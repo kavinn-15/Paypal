@@ -1,0 +1,18 @@
+# Environments & Dependencies
+.venv/
+node_modules/
+dist/
+__pycache__/
+*.pyc
+
+# Database & Caches
+*.db
+cashflow.db
+.pytest_cache/
+
+# Sensitive Environment Configurations
+.env
+
+# Logs & System
+*.log
+.DS_Store
