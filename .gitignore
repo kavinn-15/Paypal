@@ -1,21 +1,82 @@
-# Environments & Dependencies
+# ==========================================
+# Environments & Python Virtual Envs
+# ==========================================
 .venv/
-node_modules/
-dist/
+venv/
+env/
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Database & Caches
+# ==========================================
+# Node.js & Frontend Bundles
+# ==========================================
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+dist/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+
+# ==========================================
+# Testing, Coverage & Caches
+# ==========================================
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ==========================================
+# Databases & Local Runtime Storage
+# ==========================================
 *.db
+*.db-journal
 *.db-shm
 *.db-wal
+*.sqlite
+*.sqlite3
 cashflow.db*
-.pytest_cache/
 
-# Sensitive Environment Configurations
+# ==========================================
+# Sensitive Environment Configurations & Secrets
+# ==========================================
 .env
+.env.local
+.env.*.local
+*.pem
+*.key
+!.env.example
 
-# Logs & System
-*.log
+# ==========================================
+# System & Editor Temporary Files
+# ==========================================
 .DS_Store
-
+Thumbs.db
+*.log
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
