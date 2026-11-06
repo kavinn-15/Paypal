@@ -27,18 +27,20 @@ def project_cashflow_timeline(
 
     for inf in predicted_inflows:
         d_str = inf["expected_pay_date"].strftime("%Y-%m-%d")
+        amt = float(inf["amount"])
         if d_str in daily_inflows:
-            daily_inflows[d_str] += inf["amount"]
+            daily_inflows[d_str] += amt
         elif inf["expected_pay_date"].date() < start_date.date():
             # Arrived earlier or today
-            daily_inflows[date_strs[0]] += inf["amount"]
+            daily_inflows[date_strs[0]] += amt
 
     for obl in obligations:
         d_str = obl["due_date"].strftime("%Y-%m-%d")
+        amt = float(obl["amount"])
         if d_str in daily_outflows:
-            daily_outflows[d_str] += obl["amount"]
+            daily_outflows[d_str] += amt
         elif obl["due_date"].date() < start_date.date():
-            daily_outflows[date_strs[0]] += obl["amount"]
+            daily_outflows[date_strs[0]] += amt
 
     projections = []
     current_balance = starting_balance
@@ -199,4 +201,59 @@ def compute_driver_ranking(
     # Sort descending by marginal shortfall delta
     drivers.sort(key=lambda d: d["marginal_shortfall_delta"], reverse=True)
     return drivers
+
+
+def run_multi_horizon_simulation(
+    starting_balance: float,
+    predicted_inflows: List[Dict[str, Any]],
+    obligations: List[Dict[str, Any]],
+    start_date: datetime
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Computes deterministic forecasts across multiple planning horizons:
+    7 days, 30 days, 60 days, and 90 days.
+    """
+    horizons = {"7d": 7, "30d": 30, "60d": 60, "90d": 90}
+    results = {}
+
+    for label, days in horizons.items():
+        end_date = start_date + timedelta(days=days)
+        projections, first_shortfall, max_shortfall = project_cashflow_timeline(
+            starting_balance=starting_balance,
+            predicted_inflows=predicted_inflows,
+            obligations=obligations,
+            start_date=start_date,
+            end_date=end_date
+        )
+
+        min_bal = min([p["ending_balance"] for p in projections]) if projections else starting_balance
+        final_bal = projections[-1]["ending_balance"] if projections else starting_balance
+        tot_inflows = sum([p["inflows"] for p in projections])
+        tot_outflows = sum([p["outflows"] for p in projections])
+
+        # Shortfall risk probability approximation across horizon
+        p_short = 0.85 if max_shortfall > 0 else 0.05
+        if max_shortfall > 0 and final_bal > 0:
+            p_short = 0.70  # temporary dip
+
+        # Days of runway without incoming revenue
+        avg_daily_burn = (tot_outflows / days) if days > 0 else 1.0
+        runway_days = round(starting_balance / max(avg_daily_burn, 10.0), 1)
+
+        results[label] = {
+            "horizon_days": days,
+            "starting_balance": round(starting_balance, 2),
+            "ending_balance": round(final_bal, 2),
+            "min_projected_balance": round(min_bal, 2),
+            "first_shortfall_date": first_shortfall,
+            "shortfall_amount": round(max_shortfall, 2),
+            "p_shortfall": p_short,
+            "total_inflows": round(tot_inflows, 2),
+            "total_outflows": round(tot_outflows, 2),
+            "runway_days": runway_days,
+            "projections": projections
+        }
+
+    return results
+
 

@@ -7,6 +7,7 @@ from backend.app.db import init_db
 from backend.app.events.queue import event_queue
 
 # Import routers
+from backend.app.api.auth import router as auth_router
 from backend.app.api.paypal import router as paypal_router
 from backend.app.api.obligations import router as obligations_router
 from backend.app.api.history import router as history_router
@@ -16,6 +17,12 @@ from backend.app.api.actions import router as actions_router
 from backend.app.api.webhooks import router as webhooks_router
 from backend.app.api.audit import router as audit_router
 from backend.app.api.clients import router as clients_router
+from backend.app.api.finance import router as finance_router
+from backend.app.api.simulation import router as simulation_router
+from backend.app.api.negotiate import router as negotiate_router
+from backend.app.api.supervisor import router as supervisor_router
+from backend.app.api.resilience import router as resilience_router
+from backend.app.api.demo import router as demo_router
 
 
 @asynccontextmanager
@@ -42,8 +49,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Cashflow Lifeline API",
-    description="Finds the one upcoming payment a PayPal-paid freelancer is about to miss, compares the cheapest ways to protect it, and executes the approved plan through PayPal.",
-    version="1.0.0",
+    description="Agentic Financial Early-Warning & Proactive Decision Platform with PayPal Sandbox Integration.",
+    version="2.0.0",
     lifespan=lifespan
 )
 
@@ -57,6 +64,13 @@ app.add_middleware(
 )
 
 # Register all Routers
+app.include_router(auth_router)
+app.include_router(finance_router)
+app.include_router(simulation_router)
+app.include_router(supervisor_router)
+app.include_router(negotiate_router)
+app.include_router(resilience_router)
+app.include_router(demo_router)
 app.include_router(paypal_router)
 app.include_router(obligations_router)
 app.include_router(history_router)
@@ -73,6 +87,7 @@ def health_check():
     return {
         "status": "healthy",
         "service": "Cashflow Lifeline",
+        "version": "2.0.0",
         "environment": "sandbox",
         "paypal_base_url": settings.PAYPAL_BASE_URL,
         "dev_mode": settings.DEV_MODE
@@ -83,10 +98,9 @@ def health_check():
 def system_status():
     return {
         "status": "online",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "llm_provider": settings.LLM_PROVIDER,
         "max_discount_pct": settings.MAX_DISCOUNT_PCT,
         "max_payout_amount": settings.MAX_PAYOUT_AMOUNT,
         "allowed_currencies": settings.allowed_currencies_list
     }
-

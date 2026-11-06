@@ -91,3 +91,17 @@ def get_latest_forecast(db: Session = Depends(get_db)):
         plans=plans_out
     )
 
+
+@router.get("/horizons")
+def get_multi_horizon_forecast(
+    starting_balance: float = Query(1800.0, description="Starting cash balance"),
+    db: Session = Depends(get_db)
+):
+    """
+    Computes deterministic multi-horizon cash flow projections (7d, 30d, 60d, 90d)
+    with minimum projected balance, shortfall risks, and runway coverage.
+    """
+    forecaster = ForecasterAgent(db)
+    return forecaster.run_multi_horizon(starting_balance=starting_balance)
+
+

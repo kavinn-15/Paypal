@@ -81,7 +81,7 @@ class ActionExecutionService:
                 try:
                     res = await paypal_client.create_payout(
                         recipient_email="marcus.contractor@example.com",
-                        amount=action.amount,
+                        amount=float(action.amount),
                         currency=action.currency,
                         sender_batch_id=action.idempotency_key,
                         note="Contractor Installment Payout"

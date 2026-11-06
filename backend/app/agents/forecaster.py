@@ -82,7 +82,8 @@ class ForecasterAgent:
                 p_late=pred["p_late"],
                 expected_days_late=pred["expected_days_late"],
                 ci_low=pred["ci_low"],
-                ci_high=pred["ci_high"]
+                ci_high=pred["ci_high"],
+                is_cold_start=pred.get("is_cold_start", False)
             )
             self.db.add(cp_record)
 
@@ -91,7 +92,7 @@ class ForecasterAgent:
                 "paypal_invoice_id": inv.paypal_invoice_id,
                 "client_id": inv.client_id,
                 "client_name": inv.client.name,
-                "amount": inv.amount,
+                "amount": float(inv.amount),
                 "due_date": due_d,
                 "expected_pay_date": to_naive(pred["expected_pay_date"]),
                 "p_late": pred["p_late"],
@@ -99,19 +100,21 @@ class ForecasterAgent:
                 "ci_low": pred["ci_low"],
                 "ci_high": pred["ci_high"],
                 "pay_link": inv.pay_link,
+                "is_cold_start": pred.get("is_cold_start", False)
             }
             open_invoices_with_preds.append(item)
 
             client_preds_out.append(ClientPredictionOut(
                 client_id=inv.client_id,
                 client_name=inv.client.name,
-                invoice_amount=inv.amount,
+                invoice_amount=float(inv.amount),
                 due_date=due_d.strftime("%Y-%m-%d"),
                 expected_pay_date=pred["expected_pay_date"].strftime("%Y-%m-%d"),
                 p_late=pred["p_late"],
                 expected_days_late=pred["expected_days_late"],
                 ci_low_days=pred["ci_low"],
-                ci_high_days=pred["ci_high"]
+                ci_high_days=pred["ci_high"],
+                is_cold_start=pred.get("is_cold_start", False)
             ))
 
         # 4. Project timeline through obligation due date + 7 days
@@ -120,7 +123,7 @@ class ForecasterAgent:
             starting_balance=starting_balance,
             predicted_inflows=open_invoices_with_preds,
             obligations=[{
-                "amount": obligation.amount,
+                "amount": float(obligation.amount),
                 "due_date": obl_due,
                 "payee_name": obligation.payee_name
             }],
@@ -132,7 +135,7 @@ class ForecasterAgent:
         p_shortfall, ci_low_band, ci_high_band = run_monte_carlo_simulation(
             starting_balance=starting_balance,
             open_invoices_with_preds=open_invoices_with_preds,
-            obligation_amount=obligation.amount,
+            obligation_amount=float(obligation.amount),
             obligation_due_date=obl_due,
             start_date=current_time,
             num_simulations=1000
@@ -159,7 +162,7 @@ class ForecasterAgent:
         driver_items = compute_driver_ranking(
             starting_balance=starting_balance,
             open_invoices_with_preds=open_invoices_with_preds,
-            obligation_amount=obligation.amount,
+            obligation_amount=float(obligation.amount),
             obligation_due_date=obl_due,
             start_date=current_time
         )
@@ -188,7 +191,7 @@ class ForecasterAgent:
             starting_balance=starting_balance,
             assumptions={
                 "starting_balance": starting_balance,
-                "obligation_amount": obligation.amount,
+                "obligation_amount": float(obligation.amount),
                 "obligation_due_date": obligation.due_date.strftime("%Y-%m-%d"),
                 "num_open_invoices": len(open_invoices),
                 "model_type": "LogisticRegression+EmpiricalBayesShrinkage"
@@ -219,4 +222,46 @@ class ForecasterAgent:
             driver_explanation=driver_explanation,
             is_source_seeded=has_seeded
         )
+
+    def run_multi_horizon(
+        self,
+        starting_balance: float = 1800.0,
+        now: Optional[datetime] = None
+    ) -> Dict[str, Any]:
+        """
+        Executes multi-horizon forecasting (7d, 30d, 60d, 90d).
+        """
+        from backend.app.ml.simulation import run_multi_horizon_simulation
+
+        current_time = to_naive(now or datetime.now(timezone.utc))
+        history = self.db.query(PaymentHistory).all()
+        self.model.fit(history)
+
+        open_invoices = self.db.query(Invoice).filter(Invoice.status == "SENT").all()
+        predicted_inflows = []
+        for inv in open_invoices:
+            due_d = to_naive(inv.due_date)
+            pred = self.model.predict_client_delay(inv.client_id, float(inv.amount), due_d)
+            predicted_inflows.append({
+                "amount": float(inv.amount),
+                "expected_pay_date": to_naive(pred["expected_pay_date"]),
+                "due_date": due_d,
+                "client_name": inv.client.name
+            })
+
+        obligations_records = self.db.query(Obligation).filter(Obligation.status != "paid").all()
+        obligations = [{
+            "amount": float(o.amount),
+            "due_date": to_naive(o.due_date),
+            "payee_name": o.payee_name
+        } for o in obligations_records]
+
+        results = run_multi_horizon_simulation(
+            starting_balance=starting_balance,
+            predicted_inflows=predicted_inflows,
+            obligations=obligations,
+            start_date=current_time
+        )
+        return results
+
 

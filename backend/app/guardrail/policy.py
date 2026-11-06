@@ -25,9 +25,9 @@ def validate_action_against_policy(action: Action, db: Session):
 
     # 2. Maximum Payout Limit Check
     if action.action_type in ("SCHEDULE_PAYOUT_SPLIT", "PAYOUT"):
-        if action.amount > settings.MAX_PAYOUT_AMOUNT:
+        if float(action.amount) > settings.MAX_PAYOUT_AMOUNT:
             raise PolicyViolationError(
-                f"POLICY VIOLATION: Payout amount ${action.amount:,.2f} exceeds configured maximum limit of "
+                f"POLICY VIOLATION: Payout amount ${float(action.amount):,.2f} exceeds configured maximum limit of "
                 f"${settings.MAX_PAYOUT_AMOUNT:,.2f}"
             )
 

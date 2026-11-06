@@ -91,7 +91,7 @@ def process_webhook_event(
         # Recalculate forecast with new cash position
         forecaster = ForecasterAgent(db)
         # Starting balance increases by invoice payment amount
-        new_balance = 1800.0 + invoice.amount
+        new_balance = 1800.0 + float(invoice.amount)
         updated_forecast = forecaster.run_forecast(starting_balance=new_balance)
 
         append_audit_log(
@@ -100,7 +100,7 @@ def process_webhook_event(
             event="WEBHOOK_RECALCULATION_COMPLETE",
             payload={
                 "paypal_invoice_id": invoice.paypal_invoice_id,
-                "amount_paid": invoice.amount,
+                "amount_paid": float(invoice.amount),
                 "new_balance": new_balance,
                 "shortfall_remaining": updated_forecast.shortfall_amount,
                 "action_confirmed": action.id if action else None,

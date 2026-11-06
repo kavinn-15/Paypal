@@ -47,3 +47,16 @@ $$\text{Hash}_n = \text{SHA-256}(\text{Hash}_{n-1} \parallel \text{timestamp} \p
 The Genesis block is hardcoded with $64$ zeros (`0` $\times 64$).
 The `/audit/verify` endpoint verifies the mathematical linkage of every row in $O(N)$ time.
 
+### D. In-Memory Simulation Isolation
+The What-If Simulation Studio (`backend/app/services/simulation_service.py`) guarantees:
+1. **Zero Database Mutations**: Shocks and delays are applied to transient Python dictionaries in memory; no `INSERT`, `UPDATE`, or `DELETE` SQL commands are emitted.
+2. **Zero PayPal Sandbox Network Calls**: No API calls to PayPal Invoicing or Payouts endpoints are dispatched during simulation execution.
+
+### E. Multi-Tenant JWT Isolation
+1. **RFC 7519 String Subject Compliance**: All tokens encode user IDs as strings (`sub=str(user.id)`), strictly preventing parser type coercion vulnerabilities.
+2. **Strict User Scoping**: All financial endpoints filter entities by the authenticated `Owner.id`. Cross-user data leakage is completely blocked.
+
+### F. Supervisor Workflow Diagnostic Traces
+The `SupervisorAgent` logs all internal workflow transitions to `agent_workflow_runs`, including timestamps, agent execution status, duration, and output facts, preventing opaque background agent executions.
+
+

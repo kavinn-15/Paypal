@@ -44,7 +44,7 @@ class TreasurerAgent:
         if not obligation.split_allowed:
             return None
 
-        total = obligation.amount
+        total = float(obligation.amount)
         # Default 50/50 split or affordable portion
         inst1 = round(total * 0.5, 2)
         inst2 = round(total - inst1, 2)

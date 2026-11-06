@@ -5,9 +5,10 @@ from datetime import datetime, timedelta, timezone
 from backend.app.db import engine, SessionLocal, init_db, Base
 from backend.app.models import (
     Owner, PayPalConnection, Client, Invoice, PaymentHistory, Obligation,
-    AuditLog, Forecast, RescuePlan, Action, ClientPrediction, WebhookEvent, Message
+    AuditLog, Forecast, RescuePlan, Action, ClientPrediction, WebhookEvent, Message, FinancialEntry
 )
 from backend.app.guardrail.audit import compute_hash, GENESIS_HASH
+from backend.app.auth.security import hash_password
 
 
 CLIENT_PROFILES = [
@@ -81,11 +82,11 @@ def seed_database(clean: bool = False, demo_mode: bool = True):
 
     try:
         if clean:
-            print("Cleaning existing database data...")
-            # Drop all records cleanly in reverse dependency order
-            for table in reversed(Base.metadata.sorted_tables):
-                db.execute(table.delete())
-            db.commit()
+            print("Cleaning existing database data and refreshing tables...")
+            db.close()
+            Base.metadata.drop_all(bind=engine)
+            Base.metadata.create_all(bind=engine)
+            db = SessionLocal()
 
         # Check if owner already exists
         owner = db.query(Owner).first()
@@ -94,9 +95,18 @@ def seed_database(clean: bool = False, demo_mode: bool = True):
             owner = Owner(
                 name="Alex Morgan",
                 email="alex.morgan.freelance@example.com",
+                hashed_password=hash_password("DemoAlex2026!"),
+                currency="USD",
+                timezone="UTC",
+                is_demo=True,
+                is_active=True,
                 created_at=datetime.now(timezone.utc) - timedelta(days=365)
             )
             db.add(owner)
+            db.flush()
+        else:
+            owner.hashed_password = hash_password("DemoAlex2026!")
+            owner.is_demo = True
             db.flush()
 
         # PayPal Sandbox Connection record
@@ -127,6 +137,7 @@ def seed_database(clean: bool = False, demo_mode: bool = True):
                     country=p["country"],
                     typical_invoice_amount=p["typical_invoice_amount"],
                     relationship_weight=p["relationship_weight"],
+                    is_seeded=True,
                     created_at=now - timedelta(days=365)
                 )
                 db.add(client)
@@ -246,6 +257,26 @@ def seed_database(clean: bool = False, demo_mode: bool = True):
             contractor_obligation.amount = 3200.0
             contractor_obligation.due_date = due_friday
             contractor_obligation.status = "pending"
+
+        # Opening confirmed cash balance entry ($1,800.00)
+        opening_entry = db.query(FinancialEntry).filter_by(reference_id="OPENING-BAL-001").first()
+        if not opening_entry:
+            opening_entry = FinancialEntry(
+                owner_id=owner.id,
+                title="PayPal Working Balance",
+                amount=1800.0,
+                currency="USD",
+                entry_type="opening_balance",
+                category="opening_balance",
+                recurrence="one_time",
+                transaction_date=now - timedelta(days=1),
+                status="confirmed",
+                data_source="paypal",
+                reference_id="OPENING-BAL-001",
+                notes="Starting verified sandbox PayPal account balance",
+                is_demo=True
+            )
+            db.add(opening_entry)
 
         # Initialize Audit Log Genesis Block if empty
         existing_audit = db.query(AuditLog).first()

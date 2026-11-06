@@ -1,17 +1,43 @@
 version: "3.8"
 
 services:
+  mysql:
+    image: mysql:8.0
+    container_name: cashflow-lifeline-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: cashflow_lifeline
+      MYSQL_USER: cashflow_user
+      MYSQL_PASSWORD: cashflow_password
+    ports:
+      - "3306:3306"
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    container_name: cashflow-lifeline-backend
+    restart: always
     ports:
       - "8000:8000"
     env_file:
       - .env
     environment:
-      - DATABASE_URL=sqlite:///./cashflow.db
+      - DATABASE_URL=mysql+pymysql://cashflow_user:cashflow_password@mysql:3306/cashflow_lifeline?charset=utf8mb4
       - PAYPAL_BASE_URL=https://api-m.sandbox.paypal.com
+      - PORT=8000
+    depends_on:
+      mysql:
+        condition: service_healthy
     volumes:
       - ./data:/app/data
 
@@ -19,8 +45,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    container_name: cashflow-lifeline-frontend
+    restart: always
     ports:
       - "5173:5173"
     depends_on:
       - backend
 
+volumes:
+  mysql_data:

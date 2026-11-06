@@ -24,45 +24,44 @@
 
 ---
 
-### Act II: Explaining the Shortfall Drivers (0:30 - 1:00)
+### Act II: Autonomous Supervisor & Agent Coordination (0:30 - 1:00)
 
 | Timestamp | Visual Action on Screen | Voiceover Script |
 |---|---|---|
-| **0:30 - 0:45** | Scroll to the Forecast Chart. Show the red balance line dipping to -\$1,400 on Friday. Toggle the Monte Carlo uncertainty band. | *"Our statistical model trains on 12 months of client transaction history, using empirical Bayes shrinkage to model payment delays. In 85% of simulated trajectories, Alex misses Friday's payment."* |
-| **0:45 - 1:00** | Point to the Driver Explanation Card. Highlight Apex Design Studio. | *"Here is the culprit: Apex Design Studio has a \$2,000 invoice due in two days, but historically, they pay 14 days late. Their cash won't arrive until next week—well after Marcus is expecting his payout."* |
+| **0:30 - 0:45** | Click **Supervisor** tab. Click **"Run Autonomous Supervisor Orchestration"**. Show step-by-step agent traces executing live. | *"Our Autonomous Supervisor Agent coordinates specialized AI agents. The Forecaster runs 1,000 Monte Carlo trajectories with empirical Bayes shrinkage; the Collector analyzes client payment reliability; the Treasurer solves for optimal timing; and the Planner synthesizes rescue options."* |
+| **0:45 - 1:00** | Point to the Forecaster chart on the main dashboard. Highlight Apex Design Studio in Driver Explanation. | *"Here is the culprit: Apex Design Studio has a \$2,000 invoice due in two days, but historically pays 14 days late. Their cash won't arrive until next week—leaving Friday's contractor payout stranded."* |
 
 ---
 
-### Act III: Comparing the Three Rescue Plans (1:00 - 1:45)
+### Act III: What-If Studio & Negotiation Engine (1:00 - 1:35)
 
 | Timestamp | Visual Action on Screen | Voiceover Script |
 |---|---|---|
-| **1:00 - 1:20** | Scroll down to the three side-by-side Rescue Plan cards. Hover over Plan A and Plan B. | *"Instead of just showing another scary graph, Cashflow Lifeline computes the three cheapest ways to protect Marcus's payment.*<br><br>*Plan A is 'Collect Without Concessions': an official PayPal invoice reminder with a direct pay link. Cost: zero dollars.*<br><br>*Plan B is a 'Limited Early-Pay Discount': offering Apex a 3% concession (\$60.00) in exchange for settlement by Friday."* |
-| **1:20 - 1:45** | Click on Plan B to preview the green dashed overlay on the chart. Then click Plan C. | *"Notice how the chart dynamically overlays the recovery path. Plan C is 'Contractor Split': paying Marcus \$1,600 from current cash on Friday and scheduling the second \$1,600 for next week. Every plan clearly shows costs, incoming needed, and remaining risks. Notice our non-negotiable rule: nothing is promised as guaranteed—only 'plausibly protects'."* |
+| **1:00 - 1:15** | Click **What-If Studio** tab. Select the **"Client Delays +5 Days"** and **"Contractor 50% Split"** presets. | *"What if things get worse? Alex can test scenarios in our What-If Studio. It runs in-memory simulations without touching live records, showing exactly how delays or expense shocks affect cash runway."* |
+| **1:15 - 1:35** | Click **Negotiation Studio** tab. Toggle between **Professional**, **Friendly**, and **Urgent** tones. | *"Our Financial Negotiation Agent crafts tone-calibrated messages: whether a formal corporate reminder for enterprise clients or a friendly note with early-pay discount incentives."* |
 
 ---
 
-### Act IV: Cryptographic Guardrail Approval & Sandbox Execution (1:45 - 2:15)
+### Act IV: Comparing Rescue Plans & Cryptographic Guardrails (1:35 - 2:15)
 
 | Timestamp | Visual Action on Screen | Voiceover Script |
 |---|---|---|
-| **1:45 - 2:00** | On Plan A, point to the HMAC parameters box: Recipient `Apex Design Studio`, Amount `\$2000.00 USD`. Click **"Approve Exact Action"**. | *"Now, the safety guardrail. The LLM can NEVER approve transactions. Approval requires an explicit owner signature. Our HMAC-SHA256 signature cryptographically binds the exact recipient, amount, and action type. If any parameter were tampered with by even one cent, approval would fail."* |
-| **2:00 - 2:15** | Click **"Execute in PayPal Sandbox"**. Show the Action Timeline transition from Approved to Executed. | *"We approve Plan A and dispatch it to the PayPal Sandbox. The Invoicing v2 API immediately sends the reminder with an active sandbox payment link. The action enters the 'Executed' state."* |
+| **1:35 - 1:55** | Return to Dashboard. Compare the three Rescue Plans (Plan A, B, and C). Click Plan B to see trajectory overlay. | *"Instead of just showing a scary graph, Cashflow Lifeline generates three costed rescue plans.*<br><br>*Plan A: Zero-cost PayPal invoice reminder with pay link.<br>Plan B: 3% early-pay discount (\$60 concession) to incentivize payment before Friday.<br>Plan C: Agreed contractor split payout.*<br><br>*Notice our non-negotiable rule: nothing is promised as guaranteed—only 'plausibly protects'."* |
+| **1:55 - 2:15** | Click **"Approve Exact Action"** on Plan A. Show the HMAC Approval Modal. | *"Now, the safety guardrail. The LLM can NEVER approve transactions. Approval requires an explicit owner signature. Our HMAC-SHA256 signature cryptographically binds the exact recipient, amount, and action type. If any parameter were tampered with by even one cent, approval would fail."* |
 
 ---
 
-### Act V: Live Webhook Confirmation & Recovery (2:15 - 2:45)
+### Act V: Live PayPal Sandbox Execution & Webhook Confirmation (2:15 - 2:45)
 
 | Timestamp | Visual Action on Screen | Voiceover Script |
 |---|---|---|
-| **2:15 - 2:30** | Click **"Simulate Client Payment ($2,000)"** in the demo fast-track bar. | *"Now the client pays through PayPal. The sandbox fires a verified `INVOICING.INVOICE.PAID` webhook. Our in-process event queue verifies the cryptographic signature against PayPal's servers."* |
-| **2:30 - 2:45** | Show the green banner: **"Contractor Payout to Marcus Sterling is Fully Covered"**. Balance is now **\$3,800.00**. | *"Boom! The action instantly transitions to 'CONFIRMED'. The forecast recalculates in real time. Alex's balance rises to \$3,800. Friday's obligation is 100% protected."* |
+| **2:15 - 2:30** | Click **"Execute in PayPal Sandbox"**. Show Action Timeline enter 'Executed'. Then click **"Simulate Client Payment ($2,000)"**. | *"We dispatch Plan A to the PayPal Sandbox via Invoicing v2 API. When the client pays, PayPal fires an `INVOICING.INVOICE.PAID` webhook. Our in-process event queue verifies the cryptographic signature."* |
+| **2:30 - 2:45** | Show the green banner: **"Contractor Payout to Marcus Sterling is Fully Covered"**. Balance is now **\$3,800.00**. | *"Boom! The action transitions to 'CONFIRMED'. The forecast recalculates in real time. Alex's balance rises to \$3,800. Friday's obligation is 100% protected."* |
 
 ---
 
-### Act VI: Cryptographic Audit Trail Verification (2:45 - 3:00)
+### Act VI: Resilience Score & Audit Trail Verification (2:45 - 3:00)
 
 | Timestamp | Visual Action on Screen | Voiceover Script |
 |---|---|---|
-| **2:45 - 3:00** | Click on the **Audit Trail** tab. Click **"Verify Chain Integrity"**. Show the green badge: "Audit Chain 100% Intact". | *"Finally, our append-only audit trail. Every decision and webhook event is chained via SHA-256 blocks from Genesis. We click 'Verify Chain Integrity'—all blocks intact. That is Cashflow Lifeline: finding the payment you are about to miss, comparing the cheapest fixes, and protecting it through PayPal with deterministic safety."* |
-
+| **2:45 - 3:00** | Click **Resilience Score** tab (show 6 dimensions), then click **Audit Trail** and click **"Verify Chain Integrity"**. | *"Alex's Financial Resilience Score jumps to 78. And on our Audit Trail tab, every decision is chained via SHA-256 blocks from Genesis. We click 'Verify Chain Integrity'—all blocks 100% intact. That is Cashflow Lifeline: autonomous prediction, bounded AI reasoning, and PayPal sandbox execution."* |

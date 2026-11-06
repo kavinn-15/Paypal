@@ -14,22 +14,26 @@ flowchart TD
         UI_Dash["Dashboard & At-Risk Banner"]
         UI_Chart["Interactive Recharts Timeline (CI Band + Plan Overlay)"]
         UI_Cards["Rescue Plan Cards (Plan A / B / C)"]
-        UI_Modal["HMAC Approval Modal"]
-        UI_Timeline["4-State Action Timeline"]
-        UI_Audit["Audit Log & Integrity Verifier"]
-        UI_Clients["Client Behavioral Pattern Viewer"]
+        UI_Super["Autonomous Supervisor Progress & Traces"]
+        UI_WhatIf["What-If Financial Simulation Studio"]
+        UI_Nego["Negotiation Studio (3-Tone Drafts)"]
+        UI_Resil["Financial Resilience Score (0-100)"]
+        UI_Timeline["Chronological Inflow/Outflow Ledger"]
+        UI_Audit["Cryptographic Audit Log & Chain Verifier"]
     end
 
     subgraph API["FastAPI Application Layer (backend/app/api)"]
-        Router_PayPal["/paypal (Token Check, Webhook Reg)"]
-        Router_Obligations["/obligations (Contractor Payouts)"]
-        Router_Forecast["/forecast (Run Engine, Latest State)"]
-        Router_Plans["/plans (Plan Retrieval)"]
-        Router_Actions["/actions (Approve, Execute)"]
+        Router_Auth["/auth (JWT, Registration, Login, Demo)"]
+        Router_Supervisor["/supervisor (Multi-Agent Workflow Runs)"]
+        Router_Simulation["/simulation (Presets, What-If Engine)"]
+        Router_Negotiate["/negotiate (Tone-Specific Message Drafts)"]
+        Router_Resilience["/resilience (6-Factor Score & Tips)"]
+        Router_Finance["/finance (Position Summary & Timeline)"]
+        Router_Forecast["/forecast (Multi-Horizon 7/30/60/90d)"]
+        Router_Plans["/plans (Rescue Plan Generator)"]
+        Router_Actions["/actions (Approve HMAC, Execute)"]
         Router_Webhooks["/webhooks/paypal (Verified Ingress)"]
-        Router_DevSim["/dev/simulate-webhook (Dev Only)"]
         Router_Audit["/audit (Ledger, Verify Chain)"]
-        Router_Clients["/clients (Behavioral Patterns)"]
     end
 
     subgraph Guardrail["Deterministic Guardrail Security Layer (No LLM Decisions)"]
@@ -37,19 +41,21 @@ flowchart TD
         HMAC["HMAC-SHA256 Signature Binding (Recipient, Amount, Currency, Action)"]
         Policy["Policy Bounds (5% Max Discount, $10k Cap, Whitelist)"]
         AuditLog["Hash-Chained Audit Trail (SHA-256 Chaining)"]
+        Validator_Num["Strict Number & Metric Validator (Zero Hallucination)"]
     end
 
-    subgraph Agents["Intelligent & Deterministic Agents"]
-        Agent_Forecaster["Forecaster Agent (scikit-learn + Monte Carlo)"]
-        Agent_Collector["Collector Agent (Target Scoring & Pay Links)"]
+    subgraph Agents["Autonomous & Intelligent Agent Network"]
+        Agent_Supervisor["Supervisor Agent (Orchestration & State Management)"]
+        Agent_Forecaster["Forecaster Agent (scikit-learn + Monte Carlo + Bayes)"]
+        Agent_Collector["Collector Agent (Target Scoring & Invoices)"]
         Agent_Treasurer["Treasurer Agent (Timing & Split Solver)"]
+        Agent_Negotiator["Negotiation Agent (3-Tone Communication Engine)"]
         Agent_Planner["Rescue Plan Engine (Plan A, B, C Generation)"]
-        Layer_LLM["LLM Layer (Gemini / Claude / Template)"]
-        Validator_Num["Strict Number & Metric Validator"]
     end
 
-    subgraph Storage["Storage & Event Queue"]
-        SQLite_DB[("SQLite Database (WAL Mode / MySQL Compatible)")]
+    subgraph Storage["Storage & Persistence Layer"]
+        MySQL_DB[("MySQL 8.0 Primary (Alembic Migrations)")]
+        SQLite_DB[("SQLite 3 Fallback (WAL Mode)")]
         Persisted_Queue[("In-Process Queue + webhook_events table")]
     end
 
@@ -58,69 +64,75 @@ flowchart TD
         PP_Invoice["Invoicing v2 API (Remind, Discount, Send)"]
         PP_Payouts["Payouts API (Idempotent Batch)"]
         PP_Reporting["Transaction Search / Reporting"]
-        PP_WebhookVerify["verify-webhook-signature API"]
     end
 
-    UI_Dash --> API
-    UI_Chart --> API
-    UI_Cards --> API
-    UI_Modal --> API
-    UI_Audit --> API
-
+    Frontend --> API
     API --> Guardrail
     API --> Agents
-    Agents --> Layer_LLM
-    Layer_LLM --> Validator_Num
-    Agents --> Storage
+    Agents --> Guardrail
     Guardrail --> Storage
-
-    API --> PayPal_Sandbox
-    PayPal_Sandbox --> Router_Webhooks
-    Router_Webhooks --> Persisted_Queue
-    Persisted_Queue --> Storage
+    Guardrail --> PayPal_Sandbox
 ```
 
 ---
 
-## 2. Agent Responsibilities & Boundaries
+## 2. Coordinated Agent System
 
-| Component | Responsibility | Boundary & Constraints |
-|---|---|---|
-| **Forecaster Agent** | Fits statistical payment delay models, runs 1,000 Monte Carlo trajectories, detects first shortfall date and amount, ranks driver clients. | Strictly mathematical and statistical. Cannot approve plans. |
-| **Collector Agent** | Scores and ranks clients using: $\text{Score} = (\text{Amount}/\text{Shortfall}) \times (1 - p_{\text{late}}) \times W_{\text{rel}}$. Selects optimal targets for reminders vs discount concessions. | Computes candidate rankings and explanations. Never approves or executes. |
-| **Treasurer Agent** | Ranks upcoming obligations by urgency; calculates feasible 2-stage installment schedules within available balance and future inflow timings. | Evaluates split timing. Direct cash cost is \$0.00. |
-| **Rescue Plan Engine** | Generates exactly three plans per shortfall: Plan A (Reminders), Plan B (Early-Pay Discount), Plan C (Contractor Split). Attaches with/without projections and late scenarios. | Never presents any plan as guaranteed. Must state "plausibly protects". |
-| **Guardrail Agent** | Enforces 4-state state machine, validates HMAC approval hashes, checks policy bounds, appends hash-chained audit blocks. | Deterministic Python code only. Zero LLM involvement. Rejects illegal transitions. |
-| **LLM Service** | Generates natural language driver summaries, plan trade-off reasoning, and polite message drafts. | Strictly restricted to prose. All numbers pass through `validate_llm_numbers()`. Any discrepancy falls back to deterministic templates. |
+### A. Supervisor Agent (`backend/app/agents/supervisor.py`)
+- Acts as the central coordinator for the multi-agent pipeline.
+- Executes analysis in deterministic phases:
+  1. **Telemetry & Balance Check**: Queries current balance and confirmed cash reserves.
+  2. **Obligation Identification**: Identifies the primary near-term payment at risk (Marcus Sterling $3,200).
+  3. **Forecaster Invocation**: Runs multi-horizon Monte Carlo cashflow trajectory analysis.
+  4. **Collector Invocation**: Scans open invoices and computes behavioral delay risk for each client.
+  5. **Treasurer Invocation**: Solves for minimum required incoming cash and optimal split scheduling.
+  6. **Plan Synthesis**: Generates bounded Rescue Plans A, B, and C.
+- Records every step in `agent_workflow_runs` with execution timing, outputs, and status.
+
+### B. Forecaster Agent (`backend/app/agents/forecaster.py`)
+- Employs a scikit-learn Logistic Regression model trained on 12 months of client transaction history to compute late payment probability $P(\text{late})$.
+- Employs Empirical Bayes shrinkage to adjust historical delay estimates toward the global mean for clients with low sample size ($N < 3$).
+- Simulates 1,000 Monte Carlo balance trajectories over 7, 30, 60, and 90-day horizons, outputting $P(\text{shortfall})$, median projected balance, and 10th-to-90th percentile confidence envelopes.
+
+### C. Collector Agent (`backend/app/agents/collector.py`)
+- Prioritizes client receivables based on expected delay, outstanding balance, and likelihood of response.
+- Identifies Apex Design Studio ($2,000 invoice due in 2 days, historical delay 14 days) as the critical path receivable.
+
+### D. Treasurer Agent (`backend/app/agents/treasurer.py`)
+- Solves for the minimal incoming cash required to avoid overdraft on the obligation date.
+- Evaluates feasibility of split payout terms to preserve contractor relationships without incurring external financing fees.
+
+### E. Financial Negotiation Agent (`backend/app/agents/negotiator.py`)
+- Drafts actionable, tone-specific messages across three distinct communication modes:
+  - **Professional**: Formal and clear, appropriate for corporate accounting departments.
+  - **Friendly**: Warm and collaborative, preserving client rapport.
+  - **Urgent & Respectful**: Direct, highlighting critical-path timing with bounded incentives.
 
 ---
 
-## 3. Data Flow: The End-to-End Lifeline Cycle
+## 3. Financial Position & Precision Architecture
 
-1. **Baseline Assessment**:
-   - The user opens the dashboard. Current balance is healthy (\$1,800.00).
-   - Contractor obligation: Marcus Sterling, \$3,200.00 due on Friday.
-2. **Shortfall Detection**:
-   - Forecaster Agent computes open invoices:
-     - Apex Design Studio (\$2,000.00 due in 2 days) typically pays 14 days late $\rightarrow$ cash arrives after Friday!
-     - Nordic Data Labs (\$1,500.00) arrives with 6-day lag.
-   - Projected balance on Friday drops to **-\$1,400.00** (Shortfall Amount: \$1,400.00).
-   - Monte Carlo simulation reveals an **85% probability of shortfall**.
-3. **Rescue Plan Generation**:
-   - Engine creates Plan A (\$0.00 cost), Plan B (\$60.00 discount cost), and Plan C (\$0.00 cash cost split).
-   - Each plan includes an exact `Action` in `proposed` state with a pre-computed HMAC signature.
-4. **Owner Review & Signed Approval**:
-   - Owner reviews the side-by-side cards. Owner selects Plan A and clicks **"Approve Exact Action"**.
-   - Guardrail verifies HMAC signature against `(recipient, amount, currency, action_type, idempotency_key)`.
-   - Action moves from `proposed` $\rightarrow$ `approved`. Audit block appended.
-5. **Sandbox Execution**:
-   - Owner clicks **"Execute in PayPal Sandbox"**.
-   - ActionExecutionService dispatches PayPal Invoicing reminder API with live payment link.
-   - Action moves from `approved` $\rightarrow$ `executed`.
-6. **Payment Confirmation & Recalculation**:
-   - Client pays invoice in PayPal sandbox (or fast-tracked via "Simulate Client Payment" button).
-   - Webhook arrives at `/webhooks/paypal`. Cryptographic signature verified against PayPal sandbox API.
-   - Event queued and processed. Action moves from `executed` $\rightarrow$ `confirmed`.
-   - Forecaster recalculates: cash balance rises to \$3,800.00.
-   - At-Risk banner updates to: **"Obligation Protected — \$3,200.00 Covered"**.
+All financial amounts across database schemas, models, and APIs are enforced with exact numeric precision:
+- **Database Column**: SQLAlchemy `Numeric(12, 2)` mapped to SQL `DECIMAL(12, 2)`.
+- **Python Runtime**: Standard library `decimal.Decimal` with explicit rounding to two decimal places.
+- **Float Isolation**: Floating-point values are isolated strictly to statistical models (scikit-learn arrays, Monte Carlo percentiles) and cast back to `Decimal` before reaching the financial ledger.
 
+---
+
+## 4. Multi-Tenant User Isolation & Authentication
+
+- **Password Hashing**: `bcrypt` with salting.
+- **Access Tokens**: RFC 7519 compliant JSON Web Tokens (JWT) signed with HMAC-SHA256, strictly using string user IDs for the `sub` claim.
+- **Data Isolation**: All queries for obligations, invoices, entries, plans, and actions filter by the authenticated user ID (`Owner.id`).
+- **Demo Mode**: The application includes a pre-seeded `alex@example.com` demo owner account with pre-calculated sandbox records. The `/demo/load` and `/demo/clear` endpoints allow resetting demo state at any time.
+
+---
+
+## 5. What-If Financial Simulation Studio
+
+The What-If Studio operates in complete memory isolation:
+- Clones current financial state (balance, open invoices, active obligations) in Python memory.
+- Applies scenario shocks (delays, unexpected expenses, split payouts).
+- Computes baseline vs. simulated projections and delta metrics (shortfall change, probability shift, additional capital needed).
+- **Zero Database Writes**: No modifications are written to SQLite or MySQL.
+- **Zero API Calls**: No requests are dispatched to PayPal during simulation.

@@ -1,9 +1,12 @@
 import os
+import logging
 from pathlib import Path
 from typing import List, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Locate root directory and load .env
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
@@ -24,6 +27,9 @@ class Settings(BaseSettings):
 
     # Security & Guardrail
     APPROVAL_SECRET: str = Field(default="cashflow-lifeline-sandbox-hmac-secret-key-32bytes")
+    JWT_SECRET: str = Field(default="cashflow-lifeline-jwt-super-secure-token-secret-2026")
+    JWT_ALGORITHM: str = Field(default="HS256")
+    JWT_EXPIRE_MINUTES: int = Field(default=1440)  # 24 hours
     PUBLIC_BASE_URL: str = Field(default="http://localhost:8000")
     DATABASE_URL: str = Field(default="sqlite:///./cashflow.db")
 
@@ -60,4 +66,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

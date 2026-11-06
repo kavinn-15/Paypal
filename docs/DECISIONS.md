@@ -6,7 +6,7 @@ This document records architectural, mathematical, and algorithmic decisions mad
 
 ## 1. Database Architecture: SQLite with Multi-RDBMS Compatibility
 
-- **Decision**: Cashflow Lifeline defaults to SQLite 3 (`sqlite:///./cashflow.db`) operating with Write-Ahead Logging (`PRAGMA journal_mode=WAL`) and foreign keys enforced (`PRAGMA foreign_keys=ON`).
+- **Decision**: Cashflow Lifeline defaults to SQLite 3 (`sqlite:///./cashflow.db`) operating with Write-Ahead Logging (`PRAGMA journal_mode=WAL`) and foreign keys enforced (`PRAGMA foreign_keys=ON`), while providing native MySQL 8.0 support with Alembic migrations for enterprise deployments.
 - **Rationale**:
   - The specification explicitly requires SQLite in the fixed stack section for seamless out-of-the-box local hackathon execution without requiring external database daemons or Docker services.
   - SQLAlchemy 2.0 ORM abstracts all SQL statements. If a production or enterprise MySQL 8.0 instance is provided via `DATABASE_URL=mysql+pymysql://...`, the code seamlessly adapts without modification.
@@ -85,3 +85,48 @@ This document records architectural, mathematical, and algorithmic decisions mad
 - **Verification**: Each webhook is validated against PayPal's `v1/notifications/verify-webhook-signature` API. Unverified webhooks are stored with `verified=false` and ignored.
 - **Truth in UI**: An action is marked `confirmed` **only** upon arrival of a verified PayPal sandbox event (`INVOICING.INVOICE.PAID` or `PAYMENT.PAYOUTS-ITEM.SUCCEEDED`). Simulated events in dev mode are stamped with `is_simulated = true` and visibly badged in the UI.
 
+---
+
+## 9. Strict Numeric(12, 2) / Decimal Financial Math Precision
+
+- **Decision**: All financial amounts in models, schemas, and services are typed as `Numeric(12, 2)` in SQLAlchemy and `Decimal` in Python.
+- **Rationale**:
+  - Floating point arithmetic (`float`) causes binary rounding errors (e.g. `0.1 + 0.2 = 0.30000000000000004`), which can cause off-by-a-cent accounting errors or HMAC mismatch failures.
+  - Python's default `json.dumps()` rejects `Decimal` objects; an engine-level `json_serializer=lambda obj: json.dumps(obj, default=str)` is configured so JSON columns cleanly serialize decimal values.
+  - Floating point numbers are restricted exclusively to NumPy and scikit-learn statistical model routines and converted to `Decimal` upon ingestion.
+
+---
+
+## 10. Multi-Tenant User Authentication & Isolation with JWT
+
+- **Decision**: Implemented `bcrypt` password hashing and RFC 7519 JSON Web Tokens (JWT) signed with HMAC-SHA256 (`HS256`).
+- **RFC 7519 Constraint**: PyJWT 2.x mandates that the `sub` (subject) claim be a string (`str(user.id)`). Integers raise `InvalidSubjectError`.
+- **User Scoping**: Every financial entry, obligation, client, plan, and audit entry is strictly bound to `owner_id`. A development bypass seamlessly falls back to the demo owner (`Alex Morgan`) when no bearer token is attached.
+
+---
+
+## 11. In-Memory Isolated What-If Financial Simulation Studio
+
+- **Decision**: The What-If simulation service runs strictly in Python memory, creating synthetic deep-copies of current balances and obligations.
+- **Rationale**:
+  - Users need to explore severe stress scenarios (e.g., "What if Apex delays 10 days?", "What if I have an emergency $500 expense?", "What if I negotiate a 50% contractor payout split?") without corrupting the operational database or dispatching actions to PayPal.
+  - The endpoint computes trajectory deltas, shortfall differences, and additional cash needed, returning a side-by-side comparison with zero persistent side effects.
+
+---
+
+## 12. Financial Negotiation Agent with Tone Spectrum
+
+- **Decision**: The `NegotiationAgent` generates 3 tone variations for every rescue strategy:
+  1. **Professional**: Formal, corporate, terms-oriented.
+  2. **Friendly**: Collaborative, relationship-preserving.
+  3. **Urgent & Respectful**: Direct, highlighting immediate schedule deadlines.
+- **Rationale**:
+  - Freelancers have diverse client relationships; a cold corporate demand might alienate a creative agency client, whereas an informal note might be ignored by a large enterprise accounts-payable department.
+
+---
+
+## 13. Autonomous Agent Supervisor / Orchestrator
+
+- **Decision**: Implemented an explicit `SupervisorAgent` that manages execution stages, dispatches work to specialist agents (Forecaster, Collector, Treasurer, Negotiator, Planner), and logs full diagnostic execution traces to `agent_workflow_runs`.
+- **Rationale**:
+  - Complex financial workflows require transparency and traceability. Storing execution steps, elapsed milliseconds, and agent outputs guarantees full observability for both users and hackathon judges.

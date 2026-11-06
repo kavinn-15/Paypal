@@ -2,6 +2,8 @@ export interface Owner {
   id: number;
   name: string;
   email: string;
+  currency?: string;
+  is_demo?: boolean;
 }
 
 export interface Obligation {
@@ -38,6 +40,7 @@ export interface ClientPrediction {
   expected_days_late: number;
   ci_low_days: number;
   ci_high_days: number;
+  is_cold_start?: boolean;
 }
 
 export interface DriverContribution {
@@ -65,6 +68,7 @@ export interface Action {
   paypal_ref?: string;
   error_message?: string;
   is_simulated: boolean;
+  message_draft?: string;
 }
 
 export interface RescuePlan {
@@ -147,3 +151,130 @@ export interface PayPalConnectionStatus {
   message?: string;
 }
 
+export interface WhatIfComparisonResponse {
+  scenario_name: string;
+  scenario_type: string;
+  baseline: {
+    shortfall_amount: number;
+    first_shortfall_date?: string;
+    min_projected_balance: number;
+    p_shortfall: number;
+  };
+  simulated: {
+    shortfall_amount: number;
+    first_shortfall_date?: string;
+    min_projected_balance: number;
+    p_shortfall: number;
+  };
+  delta: {
+    shortfall_change: number;
+    min_balance_change: number;
+    additional_capital_needed: number;
+    p_shortfall_change: number;
+  };
+  projections_baseline: DailyProjection[];
+  projections_simulated: DailyProjection[];
+  explanation: string;
+}
+
+export interface SimulationPreset {
+  id: string;
+  name: string;
+  scenario_type: string;
+  description: string;
+  impact_hint: string;
+}
+
+export interface AgentTraceStep {
+  agent_name: string;
+  status: string;
+  timestamp: string;
+  summary: string;
+  key_finding: string;
+}
+
+export interface SupervisorRunResponse {
+  run_id: string;
+  status: string;
+  obligation_evaluated: string;
+  shortfall_detected: boolean;
+  shortfall_amount: number;
+  primary_risk_driver: string;
+  recommended_plan: string;
+  confidence_score: number;
+  steps_trace: AgentTraceStep[];
+  final_recommendation: string;
+}
+
+export interface NegotiationDraft {
+  id: number;
+  target_type: string;
+  recipient_name: string;
+  recipient_email: string;
+  tone: string;
+  subject: string;
+  body: string;
+  offered_incentive?: string;
+  estimated_benefit?: string;
+  status: string;
+  created_at: string;
+}
+
+export interface NegotiationTonesResponse {
+  recipient_name: string;
+  recipient_email: string;
+  target_type: string;
+  context_summary: string;
+  options: NegotiationDraft[];
+}
+
+export interface ResilienceFactor {
+  name: string;
+  score: number;
+  weight: number;
+  status: "strong" | "neutral" | "at_risk";
+  detail: string;
+  impact: "positive" | "negative" | "neutral";
+}
+
+export interface ResilienceScoreResponse {
+  overall_score: number;
+  category: "Excellent" | "Good" | "Moderate" | "Fragile" | "Critical";
+  reserve_runway_days: number;
+  debtor_reliability_pct: number;
+  obligation_load_ratio: number;
+  concentration_risk_hhi: number;
+  receivables_exposure_pct: number;
+  emergency_tolerance_usd: number;
+  improving_factors: string[];
+  reducing_factors: string[];
+  recommended_actions: string[];
+  factors: ResilienceFactor[];
+}
+
+export interface TimelineEntry {
+  id: string;
+  title: string;
+  amount: number;
+  currency: string;
+  direction: "inflow" | "outflow";
+  category: string;
+  date: string;
+  status: "confirmed" | "expected" | "estimated" | "simulated";
+  data_source: string;
+  reference_id?: string;
+}
+
+export interface FinancialSummaryResponse {
+  currency: string;
+  current_confirmed_balance: number;
+  expected_inflows_30d: number;
+  expected_outflows_30d: number;
+  net_projected_30d: number;
+  confirmed_inflows_count: number;
+  expected_inflows_count: number;
+  pending_obligations_count: number;
+  emergency_reserve_target: number;
+  emergency_reserve_actual: number;
+  reserve_coverage_ratio: number;
+}

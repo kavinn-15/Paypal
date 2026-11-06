@@ -63,7 +63,7 @@ class RescuePlanEngine:
                 "client_id": inv.client_id,
                 "client_name": inv.client.name,
                 "client_email": inv.client.email,
-                "amount": inv.amount,
+                "amount": float(inv.amount),
                 "currency": inv.currency,
                 "due_date": inv_due,
                 "expected_pay_date": exp_pay,
@@ -102,7 +102,7 @@ class RescuePlanEngine:
         plan_a_with_proj, _, _ = project_cashflow_timeline(
             starting_balance=starting_balance,
             predicted_inflows=with_plan_a_inflows,
-            obligations=[{"amount": obligation_obj.amount, "due_date": obl_due, "payee_name": obligation_obj.payee_name}],
+            obligations=[{"amount": float(obligation_obj.amount), "due_date": obl_due, "payee_name": obligation_obj.payee_name}],
             start_date=start_time,
             end_date=obl_due + timedelta(days=5)
         )
@@ -212,7 +212,7 @@ class RescuePlanEngine:
         plan_b_with_proj, _, _ = project_cashflow_timeline(
             starting_balance=starting_balance,
             predicted_inflows=with_plan_b_inflows,
-            obligations=[{"amount": obligation_obj.amount, "due_date": obl_due, "payee_name": obligation_obj.payee_name}],
+            obligations=[{"amount": float(obligation_obj.amount), "due_date": obl_due, "payee_name": obligation_obj.payee_name}],
             start_date=start_time,
             end_date=obl_due + timedelta(days=5)
         )
@@ -311,8 +311,8 @@ class RescuePlanEngine:
             expected_next_inflow_date=obligation_obj.due_date + timedelta(days=5)
         )
 
-        plan_c_inst1 = split_proposal["installment_1"]["amount"] if split_proposal else round(obligation_obj.amount * 0.5, 2)
-        plan_c_inst2 = split_proposal["installment_2"]["amount"] if split_proposal else round(obligation_obj.amount * 0.5, 2)
+        plan_c_inst1 = split_proposal["installment_1"]["amount"] if split_proposal else round(float(obligation_obj.amount) * 0.5, 2)
+        plan_c_inst2 = split_proposal["installment_2"]["amount"] if split_proposal else round(float(obligation_obj.amount) * 0.5, 2)
         inst2_date_str = split_proposal["installment_2"]["date_str"] if split_proposal else "next week"
 
         plan_c_risk = (
@@ -347,7 +347,7 @@ class RescuePlanEngine:
 
         plan_c_msg_draft = llm_service.draft_contractor_split_message(
             contractor_name=obligation_obj.payee_name,
-            total_amount=obligation_obj.amount,
+            total_amount=float(obligation_obj.amount),
             first_installment=plan_c_inst1,
             first_date_str=obligation_obj.due_date.strftime("%b %d"),
             second_installment=plan_c_inst2,

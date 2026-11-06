@@ -27,7 +27,7 @@ class PaymentDelayModel:
             return
 
         delays = [r.days_late for r in history_records]
-        amounts = [r.amount for r in history_records]
+        amounts = [float(r.amount) for r in history_records]
 
         self.population_mean_delay = float(np.mean(delays))
         self.population_std_delay = float(np.std(delays)) if len(delays) > 1 else 3.0
@@ -77,7 +77,7 @@ class PaymentDelayModel:
         for r in history_records:
             c_stat = self.client_stats.get(r.client_id, {})
             c_mean = c_stat.get("mean_delay", self.population_mean_delay)
-            X.append([r.amount / 1000.0, c_mean])
+            X.append([float(r.amount) / 1000.0, c_mean])
             y.append(1 if r.days_late > 0 else 0)
 
         if len(set(y)) > 1:
@@ -99,6 +99,7 @@ class PaymentDelayModel:
             - ci_high: 90th percentile days late
         """
         stats = self.client_stats.get(client_id)
+        is_cold_start = (stats is None or stats.get("n_records", 0) < 3)
         if not stats:
             # Fallback to population prior with wide interval
             expected_days = self.population_mean_delay
@@ -114,7 +115,7 @@ class PaymentDelayModel:
             # If logistic model is fitted, blend prediction
             if self.is_fitted:
                 try:
-                    prob = self.clf.predict_proba([[invoice_amount / 1000.0, expected_days]])[0][1]
+                    prob = self.clf.predict_proba([[float(invoice_amount) / 1000.0, expected_days]])[0][1]
                     p_late = (p_late * 0.7) + (prob * 0.3)
                 except Exception:
                     pass
@@ -129,5 +130,6 @@ class PaymentDelayModel:
             "ci_high": round(ci_high, 1),
             "ci_low_date": due_date + timedelta(days=round(ci_low)),
             "ci_high_date": due_date + timedelta(days=round(ci_high)),
+            "is_cold_start": is_cold_start
         }
 

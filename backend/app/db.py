@@ -1,19 +1,30 @@
+import json
+import logging
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from backend.app.config import settings
 
+logger = logging.getLogger(__name__)
+
 DATABASE_URL = settings.DATABASE_URL
 
 connect_args = {}
+engine_kwargs = {
+    "echo": False,
+    "pool_pre_ping": True,
+    "json_serializer": lambda obj: json.dumps(obj, default=str),
+}
+
 if DATABASE_URL.startswith("sqlite"):
     connect_args["check_same_thread"] = False
+    engine_kwargs["connect_args"] = connect_args
+elif "mysql" in DATABASE_URL:
+    # Production MySQL 8 connection pool optimization
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
+    engine_kwargs["pool_recycle"] = 3600
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args=connect_args,
-    echo=False,
-    pool_pre_ping=True
-)
+engine = create_engine(DATABASE_URL, **engine_kwargs)
 
 # Enable foreign keys and WAL mode for SQLite
 if DATABASE_URL.startswith("sqlite"):
@@ -40,4 +51,3 @@ def init_db():
     # Import models so all tables are registered before creating
     import backend.app.models  # noqa: F401
     Base.metadata.create_all(bind=engine)
-

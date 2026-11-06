@@ -1,6 +1,7 @@
 import datetime
+from decimal import Decimal
 from sqlalchemy import (
-    Column, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, JSON, Text, UniqueConstraint, Index
+    Column, Integer, String, Numeric, Float, Boolean, DateTime, Date, ForeignKey, JSON, Text, UniqueConstraint, Index
 )
 from sqlalchemy.orm import relationship
 from backend.app.db import Base
@@ -12,11 +13,19 @@ class Owner(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=True)
+    currency = Column(String(10), default="USD", nullable=False)
+    timezone = Column(String(50), default="UTC", nullable=False)
+    is_demo = Column(Boolean, default=False, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
     clients = relationship("Client", back_populates="owner", cascade="all, delete-orphan")
     obligations = relationship("Obligation", back_populates="owner", cascade="all, delete-orphan")
     paypal_connection = relationship("PayPalConnection", back_populates="owner", uselist=False, cascade="all, delete-orphan")
+    financial_entries = relationship("FinancialEntry", back_populates="owner", cascade="all, delete-orphan")
+    simulations = relationship("SimulationRun", back_populates="owner", cascade="all, delete-orphan")
+    negotiation_drafts = relationship("NegotiationDraft", back_populates="owner", cascade="all, delete-orphan")
 
 
 class PayPalConnection(Base):
@@ -36,12 +45,13 @@ class Client(Base):
     __tablename__ = "clients"
 
     id = Column(Integer, primary_key=True, index=True)
-    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=False)
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     email = Column(String(255), nullable=False, index=True)
     country = Column(String(10), nullable=False, default="US")
-    typical_invoice_amount = Column(Float, nullable=False, default=1000.0)
+    typical_invoice_amount = Column(Numeric(12, 2), nullable=False, default=Decimal("1000.00"))
     relationship_weight = Column(Float, nullable=False, default=1.0)
+    is_seeded = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
     owner = relationship("Owner", back_populates="clients")
@@ -54,14 +64,14 @@ class Invoice(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     paypal_invoice_id = Column(String(255), unique=True, nullable=False, index=True)
-    client_id = Column(Integer, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
-    amount = Column(Float, nullable=False)
+    client_id = Column(Integer, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    amount = Column(Numeric(12, 2), nullable=False)
     currency = Column(String(10), nullable=False, default="USD")
     issue_date = Column(DateTime, nullable=False)
     due_date = Column(DateTime, nullable=False, index=True)
     paid_date = Column(DateTime, nullable=True)
     status = Column(String(50), nullable=False, default="SENT")  # DRAFT | SENT | PAID | CANCELLED
-    discount_applied = Column(Float, default=0.0, nullable=False)  # e.g. 3.0 for 3%
+    discount_applied = Column(Numeric(5, 2), default=Decimal("0.00"), nullable=False)  # e.g. 3.00 for 3%
     pay_link = Column(String(1024), nullable=True)
 
     client = relationship("Client", back_populates="invoices")
@@ -74,7 +84,7 @@ class PaymentHistory(Base):
     id = Column(Integer, primary_key=True, index=True)
     client_id = Column(Integer, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True)
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(12, 2), nullable=False)
     due_date = Column(DateTime, nullable=False)
     paid_date = Column(DateTime, nullable=False)
     days_late = Column(Integer, nullable=False)
@@ -88,16 +98,42 @@ class Obligation(Base):
     __tablename__ = "obligations"
 
     id = Column(Integer, primary_key=True, index=True)
-    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=False)
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
     payee_name = Column(String(255), nullable=False)
     payee_email = Column(String(255), nullable=False)
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(12, 2), nullable=False)
     currency = Column(String(10), nullable=False, default="USD")
     due_date = Column(DateTime, nullable=False, index=True)
     split_allowed = Column(Boolean, default=False, nullable=False)
     status = Column(String(50), default="pending", nullable=False)  # pending | split_agreed | paid
 
     owner = relationship("Owner", back_populates="obligations")
+
+
+class FinancialEntry(Base):
+    """
+    Unified financial timeline entry for all confirmed, expected, estimated, and simulated cash flows.
+    Supports rent, salary, contractor, subscription, tax, loan, goals, reserves, opening balance.
+    """
+    __tablename__ = "financial_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    amount = Column(Numeric(12, 2), nullable=False)
+    currency = Column(String(10), default="USD", nullable=False)
+    entry_type = Column(String(50), nullable=False)  # income | expense | opening_balance | reserve | goal
+    category = Column(String(100), nullable=False)  # client_invoice, rent, salary, contractor, subscription, loan, tax, emergency, reserve_fund, financial_goal
+    recurrence = Column(String(50), default="one_time", nullable=False)  # one_time | daily | weekly | monthly | quarterly | annual
+    transaction_date = Column(DateTime, nullable=False, index=True)
+    status = Column(String(50), default="expected", nullable=False)  # confirmed | expected | estimated | simulated
+    data_source = Column(String(50), default="manual", nullable=False)  # paypal | manual | bank_sync | simulation
+    reference_id = Column(String(255), nullable=True)
+    notes = Column(Text, nullable=True)
+    is_demo = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    owner = relationship("Owner", back_populates="financial_entries")
 
 
 class Forecast(Base):
@@ -107,13 +143,18 @@ class Forecast(Base):
     run_id = Column(String(100), unique=True, nullable=False, index=True)
     obligation_id = Column(Integer, ForeignKey("obligations.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    starting_balance = Column(Float, nullable=False, default=0.0)
+    starting_balance = Column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
+    horizon_days = Column(Integer, default=14, nullable=False)
     assumptions = Column(JSON, nullable=False, default=dict)
     projections = Column(JSON, nullable=False, default=list)
     first_shortfall_date = Column(DateTime, nullable=True)
-    shortfall_amount = Column(Float, default=0.0, nullable=False)
+    shortfall_amount = Column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
     p_shortfall = Column(Float, default=0.0, nullable=False)
+    min_projected_balance = Column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
+    expected_income_total = Column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
+    expected_expense_total = Column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
     driver_explanation = Column(Text, nullable=True)
+    is_demo = Column(Boolean, default=False, nullable=False)
 
 
 class ClientPrediction(Base):
@@ -127,6 +168,7 @@ class ClientPrediction(Base):
     expected_days_late = Column(Float, nullable=False)
     ci_low = Column(Float, nullable=False)
     ci_high = Column(Float, nullable=False)
+    is_cold_start = Column(Boolean, default=False, nullable=False)
 
     client = relationship("Client")
 
@@ -138,8 +180,9 @@ class RescuePlan(Base):
     run_id = Column(String(100), nullable=False, index=True)
     plan_type = Column(String(10), nullable=False)  # "A" | "B" | "C"
     details = Column(JSON, nullable=False, default=dict)
-    cost = Column(Float, nullable=False, default=0.0)
-    incoming_needed = Column(Float, nullable=False, default=0.0)
+    cost = Column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
+    incoming_needed = Column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
+    shortfall_probability_after = Column(Float, default=0.0, nullable=False)
     selected_clients = Column(JSON, nullable=False, default=list)
     rationale = Column(Text, nullable=False)
     forecast_with_plan = Column(JSON, nullable=False, default=list)
@@ -157,7 +200,7 @@ class Action(Base):
     plan_id = Column(Integer, ForeignKey("rescue_plans.id", ondelete="CASCADE"), nullable=True)
     action_type = Column(String(100), nullable=False)  # SEND_REMINDER | APPLY_DISCOUNT | SCHEDULE_PAYOUT_SPLIT
     recipient = Column(String(255), nullable=False)
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(12, 2), nullable=False)
     currency = Column(String(10), nullable=False, default="USD")
     state = Column(String(50), nullable=False, default="proposed")  # proposed | approved | executed | confirmed | failed
     idempotency_key = Column(String(255), unique=True, nullable=False, index=True)
@@ -186,6 +229,66 @@ class Message(Base):
     client = relationship("Client")
 
 
+class NegotiationDraft(Base):
+    """
+    Dedicated financial negotiation drafts (early payment incentive or contractor split),
+    with multiple tone styles (Professional, Friendly, Urgent-Respectful).
+    """
+    __tablename__ = "negotiation_drafts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id", ondelete="SET NULL"), nullable=True)
+    obligation_id = Column(Integer, ForeignKey("obligations.id", ondelete="SET NULL"), nullable=True)
+    target_type = Column(String(50), nullable=False)  # client_discount | contractor_split
+    recipient_name = Column(String(255), nullable=False)
+    recipient_email = Column(String(255), nullable=False)
+    tone = Column(String(50), default="professional", nullable=False)  # professional | friendly | urgent_respectful
+    subject = Column(String(255), nullable=False)
+    body = Column(Text, nullable=False)
+    offered_incentive = Column(String(255), nullable=True)
+    estimated_benefit = Column(String(255), nullable=True)
+    status = Column(String(50), default="draft", nullable=False)  # draft | approved | sent | accepted | declined
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    owner = relationship("Owner", back_populates="negotiation_drafts")
+
+
+class SimulationRun(Base):
+    """
+    What-If simulation engine run records (never modifies real financial tables).
+    """
+    __tablename__ = "simulation_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    run_name = Column(String(255), nullable=False)
+    scenario_type = Column(String(100), nullable=False)  # client_delay_5d | client_delay_10d | partial_pay_50 | dual_delay | emergency_expense | expense_increase | contractor_split
+    parameters = Column(JSON, nullable=False, default=dict)
+    baseline_metrics = Column(JSON, nullable=False, default=dict)
+    simulated_metrics = Column(JSON, nullable=False, default=dict)
+    delta_metrics = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    owner = relationship("Owner", back_populates="simulations")
+
+
+class AgentWorkflowRun(Base):
+    """
+    Supervisor / Orchestrator trace of all autonomous agent steps, validations, and recommendations.
+    """
+    __tablename__ = "agent_workflow_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    run_id = Column(String(100), unique=True, nullable=False, index=True)
+    status = Column(String(50), default="running", nullable=False)  # running | completed | failed | awaiting_approval
+    steps_trace = Column(JSON, nullable=False, default=list)
+    selected_plan = Column(String(10), nullable=True)
+    final_recommendation = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
@@ -209,4 +312,3 @@ class WebhookEvent(Base):
     processed = Column(Boolean, default=False, nullable=False, index=True)
     received_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     is_simulated = Column(Boolean, default=False, nullable=False)
-

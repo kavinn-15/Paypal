@@ -110,7 +110,7 @@ class GuardrailStateMachine:
                 "previous_state": current_state,
                 "new_state": target_state,
                 "recipient": action.recipient,
-                "amount": action.amount,
+                "amount": float(action.amount),
                 "currency": action.currency,
                 "paypal_ref": action.paypal_ref,
                 "idempotency_key": action.idempotency_key
