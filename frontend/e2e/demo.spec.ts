@@ -178,3 +178,4 @@ test.describe('Cashflow Lifeline Demo Flow E2E Test', () => {
     await expect(page.locator('text=Plan Approved!')).toBeVisible();
   });
 });
+
