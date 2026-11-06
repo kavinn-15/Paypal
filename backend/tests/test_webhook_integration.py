@@ -117,3 +117,4 @@ async def test_payout_failure_and_retry_flow():
         assert action.state == ActionState.APPROVED
     finally:
         db.close()
+

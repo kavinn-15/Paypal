@@ -65,3 +65,4 @@
 | Timestamp | Visual Action on Screen | Voiceover Script |
 |---|---|---|
 | **2:45 - 3:00** | Click on the **Audit Trail** tab. Click **"Verify Chain Integrity"**. Show the green badge: "Audit Chain 100% Intact". | *"Finally, our append-only audit trail. Every decision and webhook event is chained via SHA-256 blocks from Genesis. We click 'Verify Chain Integrity'—all blocks intact. That is Cashflow Lifeline: finding the payment you are about to miss, comparing the cheapest fixes, and protecting it through PayPal with deterministic safety."* |
+

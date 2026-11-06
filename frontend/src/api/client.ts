@@ -88,3 +88,4 @@ export const api = {
 
   verifyAuditChain: () => request<AuditVerifyResponse>('/audit/verify'),
 };
+

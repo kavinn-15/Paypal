@@ -46,3 +46,4 @@ The audit log table (`audit_log`) maintains a continuous cryptographic hash chai
 $$\text{Hash}_n = \text{SHA-256}(\text{Hash}_{n-1} \parallel \text{timestamp} \parallel \text{actor} \parallel \text{event} \parallel \text{payload})$$
 The Genesis block is hardcoded with $64$ zeros (`0` $\times 64$).
 The `/audit/verify` endpoint verifies the mathematical linkage of every row in $O(N)$ time.
+

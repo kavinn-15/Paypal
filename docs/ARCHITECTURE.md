@@ -123,3 +123,4 @@ flowchart TD
    - Event queued and processed. Action moves from `executed` $\rightarrow$ `confirmed`.
    - Forecaster recalculates: cash balance rises to \$3,800.00.
    - At-Risk banner updates to: **"Obligation Protected — \$3,200.00 Covered"**.
+

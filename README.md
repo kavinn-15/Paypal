@@ -148,3 +148,4 @@ python -m backend.scripts.sandbox_smoke
 **Title**: Cashflow Lifeline &mdash; AI Cashflow Guardian for Freelancers
 **Elevator Pitch**: Finds the one upcoming payment a PayPal-paid freelancer is about to miss, compares the cheapest ways to protect it, and executes the approved plan through PayPal with cryptographic guardrails.
 **Built With**: Python, FastAPI, React, TypeScript, Tailwind CSS, Recharts, scikit-learn, PayPal Sandbox REST APIs (Invoicing v2, Payouts, Webhooks).
+

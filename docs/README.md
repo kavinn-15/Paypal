@@ -9,3 +9,4 @@ See the root [README.md](../README.md) for full project quickstart and setup ins
 - [API.md](API.md): Comprehensive REST API endpoint reference.
 - [DEMO_SCRIPT.md](DEMO_SCRIPT.md): Timed 3-minute hackathon demo script with voiceover walkthrough.
 - [setup_sandbox.md](../backend/scripts/setup_sandbox.md): PayPal Sandbox app creation, ngrok tunnel, and webhook registration.
+

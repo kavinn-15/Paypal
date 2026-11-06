@@ -146,3 +146,4 @@ export interface PayPalConnectionStatus {
   last_checked_at?: string;
   message?: string;
 }
+

@@ -124,3 +124,4 @@ export const ApprovalInboxPage: React.FC = () => {
     </div>
   );
 };
+

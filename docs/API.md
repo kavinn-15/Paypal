@@ -173,3 +173,4 @@ Traverses cryptographic SHA-256 hash chain from Genesis block and returns integr
   "corrupted_block_id": null
 }
 ```
+

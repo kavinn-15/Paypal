@@ -50,3 +50,4 @@ describe('Rescue Plan Logic & Safety Tests', () => {
     expect(act.approval_hash.length).toBe(64);
   });
 });
+
