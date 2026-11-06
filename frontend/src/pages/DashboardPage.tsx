@@ -6,7 +6,7 @@ import { ForecastChart } from '../components/ForecastChart';
 import { DriverExplanationCard } from '../components/DriverExplanationCard';
 import { RescuePlanCard } from '../components/RescuePlanCard';
 import { ActionTimeline } from '../components/ActionTimeline';
-import { Zap, RefreshCw, AlertCircle, CheckCircle, ShieldCheck } from 'lucide-react';
+import { Zap, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
   const [data, setData] = useState<PlansComparisonResponse | null>(null);
@@ -22,7 +22,6 @@ export const DashboardPage: React.FC = () => {
       const res = await api.getLatestForecast();
       setData(res);
       if (res.plans && res.plans.length > 0) {
-        // Default to Plan A or keep currently selected plan type
         const match = selectedPlan
           ? res.plans.find((p) => p.plan_type === selectedPlan.plan_type) || res.plans[0]
           : res.plans[0];
@@ -50,7 +49,7 @@ export const DashboardPage: React.FC = () => {
       const updated = await api.approveAction(actionId, approvalHash);
       setNotification({
         type: 'success',
-        message: `Plan Approved! Action state is now APPROVED. Cryptographic HMAC bound to ${updated.recipient}.`,
+        message: `Plan Approved! Action state is now APPROVED. HMAC cryptographic signature bound to ${updated.recipient}.`,
       });
       await fetchForecast();
     } catch (err: any) {
@@ -74,7 +73,7 @@ export const DashboardPage: React.FC = () => {
   const handleSimulatePayment = async () => {
     try {
       setIsSimulating(true);
-      const res = await api.simulateWebhook();
+      await api.simulateWebhook();
       setNotification({
         type: 'success',
         message: `PayPal Sandbox Webhook Fired! Verified payment received. Action moved to CONFIRMED. Cashflow recalculated.`,
@@ -90,8 +89,8 @@ export const DashboardPage: React.FC = () => {
   if (isLoading && !data) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-3">
-        <RefreshCw className="w-8 h-8 text-blue-600 animate-spin" />
-        <p className="text-sm font-semibold text-slate-600">Running Forecaster Agent & training delay models...</p>
+        <RefreshCw className="w-8 h-8 text-electric animate-spin" />
+        <p className="text-sm font-semibold text-ink">Running Forecaster Agent & training delay models...</p>
       </div>
     );
   }
@@ -101,11 +100,11 @@ export const DashboardPage: React.FC = () => {
   const isCovered = data.shortfall_amount === 0 || activeAction?.state === 'confirmed';
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div className="space-y-6 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Notifications Banner */}
       {notification && (
         <div
-          className={`p-4 rounded-xl border text-sm flex items-center justify-between shadow-sm ${
+          className={`p-4 rounded-xl border text-xs sm:text-sm flex items-center justify-between shadow-xs ${
             notification.type === 'success'
               ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
               : 'bg-rose-50 text-rose-800 border-rose-300'
@@ -121,14 +120,14 @@ export const DashboardPage: React.FC = () => {
           </div>
           <button
             onClick={() => setNotification(null)}
-            className="text-xs font-bold text-slate-500 hover:text-slate-800 ml-4"
+            className="text-xs font-bold text-sardine-slate hover:text-ink ml-4"
           >
             Dismiss
           </button>
         </div>
       )}
 
-      {/* 1. At-Risk Obligation Banner */}
+      {/* 1. Bento Tile: At-Risk Obligation Hero */}
       <AtRiskBanner
         obligation={data.obligation}
         shortfallAmount={data.shortfall_amount}
@@ -137,7 +136,7 @@ export const DashboardPage: React.FC = () => {
         isCovered={isCovered}
       />
 
-      {/* 2. Interactive Forecast Chart & Driver Breakdown */}
+      {/* 2. Bento Grid: Trajectory Chart (2 cols) + Agentic Risk Intelligence (1 col) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <ForecastChart
@@ -156,22 +155,22 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. Three Rescue Plans Side-by-Side Comparison */}
-      <div>
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+      {/* 3. Bento Grid: Three Rescue Plans Side-by-Side Comparison */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div>
-            <h3 className="text-lg font-extrabold text-slate-900 flex items-center space-x-2">
-              <span>Rescue Plan Comparison</span>
-              <span className="text-xs font-semibold px-2.5 py-0.5 bg-blue-100 text-blue-800 rounded-full">
-                Heart of Product
+            <div className="flex items-center space-x-2">
+              <h2 className="text-lg font-extrabold text-ink tracking-tight">Rescue Plan Options</h2>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-ink text-white rounded-md">
+                Cheapest Safe Fixes
               </span>
-            </h3>
-            <p className="text-xs text-slate-500">
-              Deterministic, costed options to plausibly protect Friday's contractor payout. Approve one exact action.
+            </div>
+            <p className="text-xs text-sardine-slate mt-0.5">
+              Deterministic, costed options to plausibly protect Friday's payout. Approve one exact action.
             </p>
           </div>
-          <span className="text-xs text-slate-400 font-medium italic">
-            *Wording guarantees nothing; all options state plausibly protects.
+          <span className="text-xs text-sardine-slate font-medium italic">
+            *All plans state 'plausibly protects', never 'guarantees'.
           </span>
         </div>
 
@@ -190,34 +189,34 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 4. Action State Lifecycle Timeline */}
+      {/* 4. Action State Progression Stepper */}
       {activeAction && <ActionTimeline action={activeAction} />}
 
-      {/* 5. Demo Scenario Action Bar (Under 3 Minutes Complete Demo) */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 text-white shadow-xl border border-indigo-800/50">
+      {/* 5. Bento Tile: Hackathon Fast-Track Sandbox Bar */}
+      <div className="bento-ink p-6 border border-slate-800 shadow-bento">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
+          <div className="space-y-1">
             <div className="flex items-center space-x-2">
-              <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 text-[10px] font-bold uppercase tracking-wider">
-                Hackathon Demo Fast-Track
+              <span className="px-2 py-0.5 rounded-full bg-electric-500/20 text-electric-300 border border-electric-400/30 text-[10px] font-bold uppercase tracking-wider">
+                PayPal AI Hackathon Fast-Track
               </span>
-              <span className="text-xs text-slate-400 font-medium">3-Minute Live Workflow</span>
+              <span className="text-xs text-sardine-muted font-medium">Under 3-Minute Live Verification</span>
             </div>
-            <h4 className="text-base font-bold text-white mt-1">
+            <h3 className="text-base font-bold text-white tracking-tight">
               Simulate Client Payment Arrival (Sandbox Webhook)
-            </h4>
-            <p className="text-xs text-slate-300 max-w-xl mt-0.5">
-              Fires verified <code className="text-indigo-300">INVOICING.INVOICE.PAID</code> webhook event. Moves Action to{' '}
-              <strong className="text-emerald-400">CONFIRMED</strong> and recalculates cash balance to show the obligation is protected.
+            </h3>
+            <p className="text-xs text-sardine-muted max-w-xl">
+              Fires a verified <code className="text-electric-300 bg-slate-900 px-1 py-0.5 rounded">INVOICING.INVOICE.PAID</code> webhook event. Moves the approved action to{' '}
+              <strong className="text-emerald-400">CONFIRMED</strong> and recalculates balance to show the contractor obligation is fully covered.
             </p>
           </div>
 
           <button
             onClick={handleSimulatePayment}
             disabled={isSimulating}
-            className="flex items-center space-x-2 px-5 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-extrabold text-sm rounded-xl shadow-lg transition-all disabled:opacity-50 shrink-0"
+            className="flex items-center space-x-2 px-5 py-3 bg-electric hover:bg-electric-600 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-glow-electric transition-all disabled:opacity-50 shrink-0"
           >
-            <Zap className={`w-4 h-4 text-amber-300 ${isSimulating ? 'animate-bounce' : ''}`} />
+            <Zap className={`w-4 h-4 text-white ${isSimulating ? 'animate-bounce' : ''}`} />
             <span>{isSimulating ? 'Processing Webhook...' : 'Simulate Client Payment ($2,000)'}</span>
           </button>
         </div>
@@ -225,4 +224,3 @@ export const DashboardPage: React.FC = () => {
     </div>
   );
 };
-
