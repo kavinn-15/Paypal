@@ -88,10 +88,13 @@ def seed_database(clean: bool = False, demo_mode: bool = True):
             Base.metadata.create_all(bind=engine)
             db = SessionLocal()
 
-        # Check if owner already exists
-        owner = db.query(Owner).first()
+        # Select dedicated demo owner (Alex Morgan) rather than modifying the first registered user
+        owner = db.query(Owner).filter(
+            (Owner.email == "alex.morgan.freelance@example.com") | (Owner.is_demo == True)
+        ).first()
+
         if not owner:
-            print("Creating owner: Alex Morgan...")
+            print("Creating dedicated demo owner: Alex Morgan...")
             owner = Owner(
                 name="Alex Morgan",
                 email="alex.morgan.freelance@example.com",
@@ -105,7 +108,7 @@ def seed_database(clean: bool = False, demo_mode: bool = True):
             db.add(owner)
             db.flush()
         else:
-            owner.hashed_password = hash_password("DemoAlex2026!")
+            # Ensure dedicated demo owner is marked as demo
             owner.is_demo = True
             db.flush()
 

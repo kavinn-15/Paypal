@@ -118,3 +118,4 @@ backend\tests\test_webhook_integration.py ...                            [100%]
 - **Scrollbar Elimination**: Applied cross-browser `scrollbar-none` and CSS overrides to ensure the top navigation never produces an ugly horizontal or vertical slide bar.
 - **Automated JWT Handling**: `frontend/src/api/client.ts` automatically attaches the Authorization Bearer header, refreshes expired tokens, and handles unauthenticated states gracefully.
 - **Frontend Test Suite**: `vitest` passes with 100% success rate across all component and math validation suites.
+

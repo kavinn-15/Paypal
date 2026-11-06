@@ -78,17 +78,20 @@ class FinancialService:
         expected_inflows = Decimal("0.00")
         expected_outflows = Decimal("0.00")
 
-        # 1. Open invoices (Receivables)
+        # 1. Open invoices (Receivables) - accurately accounts for partial payments
         open_invoices = db.query(Invoice).join(Invoice.client).filter(
             Invoice.client.has(owner_id=owner.id),
-            Invoice.status.in_(["SENT", "DRAFT"])
+            Invoice.status.in_(["SENT", "DRAFT", "PARTIALLY_PAID"])
         ).all()
 
         for inv in open_invoices:
-            canon_id = f"inv_{inv.paypal_invoice_id}"
-            seen_inflow_canonical_ids.add(canon_id)
-            if inv.due_date <= thirty_days_later:
-                expected_inflows += Decimal(str(inv.amount))
+            paid_so_far = sum(Decimal(str(h.amount)) for h in inv.history_records)
+            outstanding = max(Decimal("0.00"), Decimal(str(inv.amount)) - paid_so_far)
+            if outstanding > Decimal("0.00"):
+                canon_id = f"inv_{inv.paypal_invoice_id}"
+                seen_inflow_canonical_ids.add(canon_id)
+                if inv.due_date <= thirty_days_later:
+                    expected_inflows += outstanding
 
         # 2. Open obligations (Payables)
         obligations = db.query(Obligation).filter(
@@ -167,7 +170,7 @@ class FinancialService:
         items: List[Dict[str, Any]] = []
         seen_refs: Set[str] = set()
 
-        # 1. Invoices
+        # 1. Invoices (accurately separates confirmed partial payments from outstanding balances)
         invoices = db.query(Invoice).join(Invoice.client).filter(
             Invoice.client.has(owner_id=owner.id)
         ).all()
@@ -175,19 +178,55 @@ class FinancialService:
         for inv in invoices:
             ref_key = f"inv_{inv.paypal_invoice_id}"
             seen_refs.add(ref_key)
-            items.append({
-                "id": f"invoice-{inv.id}",
-                "title": f"Invoice #{inv.paypal_invoice_id} ({inv.client.name})",
-                "amount": float(inv.amount),
-                "currency": inv.currency,
-                "direction": "inflow",
-                "category": "client_invoice",
-                "date": inv.due_date.strftime("%Y-%m-%d"),
-                "status": "confirmed" if inv.status == "PAID" else "expected",
-                "data_source": "paypal",
-                "reference_id": inv.paypal_invoice_id,
-                "canonical_id": ref_key
-            })
+            paid_so_far = sum(Decimal(str(h.amount)) for h in inv.history_records)
+            inv_total = Decimal(str(inv.amount))
+            outstanding = max(Decimal("0.00"), inv_total - paid_so_far)
+
+            if inv.status == "PAID" or outstanding == Decimal("0.00"):
+                items.append({
+                    "id": f"invoice-{inv.id}",
+                    "title": f"Invoice #{inv.paypal_invoice_id} ({inv.client.name})",
+                    "amount": float(inv_total),
+                    "currency": inv.currency,
+                    "direction": "inflow",
+                    "category": "client_invoice",
+                    "date": (inv.paid_date or inv.due_date).strftime("%Y-%m-%d"),
+                    "status": "confirmed",
+                    "data_source": "paypal",
+                    "reference_id": inv.paypal_invoice_id,
+                    "canonical_id": ref_key
+                })
+            else:
+                # Include confirmed partial payment records if any
+                for h in inv.history_records:
+                    items.append({
+                        "id": f"inv-pay-{h.id}",
+                        "title": f"Partial Payment: Invoice #{inv.paypal_invoice_id} ({inv.client.name})",
+                        "amount": float(h.amount),
+                        "currency": inv.currency,
+                        "direction": "inflow",
+                        "category": "client_invoice",
+                        "date": h.paid_date.strftime("%Y-%m-%d"),
+                        "status": "confirmed",
+                        "data_source": "paypal",
+                        "reference_id": inv.paypal_invoice_id,
+                        "canonical_id": f"pay_{inv.paypal_invoice_id}_{h.id}"
+                    })
+                # Include remaining outstanding balance as expected
+                if outstanding > Decimal("0.00"):
+                    items.append({
+                        "id": f"invoice-{inv.id}",
+                        "title": f"Invoice #{inv.paypal_invoice_id} ({inv.client.name})" if paid_so_far == 0 else f"Invoice #{inv.paypal_invoice_id} Balance Due ({inv.client.name})",
+                        "amount": float(outstanding),
+                        "currency": inv.currency,
+                        "direction": "inflow",
+                        "category": "client_invoice",
+                        "date": inv.due_date.strftime("%Y-%m-%d"),
+                        "status": "expected",
+                        "data_source": "paypal",
+                        "reference_id": inv.paypal_invoice_id,
+                        "canonical_id": ref_key
+                    })
 
         # 2. Obligations
         obligations = db.query(Obligation).filter(

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
+import { AuthModal } from './components/AuthModal';
 import { DashboardPage } from './pages/DashboardPage';
 import { WhatIfPage } from './pages/WhatIfPage';
 import { SupervisorPage } from './pages/SupervisorPage';
@@ -10,11 +11,24 @@ import { ApprovalInboxPage } from './pages/ApprovalInboxPage';
 import { ClientsPage } from './pages/ClientsPage';
 import { AuditPage } from './pages/AuditPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { api } from './api/client';
+import { api, getStoredToken } from './api/client';
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [isResetting, setIsResetting] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const token = getStoredToken();
+    if (token) {
+      api.getCurrentUser()
+        .then((user) => setCurrentUser(user))
+        .catch(() => {
+          setCurrentUser(null);
+        });
+    }
+  }, []);
 
   const handleResetDemo = async () => {
     try {
@@ -29,6 +43,18 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleLogout = async () => {
+    await api.logout();
+    setCurrentUser(null);
+    window.location.reload();
+  };
+
+  const handleAuthSuccess = (user: any) => {
+    setCurrentUser(user);
+    setIsAuthModalOpen(false);
+    window.location.reload();
+  };
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-between">
       <div>
@@ -37,6 +63,9 @@ export const App: React.FC = () => {
           onTabChange={setCurrentTab}
           onResetDemo={handleResetDemo}
           isResetting={isResetting}
+          currentUser={currentUser}
+          onOpenAuth={() => setIsAuthModalOpen(true)}
+          onLogout={handleLogout}
         />
 
         <main>
@@ -52,6 +81,12 @@ export const App: React.FC = () => {
           {currentTab === 'settings' && <SettingsPage />}
         </main>
       </div>
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={handleAuthSuccess}
+      />
 
       <footer className="border-t border-slate-200 py-6 text-center text-xs text-sardine-slate bg-white">
         <div className="max-w-[1440px] mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-2">

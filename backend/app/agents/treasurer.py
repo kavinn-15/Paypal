@@ -54,7 +54,10 @@ class TreasurerAgent:
             inst1 = max(round(starting_balance - min_reserve, 2), round(total * 0.25, 2))
             inst2 = round(total - inst1, 2)
 
-        inst2_date = max(expected_next_inflow_date, obligation.due_date + timedelta(days=5))
+        # Normalize to naive UTC datetimes to prevent offset-naive vs offset-aware comparison errors
+        obl_due = obligation.due_date.replace(tzinfo=None) if obligation.due_date.tzinfo else obligation.due_date
+        inflow_dt = expected_next_inflow_date.replace(tzinfo=None) if expected_next_inflow_date.tzinfo else expected_next_inflow_date
+        inst2_date = max(inflow_dt, obl_due + timedelta(days=5))
 
         return {
             "total_amount": total,

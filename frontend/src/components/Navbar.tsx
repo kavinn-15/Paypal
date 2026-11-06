@@ -11,7 +11,10 @@ import {
   Bot,
   MessageSquare,
   Compass,
-  Clock
+  Clock,
+  LogIn,
+  LogOut,
+  UserCheck
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -19,6 +22,9 @@ interface NavbarProps {
   onTabChange: (tab: string) => void;
   onResetDemo: () => void;
   isResetting: boolean;
+  currentUser?: any;
+  onOpenAuth: () => void;
+  onLogout: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -26,6 +32,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onTabChange,
   onResetDemo,
   isResetting,
+  currentUser,
+  onOpenAuth,
+  onLogout,
 }) => {
   const navItems = [
     { id: 'dashboard', label: 'Forecast', icon: Activity },
@@ -93,8 +102,35 @@ export const Navbar: React.FC<NavbarProps> = ({
             })}
           </nav>
 
-          {/* Sandbox Indicator & Reset Button */}
+          {/* User Account, Sandbox Indicator & Reset Button */}
           <div className="flex items-center space-x-2 shrink-0">
+            {currentUser ? (
+              <div className="flex items-center space-x-2">
+                <div className="hidden md:flex items-center space-x-1.5 px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-lg text-ink text-xs font-semibold">
+                  <UserCheck className="w-3.5 h-3.5 text-electric" />
+                  <span className="max-w-[120px] truncate">{currentUser.name || currentUser.email}</span>
+                  {currentUser.is_demo && (
+                    <span className="text-[9px] bg-electric/10 text-electric font-bold px-1 rounded-sm">DEMO</span>
+                  )}
+                </div>
+                <button
+                  onClick={onLogout}
+                  className="p-1.5 text-sardine-slate hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={onOpenAuth}
+                className="flex items-center space-x-1 px-2.5 py-1.5 bg-electric hover:bg-electric/90 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors whitespace-nowrap"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Sign In</span>
+              </button>
+            )}
+
             <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-50/80 border border-emerald-200 rounded-full text-emerald-800 text-[11px] font-semibold whitespace-nowrap">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
               <span>Sandbox</span>

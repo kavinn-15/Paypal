@@ -13,6 +13,7 @@ class InvalidStateTransitionError(Exception):
 class ActionState:
     PROPOSED = "proposed"
     APPROVED = "approved"
+    EXECUTING = "executing"
     EXECUTED = "executed"
     CONFIRMED = "confirmed"
     FAILED = "failed"
@@ -21,7 +22,8 @@ class ActionState:
 # Strict Directed State Machine Graph
 ALLOWED_TRANSITIONS = {
     ActionState.PROPOSED: [ActionState.APPROVED],
-    ActionState.APPROVED: [ActionState.EXECUTED],
+    ActionState.APPROVED: [ActionState.EXECUTING, ActionState.EXECUTED],
+    ActionState.EXECUTING: [ActionState.EXECUTED, ActionState.FAILED],
     ActionState.EXECUTED: [ActionState.CONFIRMED, ActionState.FAILED],
     ActionState.FAILED: [ActionState.APPROVED, ActionState.PROPOSED],  # Permitted retry paths
     ActionState.CONFIRMED: []  # Immutable terminal state

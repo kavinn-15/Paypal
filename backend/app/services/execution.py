@@ -1,15 +1,4 @@
 import logging
-from sqlalchemy.orm import Session
-from backend.app.models import Action, Invoice
-from backend.app.paypal.client import paypal_client, PayPalError
-from backend.app.guardrail.state_machine import GuardrailStateMachine, ActionState, InvalidStateTransitionError
-from backend.app.guardrail.policy import validate_action_against_policy, PolicyViolationError
-from backend.app.guardrail.audit import append_audit_log
-
-logger = logging.getLogger("action_executor")
-
-
-import logging
 from typing import Optional
 from sqlalchemy.orm import Session
 from backend.app.models import Action, Invoice, Obligation
@@ -26,7 +15,8 @@ class ActionExecutionService:
     Executes approved actions through the PayPal Sandbox:
     - Invoicing v2: Reminders, Discount updates
     - Payouts: Batch payouts with idempotency key
-    Zero fake batch IDs, zero swallowed errors, strict recipient & policy validation.
+    Zero fake batch IDs, zero swallowed errors, atomic concurrency locking,
+    and strict recipient & policy validation.
     """
 
     @staticmethod
@@ -37,10 +27,29 @@ class ActionExecutionService:
                 f"Action {action.id} cannot be executed. Current state is '{action.state}'. Must be '{ActionState.APPROVED}'."
             )
 
-        # 2. Safety Policy check
-        validate_action_against_policy(action, db)
+        # 2. Concurrency lock: atomically transition from approved -> executing
+        affected = db.query(Action).filter(
+            Action.id == action.id,
+            Action.state == ActionState.APPROVED
+        ).update({"state": ActionState.EXECUTING})
+        db.commit()
 
-        # 3. Execution routing
+        if affected == 0:
+            raise InvalidStateTransitionError(
+                f"Concurrent execution blocked: Action {action.id} is already executing or state has changed."
+            )
+        db.refresh(action)
+
+        # 3. Safety Policy check
+        try:
+            validate_action_against_policy(action, db)
+        except Exception:
+            # Revert back to APPROVED on pre-execution policy failure
+            action.state = ActionState.APPROVED
+            db.commit()
+            raise
+
+        # 4. Execution routing
         try:
             if action.action_type == "SEND_REMINDER":
                 inv_id = action.paypal_ref

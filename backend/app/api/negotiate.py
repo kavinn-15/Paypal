@@ -27,8 +27,11 @@ def generate_negotiation_options(
     - Urgent but Respectful (critical deadline focus)
     For early invoice discounts (clients) or payment installments (contractors).
     """
-    agent = NegotiationAgent(db)
-    return agent.generate_options(owner=current_user, req=req)
+    try:
+        agent = NegotiationAgent(db)
+        return agent.generate_options(owner=current_user, req=req)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.get("/drafts", response_model=List[NegotiationDraftOut])

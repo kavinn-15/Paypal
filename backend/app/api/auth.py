@@ -188,21 +188,31 @@ def demo_login(db: Session = Depends(get_db)):
             detail="Demo login is strictly disabled in production environments."
         )
 
+    # Strictly query for dedicated demo owner with is_demo == True. Never fallback to Owner.first()
     owner = db.query(Owner).filter(Owner.is_demo == True).first()
     if not owner:
-        owner = db.query(Owner).first()
-    if not owner:
-        owner = Owner(
-            name="Alex Morgan",
-            email="alex.morgan.freelance@gmail.com",
-            currency="USD",
-            timezone="UTC",
-            is_demo=True,
-            is_active=True
-        )
-        db.add(owner)
-        db.commit()
-        db.refresh(owner)
+        # Check if Alex Morgan demo account exists
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        if owner and not owner.is_demo:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Security violation: Demo login cannot issue credentials for a real user account."
+            )
+        if not owner:
+            owner = Owner(
+                name="Alex Morgan",
+                email="alex.morgan.freelance@example.com",
+                currency="USD",
+                timezone="UTC",
+                is_demo=True,
+                is_active=True
+            )
+            db.add(owner)
+            db.commit()
+            db.refresh(owner)
+        else:
+            owner.is_demo = True
+            db.commit()
 
     token = create_access_token({"sub": owner.id, "email": owner.email})
     refresh_token = create_refresh_token(owner.id)

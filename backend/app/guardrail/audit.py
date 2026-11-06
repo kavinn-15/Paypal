@@ -1,11 +1,13 @@
 import json
 import hashlib
+import threading
 from datetime import datetime, timezone
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 from sqlalchemy.orm import Session
 from backend.app.models import AuditLog
 
 GENESIS_HASH = "0" * 64
+_audit_chain_lock = threading.Lock()
 
 
 def serialize_payload(payload: Dict[str, Any]) -> str:
@@ -41,26 +43,30 @@ def append_audit_log(
     payload: Dict[str, Any],
     owner_id: Optional[int] = None
 ) -> AuditLog:
-    """Appends an immutable, hash-chained record to the audit log."""
-    last_entry = db.query(AuditLog).order_by(AuditLog.id.desc()).first()
-    prev_hash = last_entry.hash if last_entry else GENESIS_HASH
+    """
+    Appends an immutable, hash-chained record to the audit log.
+    Protected by threading lock for atomic, serialized hash-chain updates.
+    """
+    with _audit_chain_lock:
+        last_entry = db.query(AuditLog).order_by(AuditLog.id.desc()).first()
+        prev_hash = last_entry.hash if last_entry else GENESIS_HASH
 
-    now = datetime.now(timezone.utc)
-    new_hash = compute_hash(prev_hash, now, actor, event, payload)
+        now = datetime.now(timezone.utc)
+        new_hash = compute_hash(prev_hash, now, actor, event, payload)
 
-    entry = AuditLog(
-        owner_id=owner_id,
-        ts=now,
-        actor=actor,
-        event=event,
-        payload=payload,
-        prev_hash=prev_hash,
-        hash=new_hash
-    )
-    db.add(entry)
-    db.commit()
-    db.refresh(entry)
-    return entry
+        entry = AuditLog(
+            owner_id=owner_id,
+            ts=now,
+            actor=actor,
+            event=event,
+            payload=payload,
+            prev_hash=prev_hash,
+            hash=new_hash
+        )
+        db.add(entry)
+        db.commit()
+        db.refresh(entry)
+        return entry
 
 
 def verify_audit_chain(db: Session) -> Tuple[bool, int, str, Any]:

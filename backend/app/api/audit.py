@@ -15,9 +15,9 @@ def list_audit_logs(
     db: Session = Depends(get_db),
     current_user: Owner = Depends(get_current_user)
 ):
-    """Returns chronological audit log entries scoped to the authenticated user and system events."""
+    """Returns chronological audit log entries strictly scoped to the authenticated user."""
     return db.query(AuditLog).filter(
-        (AuditLog.owner_id == current_user.id) | (AuditLog.owner_id == None)
+        AuditLog.owner_id == current_user.id
     ).order_by(AuditLog.id.desc()).all()
 
 

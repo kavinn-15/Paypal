@@ -56,19 +56,44 @@ def clear_demo_scenario(
     """
     _check_demo_allowed()
 
-    demo_owners = db.query(Owner).filter((Owner.is_demo == True) | (Owner.id == current_user.id)).all()
+    # Strictly target ONLY dedicated demo owners (where is_demo == True).
+    # Real, non-demo users' records are NEVER touched or deleted.
+    demo_owners = db.query(Owner).filter(Owner.is_demo == True).all()
     demo_owner_ids = [o.id for o in demo_owners]
 
-    # Delete only demo records
-    demo_clients = db.query(Client).filter(Client.owner_id.in_(demo_owner_ids), Client.is_seeded == True).all()
+    if not demo_owner_ids:
+        return {
+            "status": "success",
+            "message": "No demo records found to clear.",
+            "is_demo_active": False
+        }
+
+    # Delete only seeded/demo clients and their associated data
+    demo_clients = db.query(Client).filter(
+        Client.owner_id.in_(demo_owner_ids),
+        Client.is_seeded == True
+    ).all()
     demo_client_ids = [c.id for c in demo_clients]
 
-    db.query(PaymentHistory).filter(PaymentHistory.client_id.in_(demo_client_ids)).delete(synchronize_session=False)
-    db.query(Invoice).filter(Invoice.client_id.in_(demo_client_ids)).delete(synchronize_session=False)
-    db.query(Obligation).filter(Obligation.owner_id.in_(demo_owner_ids)).delete(synchronize_session=False)
-    db.query(Client).filter(Client.id.in_(demo_client_ids)).delete(synchronize_session=False)
-    db.query(RescuePlan).filter(RescuePlan.owner_id.in_(demo_owner_ids)).delete(synchronize_session=False)
+    if demo_client_ids:
+        db.query(PaymentHistory).filter(PaymentHistory.client_id.in_(demo_client_ids)).delete(synchronize_session=False)
+        db.query(Invoice).filter(Invoice.client_id.in_(demo_client_ids)).delete(synchronize_session=False)
+        db.query(Client).filter(Client.id.in_(demo_client_ids)).delete(synchronize_session=False)
+
+    # Strictly delete only demo obligations belonging to demo owners
+    db.query(Obligation).filter(
+        Obligation.owner_id.in_(demo_owner_ids)
+    ).delete(synchronize_session=False)
+
+    # Delete demo financial entries
+    db.query(FinancialEntry).filter(
+        FinancialEntry.owner_id.in_(demo_owner_ids),
+        FinancialEntry.is_demo == True
+    ).delete(synchronize_session=False)
+
+    # Delete demo actions, plans, and forecasts strictly belonging to demo owners
     db.query(Action).filter(Action.owner_id.in_(demo_owner_ids)).delete(synchronize_session=False)
+    db.query(RescuePlan).filter(RescuePlan.owner_id.in_(demo_owner_ids)).delete(synchronize_session=False)
     db.query(Forecast).filter(Forecast.owner_id.in_(demo_owner_ids)).delete(synchronize_session=False)
     db.commit()
 

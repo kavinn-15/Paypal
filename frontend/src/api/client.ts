@@ -39,38 +39,8 @@ export function clearStoredTokens(): void {
   localStorage.removeItem('cashflow_user_email');
 }
 
-let isBootstrappingAuth = false;
-
-async function bootstrapAuth(): Promise<string | null> {
-  if (isBootstrappingAuth) return null;
-  isBootstrappingAuth = true;
-  try {
-    const res = await fetch(`${API_BASE}/auth/demo-login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setStoredTokens(data.access_token, data.refresh_token);
-      if (data.email) localStorage.setItem('cashflow_user_email', data.email);
-      return data.access_token;
-    }
-  } catch {
-    // ignore
-  } finally {
-    isBootstrappingAuth = false;
-  }
-  return null;
-}
-
 async function request<T>(endpoint: string, options?: RequestInit, isRetry = false): Promise<T> {
-  let token = getStoredToken();
-
-  // If unauthenticated and calling a non-auth endpoint, bootstrap with demo-login in sandbox/dev mode
-  if (!token && !endpoint.startsWith('/auth/') && !endpoint.startsWith('/health')) {
-    token = await bootstrapAuth();
-  }
-
+  const token = getStoredToken();
   const url = `${API_BASE}${endpoint}`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -87,10 +57,9 @@ async function request<T>(endpoint: string, options?: RequestInit, isRetry = fal
     headers,
   });
 
-  // Handle 401 Unauthorized: attempt refresh or re-login once
+  // Handle 401 Unauthorized: attempt refresh token exchange if available
   if (res.status === 401 && !isRetry && !endpoint.startsWith('/auth/')) {
     const refreshToken = getStoredRefreshToken();
-    let refreshed = false;
     if (refreshToken) {
       try {
         const refRes = await fetch(`${API_BASE}/auth/refresh`, {
@@ -101,18 +70,13 @@ async function request<T>(endpoint: string, options?: RequestInit, isRetry = fal
         if (refRes.ok) {
           const refData = await refRes.json();
           setStoredTokens(refData.access_token, refData.refresh_token);
-          refreshed = true;
+          return request<T>(endpoint, options, true);
+        } else {
+          clearStoredTokens();
         }
       } catch {
-        // ignore
+        clearStoredTokens();
       }
-    }
-    if (!refreshed) {
-      const newToken = await bootstrapAuth();
-      if (newToken) refreshed = true;
-    }
-    if (refreshed) {
-      return request<T>(endpoint, options, true);
     }
   }
 

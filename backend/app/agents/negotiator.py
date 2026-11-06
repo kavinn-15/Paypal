@@ -32,7 +32,12 @@ class NegotiationAgent:
         if req.target_type == "client_discount":
             client = None
             if req.client_id:
-                client = self.db.query(Client).filter(Client.id == req.client_id).first()
+                client = self.db.query(Client).filter(
+                    Client.id == req.client_id,
+                    Client.owner_id == owner.id
+                ).first()
+                if not client:
+                    raise ValueError(f"Client with id {req.client_id} not found or does not belong to owner.")
             if not client:
                 client = self.db.query(Client).filter(Client.owner_id == owner.id).first()
 
@@ -127,7 +132,12 @@ class NegotiationAgent:
             # contractor_split
             obligation = None
             if req.obligation_id:
-                obligation = self.db.query(Obligation).filter(Obligation.id == req.obligation_id).first()
+                obligation = self.db.query(Obligation).filter(
+                    Obligation.id == req.obligation_id,
+                    Obligation.owner_id == owner.id
+                ).first()
+                if not obligation:
+                    raise ValueError(f"Obligation with id {req.obligation_id} not found or does not belong to owner.")
             if not obligation:
                 obligation = self.db.query(Obligation).filter(Obligation.owner_id == owner.id).first()
 
