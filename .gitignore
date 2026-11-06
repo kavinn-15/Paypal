@@ -7,7 +7,9 @@ __pycache__/
 
 # Database & Caches
 *.db
-cashflow.db
+*.db-shm
+*.db-wal
+cashflow.db*
 .pytest_cache/
 
 # Sensitive Environment Configurations
