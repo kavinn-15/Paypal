@@ -62,3 +62,4 @@ switch ($Command) {
         Write-Host "  clean       - Delete cache and local database"
     }
 }
+
