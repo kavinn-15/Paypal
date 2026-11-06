@@ -1,12 +1,14 @@
 import logging
+from decimal import Decimal
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 
-from backend.app.models import Invoice, Action, PaymentHistory, WebhookEvent, Obligation
+from backend.app.models import Invoice, Action, PaymentHistory, WebhookEvent, Obligation, FinancialEntry
 from backend.app.guardrail.state_machine import GuardrailStateMachine, ActionState
 from backend.app.guardrail.audit import append_audit_log
 from backend.app.agents.forecaster import ForecasterAgent
+from backend.app.services.financial_service import FinancialService
 
 logger = logging.getLogger("webhook_processor")
 
@@ -14,69 +16,132 @@ logger = logging.getLogger("webhook_processor")
 def process_webhook_event(
     db: Session,
     event_payload: Dict[str, Any],
-    is_simulated: bool = False
+    is_simulated: bool = False,
+    webhook_event_id: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Processes verified PayPal webhook events:
-    - INVOICING.INVOICE.PAID: marks invoice paid, transitions action to CONFIRMED, recomputes forecast.
-    - PAYMENT.PAYOUTS-ITEM.SUCCEEDED: marks contractor payout installment confirmed.
+    - INVOICING.INVOICE.PAID:
+        * Matches invoice strictly by exact paypal_invoice_id (zero fallback to random invoices).
+        * Replay safe: checks if already paid to prevent double-crediting balances.
+        * Supports partial payments.
+        * Matches action strictly by exact paypal_ref and owner_id.
+        * Updates authoritative financial ledger and recomputes forecast.
+    - PAYMENT.PAYOUTS-ITEM.SUCCEEDED:
+        * Authoritatively confirms contractor payout installment.
     """
+    event_id = event_payload.get("id", "UNKNOWN")
     event_type = event_payload.get("event_type", "").upper()
     resource = event_payload.get("resource", {})
 
-    logger.info(f"Processing webhook event: {event_type} (simulated={is_simulated})")
+    logger.info(f"Processing webhook event: {event_type} (id={event_id}, simulated={is_simulated})")
+
+    # Locate WebhookEvent record for durable state tracking
+    evt_record = None
+    if webhook_event_id:
+        evt_record = db.query(WebhookEvent).filter(WebhookEvent.id == webhook_event_id).first()
+    elif event_id != "UNKNOWN":
+        evt_record = db.query(WebhookEvent).filter(WebhookEvent.paypal_event_id == event_id).first()
+
+    now = datetime.now(timezone.utc)
 
     if event_type == "INVOICING.INVOICE.PAID":
-        # Extract invoice ID
         inv_data = resource.get("invoice", resource)
         paypal_inv_id = inv_data.get("id") or resource.get("id")
 
         if not paypal_inv_id:
             logger.warning(f"No invoice ID found in webhook resource: {resource}")
-            return {"status": "skipped", "reason": "no_invoice_id"}
+            if evt_record:
+                evt_record.processing_state = "quarantined"
+                evt_record.error_details = "Missing invoice ID in resource payload"
+                evt_record.reconciliation_status = "manual_review_required"
+                db.commit()
+            return {"status": "quarantined", "reason": "missing_invoice_id"}
 
+        # Exact invoice lookup (NO GUESSING BY AMOUNT)
         invoice = db.query(Invoice).filter(Invoice.paypal_invoice_id == paypal_inv_id).first()
         if not invoice:
-            # If not found by exact ID, fallback to find any open invoice with matching amount
-            paid_amount = float(inv_data.get("amount", {}).get("value", 0.0) or resource.get("amount", {}).get("value", 0.0) or 0.0)
-            if paid_amount > 0:
-                invoice = db.query(Invoice).filter(Invoice.status == "SENT", Invoice.amount == paid_amount).first()
+            logger.warning(f"No matching local invoice for paypal_invoice_id: {paypal_inv_id}. Quarantining event.")
+            if evt_record:
+                evt_record.processing_state = "quarantined"
+                evt_record.error_details = f"Invoice {paypal_inv_id} not found in database"
+                evt_record.reconciliation_status = "manual_review_required"
+                db.commit()
+            return {"status": "quarantined", "reason": "invoice_not_found", "paypal_invoice_id": paypal_inv_id}
 
-        if not invoice:
-            logger.warning(f"No matching local invoice found for paypal_invoice_id: {paypal_inv_id}")
-            return {"status": "invoice_not_found", "paypal_invoice_id": paypal_inv_id}
+        # Associate owner with webhook event
+        owner = invoice.client.owner if invoice.client else None
+        if evt_record and owner:
+            evt_record.owner_id = owner.id
 
-        now = datetime.now(timezone.utc)
-        invoice.status = "PAID"
-        invoice.paid_date = now
+        # Replay / Idempotency Check: if invoice is already marked PAID, prevent balance double-crediting
+        if invoice.status == "PAID":
+            logger.info(f"Invoice {paypal_inv_id} is already marked PAID. Ignoring duplicate payment event.")
+            if evt_record:
+                evt_record.processing_state = "processed"
+                evt_record.processed = True
+                evt_record.reconciliation_status = "reconciled"
+                evt_record.processed_at = now
+                db.commit()
+            return {
+                "status": "already_processed",
+                "invoice_id": invoice.id,
+                "paypal_invoice_id": paypal_inv_id,
+                "reason": "duplicate_payment_event_ignored"
+            }
 
-        # Add to payment history
+        # Parse payment amount and handle partial payments
+        raw_amt = inv_data.get("amount", {}).get("value") or resource.get("amount", {}).get("value")
+        paid_amount = Decimal(str(raw_amt)) if raw_amt else Decimal(str(invoice.amount))
+
+        if paid_amount < Decimal(str(invoice.amount)):
+            invoice.status = "PARTIALLY_PAID"
+        else:
+            invoice.status = "PAID"
+            invoice.paid_date = now
+
+        # Record in PaymentHistory
         due_d = invoice.due_date if invoice.due_date.tzinfo else invoice.due_date.replace(tzinfo=timezone.utc)
         days_late = max((now.date() - due_d.date()).days, 0)
         history_entry = PaymentHistory(
             client_id=invoice.client_id,
             invoice_id=invoice.id,
-            amount=invoice.amount,
+            amount=paid_amount,
             due_date=invoice.due_date,
             paid_date=now,
             days_late=days_late,
             source="seeded" if is_simulated else "paypal"
         )
         db.add(history_entry)
+
+        # Record confirmed income entry in authoritative financial ledger
+        if owner:
+            ledger_entry = FinancialEntry(
+                owner_id=owner.id,
+                canonical_id=f"pay_{invoice.paypal_invoice_id}_{now.strftime('%Y%m%d%H%M%S')}",
+                title=f"PayPal Invoice Payment #{invoice.paypal_invoice_id} ({invoice.client.name})",
+                amount=paid_amount,
+                currency=invoice.currency,
+                entry_type="confirmed_income",
+                category="client_invoice",
+                transaction_date=now,
+                status="confirmed",
+                data_source="paypal_webhook" if not is_simulated else "dev_simulator",
+                reference_id=invoice.paypal_invoice_id,
+                is_demo=is_simulated
+            )
+            db.add(ledger_entry)
+
         db.commit()
 
-        # Check for matching Action in EXECUTED state
-        action = db.query(Action).filter(
+        # Match Action strictly by exact paypal_ref and owner_id
+        action_query = db.query(Action).filter(
             Action.state == ActionState.EXECUTED,
-            (Action.paypal_ref == invoice.paypal_invoice_id) | (Action.recipient == invoice.client.name)
-        ).first()
-
-        # If no executed action for this exact invoice, check any executed reminder or discount action
-        if not action:
-            action = db.query(Action).filter(
-                Action.state == ActionState.EXECUTED,
-                Action.action_type.in_(["SEND_REMINDER", "APPLY_DISCOUNT"])
-            ).first()
+            Action.paypal_ref == invoice.paypal_invoice_id
+        )
+        if owner:
+            action_query = action_query.filter(Action.owner_id == owner.id)
+        action = action_query.first()
 
         if action:
             GuardrailStateMachine.transition(
@@ -86,26 +151,38 @@ def process_webhook_event(
                 actor="paypal_webhook" if not is_simulated else "dev_simulator"
             )
             action.is_simulated = is_simulated
+            action.confirmed_at = now
             db.commit()
 
-        # Recalculate forecast with new cash position
+        # Recalculate forecast using actual reconciled balance
+        reconciled_balance = float(FinancialService.get_confirmed_balance(db, owner)) if owner else 1800.0 + float(paid_amount)
         forecaster = ForecasterAgent(db)
-        # Starting balance increases by invoice payment amount
-        new_balance = 1800.0 + float(invoice.amount)
-        updated_forecast = forecaster.run_forecast(starting_balance=new_balance)
+        updated_forecast = forecaster.run_forecast(
+            obligation_id=None,
+            starting_balance=reconciled_balance,
+            owner_id=owner.id if owner else None
+        )
+
+        if evt_record:
+            evt_record.processing_state = "processed"
+            evt_record.processed = True
+            evt_record.reconciliation_status = "reconciled"
+            evt_record.processed_at = now
+            db.commit()
 
         append_audit_log(
             db=db,
-            actor="webhook",
-            event="WEBHOOK_RECALCULATION_COMPLETE",
+            actor="paypal_webhook" if not is_simulated else "dev_simulator",
+            event="WEBHOOK_INVOICE_PAID_RECONCILED",
             payload={
                 "paypal_invoice_id": invoice.paypal_invoice_id,
-                "amount_paid": float(invoice.amount),
-                "new_balance": new_balance,
+                "paid_amount": float(paid_amount),
+                "reconciled_balance": reconciled_balance,
                 "shortfall_remaining": updated_forecast.shortfall_amount,
                 "action_confirmed": action.id if action else None,
                 "is_simulated": is_simulated
-            }
+            },
+            owner_id=owner.id if owner else None
         )
 
         return {
@@ -113,7 +190,7 @@ def process_webhook_event(
             "invoice_id": invoice.id,
             "paypal_invoice_id": invoice.paypal_invoice_id,
             "action_confirmed": action.id if action else None,
-            "new_balance": new_balance,
+            "reconciled_balance": reconciled_balance,
             "shortfall_amount": updated_forecast.shortfall_amount,
             "is_simulated": is_simulated
         }
@@ -131,8 +208,39 @@ def process_webhook_event(
                 target_state=ActionState.CONFIRMED,
                 actor="paypal_webhook"
             )
+            action.confirmed_at = now
+            db.commit()
+
+            # Record confirmed outflow entry in ledger
+            if action.owner_id:
+                outflow_entry = FinancialEntry(
+                    owner_id=action.owner_id,
+                    canonical_id=f"payout_{sender_batch_id}",
+                    title=f"Contractor Payout Confirmed ({action.recipient})",
+                    amount=Decimal(str(action.amount)),
+                    currency=action.currency,
+                    entry_type="confirmed_expense",
+                    category="contractor",
+                    transaction_date=now,
+                    status="confirmed",
+                    data_source="paypal_webhook",
+                    reference_id=sender_batch_id
+                )
+                db.add(outflow_entry)
+                db.commit()
+
+        if evt_record:
+            evt_record.processing_state = "processed"
+            evt_record.processed = True
+            evt_record.reconciliation_status = "reconciled"
+            evt_record.processed_at = now
+            db.commit()
 
         return {"status": "success", "payout_action_confirmed": action.id if action else None}
 
-    return {"status": "unhandled_event_type", "event_type": event_type}
+    if evt_record:
+        evt_record.processing_state = "quarantined"
+        evt_record.reconciliation_status = "unhandled_type"
+        db.commit()
 
+    return {"status": "unhandled_event_type", "event_type": event_type}

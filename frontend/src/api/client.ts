@@ -18,16 +18,103 @@ import {
 
 const API_BASE = '/api';
 
-async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+export function getStoredToken(): string | null {
+  return localStorage.getItem('cashflow_access_token');
+}
+
+export function getStoredRefreshToken(): string | null {
+  return localStorage.getItem('cashflow_refresh_token');
+}
+
+export function setStoredTokens(accessToken: string, refreshToken?: string): void {
+  localStorage.setItem('cashflow_access_token', accessToken);
+  if (refreshToken) {
+    localStorage.setItem('cashflow_refresh_token', refreshToken);
+  }
+}
+
+export function clearStoredTokens(): void {
+  localStorage.removeItem('cashflow_access_token');
+  localStorage.removeItem('cashflow_refresh_token');
+  localStorage.removeItem('cashflow_user_email');
+}
+
+let isBootstrappingAuth = false;
+
+async function bootstrapAuth(): Promise<string | null> {
+  if (isBootstrappingAuth) return null;
+  isBootstrappingAuth = true;
+  try {
+    const res = await fetch(`${API_BASE}/auth/demo-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setStoredTokens(data.access_token, data.refresh_token);
+      if (data.email) localStorage.setItem('cashflow_user_email', data.email);
+      return data.access_token;
+    }
+  } catch {
+    // ignore
+  } finally {
+    isBootstrappingAuth = false;
+  }
+  return null;
+}
+
+async function request<T>(endpoint: string, options?: RequestInit, isRetry = false): Promise<T> {
+  let token = getStoredToken();
+
+  // If unauthenticated and calling a non-auth endpoint, bootstrap with demo-login in sandbox/dev mode
+  if (!token && !endpoint.startsWith('/auth/') && !endpoint.startsWith('/health')) {
+    token = await bootstrapAuth();
+  }
+
   const url = `${API_BASE}${endpoint}`;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    ...(options?.headers as Record<string, string>),
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const res = await fetch(url, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...options?.headers,
-    },
+    headers,
   });
+
+  // Handle 401 Unauthorized: attempt refresh or re-login once
+  if (res.status === 401 && !isRetry && !endpoint.startsWith('/auth/')) {
+    const refreshToken = getStoredRefreshToken();
+    let refreshed = false;
+    if (refreshToken) {
+      try {
+        const refRes = await fetch(`${API_BASE}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+        if (refRes.ok) {
+          const refData = await refRes.json();
+          setStoredTokens(refData.access_token, refData.refresh_token);
+          refreshed = true;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (!refreshed) {
+      const newToken = await bootstrapAuth();
+      if (newToken) refreshed = true;
+    }
+    if (refreshed) {
+      return request<T>(endpoint, options, true);
+    }
+  }
 
   if (!res.ok) {
     let errorDetail = res.statusText;
@@ -162,4 +249,50 @@ export const api = {
   }),
 
   getDemoStatus: () => request<{ is_demo_active: boolean; persona?: string }>('/demo/status'),
+
+  // Authentication & Ledger Integrity
+  demoLogin: async () => {
+    const res = await request<any>('/auth/demo-login', { method: 'POST' });
+    setStoredTokens(res.access_token, res.refresh_token);
+    if (res.email) localStorage.setItem('cashflow_user_email', res.email);
+    return res;
+  },
+
+  login: async (email: string, password: string) => {
+    const res = await request<any>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    setStoredTokens(res.access_token, res.refresh_token);
+    if (res.email) localStorage.setItem('cashflow_user_email', res.email);
+    return res;
+  },
+
+  register: async (data: { name: string; email: string; password: string; currency?: string }) => {
+    const res = await request<any>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    setStoredTokens(res.access_token, res.refresh_token);
+    if (res.email) localStorage.setItem('cashflow_user_email', res.email);
+    return res;
+  },
+
+  logout: async () => {
+    try {
+      const refreshToken = getStoredRefreshToken();
+      await request<{ status: string; message: string }>('/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+    } catch {
+      // ignore
+    } finally {
+      clearStoredTokens();
+    }
+  },
+
+  getCurrentUser: () => request<any>('/auth/me'),
+
+  getIntegrityCheck: () => request<any>('/finance/integrity-check'),
 };

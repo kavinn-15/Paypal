@@ -28,15 +28,23 @@ class AgentSupervisor:
         self,
         owner: Owner,
         obligation_id: Optional[int] = None,
-        starting_balance: float = 1800.0
+        starting_balance: Optional[float] = None
     ) -> SupervisorRunResponse:
         run_id = f"sup_{uuid.uuid4().hex[:12]}"
         now_str = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
         steps_trace: List[AgentTraceStep] = []
 
-        # Step 1: Forecaster Agent
+        if starting_balance is None:
+            from backend.app.services.financial_service import FinancialService
+            starting_balance = float(FinancialService.get_confirmed_balance(self.db, owner))
+
+        # Step 1: Forecaster Agent scoped strictly to authenticated owner
         forecaster = ForecasterAgent(self.db)
-        forecast_res = forecaster.run_forecast(obligation_id=obligation_id, starting_balance=starting_balance)
+        forecast_res = forecaster.run_forecast(
+            obligation_id=obligation_id,
+            starting_balance=starting_balance,
+            owner_id=owner.id
+        )
         has_shortfall = forecast_res.shortfall_amount > 0
 
         steps_trace.append(AgentTraceStep(

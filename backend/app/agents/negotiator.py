@@ -206,3 +206,4 @@ class NegotiationAgent:
                 context_summary=f"Splitting ${obligation.amount:,.2f} obligation into ${p1_amt:,.2f} upfront and ${p2_amt:,.2f} in 14d",
                 options=saved_drafts
             )
+

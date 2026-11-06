@@ -63,3 +63,4 @@ async def test_auth_registration_and_login_flow():
         res_me = await client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
         assert res_me.status_code == 200
         assert res_me.json()["name"] == "Sarah Connor"
+

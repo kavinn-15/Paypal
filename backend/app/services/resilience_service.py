@@ -173,3 +173,4 @@ class ResilienceService:
             recommended_actions=recommendations,
             factors=factors
         )
+

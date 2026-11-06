@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -7,6 +7,7 @@ from backend.app.models import Owner
 from backend.app.auth.deps import get_current_user
 from backend.app.schemas import SimulationScenarioRequest, WhatIfComparisonResponse
 from backend.app.services.simulation_service import SimulationService
+from backend.app.services.financial_service import FinancialService
 
 router = APIRouter(prefix="/simulation", tags=["What-If Financial Simulation Engine"])
 
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/simulation", tags=["What-If Financial Simulation Eng
 @router.post("/run", response_model=WhatIfComparisonResponse)
 def run_simulation(
     req: SimulationScenarioRequest,
-    starting_balance: float = Query(1800.0, description="Starting cash balance"),
+    starting_balance: Optional[float] = Query(None, description="Starting cash balance (defaults to authoritative reconciled ledger)"),
     db: Session = Depends(get_db),
     current_user: Owner = Depends(get_current_user)
 ):
@@ -28,6 +29,9 @@ def run_simulation(
     - Contractor split agreement
     Compares baseline vs simulated metrics side-by-side without modifying database records.
     """
+    if starting_balance is None:
+        starting_balance = float(FinancialService.get_confirmed_balance(db, current_user))
+
     return SimulationService.run_scenario(
         db=db,
         owner=current_user,
@@ -85,3 +89,4 @@ def get_simulation_presets():
             "impact_hint": "Completely protects cashflow"
         }
     ]
+

@@ -122,3 +122,4 @@ export const SupervisorPage: React.FC = () => {
     </div>
   );
 };
+

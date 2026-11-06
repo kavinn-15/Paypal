@@ -42,18 +42,21 @@ def validate_action_against_policy(action: Action, db: Session):
                     f"{settings.MAX_DISCOUNT_PCT:.1f}%"
                 )
 
-    # 4. Whitelisted Recipients Check
+    # 4. Whitelisted Recipients Check (strictly scoped to this owner)
     recip = action.recipient.strip().lower()
+    owner_filter = [Obligation.owner_id == action.owner_id] if action.owner_id else []
+    client_filter = [Client.owner_id == action.owner_id] if action.owner_id else []
+
     valid_contractors = [
-        o.payee_name.strip().lower() for o in db.query(Obligation).all()
+        o.payee_name.strip().lower() for o in db.query(Obligation).filter(*owner_filter).all()
     ] + [
-        o.payee_email.strip().lower() for o in db.query(Obligation).all()
+        o.payee_email.strip().lower() for o in db.query(Obligation).filter(*owner_filter).all()
     ]
 
     valid_clients = [
-        c.name.strip().lower() for c in db.query(Client).all()
+        c.name.strip().lower() for c in db.query(Client).filter(*client_filter).all()
     ] + [
-        c.email.strip().lower() for c in db.query(Client).all()
+        c.email.strip().lower() for c in db.query(Client).filter(*client_filter).all()
     ]
 
     is_whitelisted = (recip in valid_contractors) or (recip in valid_clients)

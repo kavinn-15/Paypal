@@ -23,12 +23,17 @@ class UserLogin(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: Optional[str] = None
     token_type: str = "bearer"
     user_id: int
     email: str
     name: str
     currency: str
     is_demo: bool
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 
 class UserProfile(BaseModel):
@@ -167,6 +172,22 @@ class FinancialSummaryResponse(BaseModel):
     emergency_reserve_target: float
     emergency_reserve_actual: float
     reserve_coverage_ratio: float
+    currency_breakdown: Optional[Dict[str, float]] = None
+
+
+class LedgerIntegrityReport(BaseModel):
+    is_balanced: bool
+    currency: str
+    reconciled_balance: float
+    opening_balance: float
+    total_confirmed_inflows: float
+    total_confirmed_outflows: float
+    total_reserves: float
+    total_adjustments: float
+    discrepancy: float
+    verified_entries_count: int
+    unreconciled_items_count: int
+    notes: List[str]
 
 
 # ==========================================
@@ -346,6 +367,12 @@ class NegotiationDraftOut(BaseModel):
     status: str  # draft | approved | sent | accepted | declined
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+
+class NegotiationDraftUpdate(BaseModel):
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    offered_incentive: Optional[str] = None
 
 
 class NegotiationTonesResponse(BaseModel):

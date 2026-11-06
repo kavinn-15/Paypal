@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from backend.app.db import get_db
-from backend.app.models import Action
+from backend.app.models import Action, Owner
 from backend.app.schemas import ActionOut, ApprovalRequest, ExecuteRequest
+from backend.app.auth.deps import get_current_user
 from backend.app.guardrail.state_machine import GuardrailStateMachine, ActionState, InvalidStateTransitionError
 from backend.app.guardrail.policy import PolicyViolationError
 from backend.app.services.execution import ActionExecutionService
@@ -12,13 +13,25 @@ router = APIRouter(prefix="/actions", tags=["Guardrail Actions & Approvals"])
 
 
 @router.get("", response_model=List[ActionOut])
-def list_actions(db: Session = Depends(get_db)):
-    return db.query(Action).order_by(Action.id.desc()).all()
+def list_actions(
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_current_user)
+):
+    """Lists actions scoped strictly to the authenticated owner."""
+    return db.query(Action).filter(Action.owner_id == current_user.id).order_by(Action.id.desc()).all()
 
 
 @router.get("/{action_id}", response_model=ActionOut)
-def get_action(action_id: int, db: Session = Depends(get_db)):
-    action = db.query(Action).filter(Action.id == action_id).first()
+def get_action(
+    action_id: int,
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_current_user)
+):
+    """Retrieves an action strictly owned by the authenticated user."""
+    action = db.query(Action).filter(
+        Action.id == action_id,
+        Action.owner_id == current_user.id
+    ).first()
     if not action:
         raise HTTPException(status_code=404, detail="Action not found.")
     return ActionOut.model_validate(action)
@@ -28,14 +41,19 @@ def get_action(action_id: int, db: Session = Depends(get_db)):
 def approve_action(
     action_id: int,
     payload: ApprovalRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_current_user)
 ):
     """
     Owner UI Approval endpoint:
     Requires the exact HMAC approval_hash calculated over recipient, amount, currency, and action_type.
     Strictly deterministic - the LLM or background agents can NEVER approve.
+    Protected by user authentication and ownership check.
     """
-    action = db.query(Action).filter(Action.id == action_id).first()
+    action = db.query(Action).filter(
+        Action.id == action_id,
+        Action.owner_id == current_user.id
+    ).first()
     if not action:
         raise HTTPException(status_code=404, detail="Action not found.")
 
@@ -56,13 +74,17 @@ def approve_action(
 async def execute_action(
     action_id: int,
     payload: ExecuteRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_current_user)
 ):
     """
     Executes an approved action through the PayPal Sandbox.
-    Enforces idempotency, state transitions, and safety policy bounds.
+    Enforces idempotency, state transitions, ownership verification, and safety policy bounds.
     """
-    action = db.query(Action).filter(Action.id == action_id).first()
+    action = db.query(Action).filter(
+        Action.id == action_id,
+        Action.owner_id == current_user.id
+    ).first()
     if not action:
         raise HTTPException(status_code=404, detail="Action not found.")
 
@@ -83,4 +105,3 @@ async def execute_action(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Execution failed: {str(e)}")
-

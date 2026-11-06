@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 
 from backend.app.db import get_db
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/supervisor", tags=["Agent Orchestrator / Supervisor"
 @router.post("/run", response_model=SupervisorRunResponse)
 def run_supervisor_workflow(
     obligation_id: Optional[int] = Query(None, description="Target obligation ID"),
-    starting_balance: float = Query(1800.0, description="Current starting balance"),
+    starting_balance: Optional[float] = Query(None, description="Current starting balance (defaults to authoritative reconciled ledger)"),
     db: Session = Depends(get_db),
     current_user: Owner = Depends(get_current_user)
 ):
@@ -47,3 +47,22 @@ def list_supervisor_runs(
         AgentWorkflowRun.owner_id == current_user.id
     ).order_by(AgentWorkflowRun.id.desc()).all()
     return runs
+
+
+@router.get("/runs/{run_id}")
+def get_supervisor_run(
+    run_id: str,
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_current_user)
+):
+    """
+    Retrieve specific supervisor workflow run trace for authenticated user.
+    """
+    run = db.query(AgentWorkflowRun).filter(
+        AgentWorkflowRun.run_id == run_id,
+        AgentWorkflowRun.owner_id == current_user.id
+    ).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Supervisor run not found.")
+    return run
+

@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -6,13 +7,14 @@ from backend.app.models import Owner
 from backend.app.auth.deps import get_current_user
 from backend.app.schemas import ResilienceScoreResponse
 from backend.app.services.resilience_service import ResilienceService
+from backend.app.services.financial_service import FinancialService
 
 router = APIRouter(prefix="/resilience", tags=["Financial Resilience Score"])
 
 
 @router.get("/score", response_model=ResilienceScoreResponse)
 def get_resilience_score(
-    starting_balance: float = Query(1800.0, description="Current cash balance"),
+    starting_balance: Optional[float] = Query(None, description="Current cash balance (defaults to authoritative reconciled ledger)"),
     db: Session = Depends(get_db),
     current_user: Owner = Depends(get_current_user)
 ):
@@ -25,8 +27,12 @@ def get_resilience_score(
     5. Outstanding Receivables Exposure
     6. Unexpected Expense Shock Tolerance
     """
+    if starting_balance is None:
+        starting_balance = float(FinancialService.get_confirmed_balance(db, current_user))
+
     return ResilienceService.calculate_score(
         db=db,
         owner=current_user,
         starting_balance=starting_balance
     )
+

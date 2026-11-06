@@ -26,6 +26,11 @@ class Owner(Base):
     financial_entries = relationship("FinancialEntry", back_populates="owner", cascade="all, delete-orphan")
     simulations = relationship("SimulationRun", back_populates="owner", cascade="all, delete-orphan")
     negotiation_drafts = relationship("NegotiationDraft", back_populates="owner", cascade="all, delete-orphan")
+    forecasts = relationship("Forecast", back_populates="owner", cascade="all, delete-orphan")
+    rescue_plans = relationship("RescuePlan", back_populates="owner", cascade="all, delete-orphan")
+    actions = relationship("Action", back_populates="owner", cascade="all, delete-orphan")
+    audit_logs = relationship("AuditLog", back_populates="owner", cascade="all, delete-orphan")
+    refresh_tokens = relationship("RefreshToken", back_populates="owner", cascade="all, delete-orphan")
 
 
 class PayPalConnection(Base):
@@ -119,16 +124,22 @@ class FinancialEntry(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    canonical_id = Column(String(255), unique=True, nullable=True, index=True)
     title = Column(String(255), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
     currency = Column(String(10), default="USD", nullable=False)
-    entry_type = Column(String(50), nullable=False)  # income | expense | opening_balance | reserve | goal
+    entry_type = Column(String(50), nullable=False)  # opening_balance | confirmed_income | confirmed_expense | expected_income | expected_expense | estimated_income | simulated_income | reserve | refund | adjustment
     category = Column(String(100), nullable=False)  # client_invoice, rent, salary, contractor, subscription, loan, tax, emergency, reserve_fund, financial_goal
     recurrence = Column(String(50), default="one_time", nullable=False)  # one_time | daily | weekly | monthly | quarterly | annual
+    is_recurring = Column(Boolean, default=False, nullable=False)
+    recurrence_end_date = Column(DateTime, nullable=True)
+    is_cancelled = Column(Boolean, default=False, nullable=False)
+    parent_entry_id = Column(Integer, ForeignKey("financial_entries.id", ondelete="SET NULL"), nullable=True)
+    reconciled = Column(Boolean, default=False, nullable=False)
     transaction_date = Column(DateTime, nullable=False, index=True)
     status = Column(String(50), default="expected", nullable=False)  # confirmed | expected | estimated | simulated
     data_source = Column(String(50), default="manual", nullable=False)  # paypal | manual | bank_sync | simulation
-    reference_id = Column(String(255), nullable=True)
+    reference_id = Column(String(255), nullable=True, index=True)
     notes = Column(Text, nullable=True)
     is_demo = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
@@ -140,6 +151,7 @@ class Forecast(Base):
     __tablename__ = "forecasts"
 
     id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=True, index=True)
     run_id = Column(String(100), unique=True, nullable=False, index=True)
     obligation_id = Column(Integer, ForeignKey("obligations.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
@@ -155,6 +167,8 @@ class Forecast(Base):
     expected_expense_total = Column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
     driver_explanation = Column(Text, nullable=True)
     is_demo = Column(Boolean, default=False, nullable=False)
+
+    owner = relationship("Owner", back_populates="forecasts")
 
 
 class ClientPrediction(Base):
@@ -177,6 +191,7 @@ class RescuePlan(Base):
     __tablename__ = "rescue_plans"
 
     id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=True, index=True)
     run_id = Column(String(100), nullable=False, index=True)
     plan_type = Column(String(10), nullable=False)  # "A" | "B" | "C"
     details = Column(JSON, nullable=False, default=dict)
@@ -190,6 +205,7 @@ class RescuePlan(Base):
     late_scenario = Column(JSON, nullable=False, default=dict)
     remaining_risk = Column(Text, nullable=False)
 
+    owner = relationship("Owner", back_populates="rescue_plans")
     actions = relationship("Action", back_populates="plan", cascade="all, delete-orphan")
 
 
@@ -197,6 +213,7 @@ class Action(Base):
     __tablename__ = "actions"
 
     id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=True, index=True)
     plan_id = Column(Integer, ForeignKey("rescue_plans.id", ondelete="CASCADE"), nullable=True)
     action_type = Column(String(100), nullable=False)  # SEND_REMINDER | APPLY_DISCOUNT | SCHEDULE_PAYOUT_SPLIT
     recipient = Column(String(255), nullable=False)
@@ -212,6 +229,7 @@ class Action(Base):
     error_message = Column(Text, nullable=True)
     is_simulated = Column(Boolean, default=False, nullable=False)
 
+    owner = relationship("Owner", back_populates="actions")
     plan = relationship("RescuePlan", back_populates="actions")
     messages = relationship("Message", back_populates="action", cascade="all, delete-orphan")
 
@@ -293,6 +311,7 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=True, index=True)
     ts = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
     actor = Column(String(100), nullable=False)  # owner | system | webhook | agent
     event = Column(String(100), nullable=False, index=True)
@@ -300,15 +319,52 @@ class AuditLog(Base):
     prev_hash = Column(String(64), nullable=False)
     hash = Column(String(64), nullable=False, index=True)
 
+    owner = relationship("Owner", back_populates="audit_logs")
+
 
 class WebhookEvent(Base):
     __tablename__ = "webhook_events"
 
     id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=True, index=True)
     paypal_event_id = Column(String(255), unique=True, nullable=False, index=True)
     event_type = Column(String(100), nullable=False, index=True)
     verified = Column(Boolean, default=False, nullable=False)
     payload = Column(JSON, nullable=False, default=dict)
     processed = Column(Boolean, default=False, nullable=False, index=True)
+    processing_state = Column(String(50), default="received", nullable=False, index=True)  # received | processing | processed | quarantined | failed
+    retry_count = Column(Integer, default=0, nullable=False)
+    error_details = Column(Text, nullable=True)
+    processed_at = Column(DateTime, nullable=True)
+    reconciliation_status = Column(String(50), default="pending", nullable=False)  # pending | matched | manual_review_required | reconciled
     received_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     is_simulated = Column(Boolean, default=False, nullable=False)
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String(255), unique=True, nullable=False, index=True)
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    revoked = Column(Boolean, default=False, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    owner = relationship("Owner", back_populates="refresh_tokens")
+
+
+class ExchangeRate(Base):
+    """
+    Authoritative currency exchange rates. Prevents illegal direct cross-currency arithmetic.
+    """
+    __tablename__ = "exchange_rates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    from_currency = Column(String(10), nullable=False, index=True)
+    to_currency = Column(String(10), nullable=False, index=True)
+    rate = Column(Numeric(18, 6), nullable=False)
+    source = Column(String(100), default="ecb_or_bank_ref", nullable=False)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    __table_args__ = (UniqueConstraint("from_currency", "to_currency", name="uq_from_to_currency"),)

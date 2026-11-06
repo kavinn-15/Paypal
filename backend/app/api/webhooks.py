@@ -6,7 +6,8 @@ from typing import Optional, Dict, Any
 
 from backend.app.db import get_db
 from backend.app.config import settings
-from backend.app.models import WebhookEvent, Invoice
+from backend.app.auth.deps import get_current_user
+from backend.app.models import WebhookEvent, Invoice, Owner
 from backend.app.paypal.client import paypal_client
 from backend.app.events.queue import event_queue
 from backend.app.events.processor import process_webhook_event
@@ -58,16 +59,17 @@ async def receive_paypal_webhook(
             webhook_event_payload=body_json
         )
     else:
-        # In sandbox test without full headers or local testing
         is_verified = False
 
-    # Persist event
+    # Persist event with durable tracking state
     evt_record = WebhookEvent(
         paypal_event_id=event_id,
         event_type=event_type,
         verified=is_verified,
         payload=body_json,
         processed=False,
+        processing_state="received" if is_verified else "quarantined",
+        reconciliation_status="pending" if is_verified else "unverified_signature",
         is_simulated=False
     )
     db.add(evt_record)
@@ -82,7 +84,6 @@ async def receive_paypal_webhook(
     )
 
     if not is_verified:
-        # Unverified events are persisted for forensic auditing but never processed into cashflow
         return {"status": "unverified_signature_stored", "verified": False, "event_id": event_id}
 
     # 3. Enqueue verified event for processing
@@ -93,29 +94,30 @@ async def receive_paypal_webhook(
 @router.post("/dev/simulate-webhook")
 def simulate_webhook_event(
     payload: SimulateWebhookRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_current_user)
 ):
     """
-    DEV_MODE ONLY: Simulates a confirmed client payment event.
+    DEV_MODE ONLY: Simulates a confirmed client payment event for the authenticated user.
     Visibly stamped as 'is_simulated=True' and labeled in UI.
     """
-    if not settings.DEV_MODE:
+    if not settings.DEV_MODE or not settings.ALLOW_DEMO_ENDPOINTS:
         raise HTTPException(
             status_code=403,
             detail="Forbidden: Webhook simulation endpoint is disabled in production."
         )
 
-    # Find target invoice
+    # Find target invoice owned by current_user
+    inv_query = db.query(Invoice).join(Invoice.client).filter(Invoice.client.has(owner_id=current_user.id))
     if payload.invoice_id:
-        invoice = db.query(Invoice).filter(Invoice.id == payload.invoice_id).first()
+        invoice = inv_query.filter(Invoice.id == payload.invoice_id).first()
     elif payload.paypal_invoice_id:
-        invoice = db.query(Invoice).filter(Invoice.paypal_invoice_id == payload.paypal_invoice_id).first()
+        invoice = inv_query.filter(Invoice.paypal_invoice_id == payload.paypal_invoice_id).first()
     else:
-        # Pick first open invoice
-        invoice = db.query(Invoice).filter(Invoice.status == "SENT").first()
+        invoice = inv_query.filter(Invoice.status.in_(["SENT", "DRAFT"])).first()
 
     if not invoice:
-        raise HTTPException(status_code=400, detail="No open invoice available to simulate payment on.")
+        raise HTTPException(status_code=400, detail="No open invoice available for current user to simulate payment on.")
 
     sim_event_id = f"WH-SIM-{uuid.uuid4().hex[:12]}"
     amount_paid = payload.amount or invoice.amount
@@ -135,20 +137,23 @@ def simulate_webhook_event(
         }
     }
 
-    # Record in WebhookEvent table visibly marked as simulated
+    # Record in WebhookEvent table visibly marked as simulated and bound to user
     evt_record = WebhookEvent(
+        owner_id=current_user.id,
         paypal_event_id=sim_event_id,
         event_type="INVOICING.INVOICE.PAID",
-        verified=True,  # Verified for simulation purposes
+        verified=True,
         payload=simulated_payload,
         processed=True,
-        is_simulated=True  # EXPLICITLY LABELED AS SIMULATED
+        processing_state="processed",
+        reconciliation_status="reconciled",
+        is_simulated=True
     )
     db.add(evt_record)
     db.commit()
 
     # Process immediately
-    result = process_webhook_event(db, simulated_payload, is_simulated=True)
+    result = process_webhook_event(db, simulated_payload, is_simulated=True, webhook_event_id=evt_record.id)
 
     return {
         "success": True,

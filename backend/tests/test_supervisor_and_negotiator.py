@@ -13,8 +13,13 @@ def setup_db():
 async def test_supervisor_workflow_orchestration():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res_login = await client.post("/auth/demo-login")
+        assert res_login.status_code == 200
+        token = res_login.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
         # Run supervisor workflow
-        res_sup = await client.post("/supervisor/run?starting_balance=1800.0")
+        res_sup = await client.post("/supervisor/run?starting_balance=1800.0", headers=headers)
         assert res_sup.status_code == 200
         sup_data = res_sup.json()
         assert sup_data["status"] == "completed"
@@ -31,7 +36,7 @@ async def test_supervisor_workflow_orchestration():
         assert "NegotiationAgent" in agents_traced
 
         # Check list of past supervisor runs
-        res_runs = await client.get("/supervisor/runs")
+        res_runs = await client.get("/supervisor/runs", headers=headers)
         assert res_runs.status_code == 200
         assert len(res_runs.json()) >= 1
 
@@ -40,11 +45,16 @@ async def test_supervisor_workflow_orchestration():
 async def test_negotiation_agent_multi_tone_drafts():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res_login = await client.post("/auth/demo-login")
+        assert res_login.status_code == 200
+        token = res_login.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
         # 1. Generate client discount negotiation options
         res_neg_client = await client.post("/negotiate/generate", json={
             "target_type": "client_discount",
             "discount_pct": 3.0
-        })
+        }, headers=headers)
         assert res_neg_client.status_code == 200
         client_data = res_neg_client.json()
         assert len(client_data["options"]) == 3
@@ -57,13 +67,14 @@ async def test_negotiation_agent_multi_tone_drafts():
         res_neg_contractor = await client.post("/negotiate/generate", json={
             "target_type": "contractor_split",
             "split_pct": 50.0
-        })
+        }, headers=headers)
         assert res_neg_contractor.status_code == 200
         contractor_data = res_neg_contractor.json()
         assert len(contractor_data["options"]) == 3
 
         # 3. Approve a negotiation draft
         draft_id = client_data["options"][0]["id"]
-        res_approve = await client.post(f"/negotiate/drafts/{draft_id}/approve")
+        res_approve = await client.post(f"/negotiate/drafts/{draft_id}/approve", headers=headers)
         assert res_approve.status_code == 200
         assert res_approve.json()["status"] == "approved"
+

@@ -39,8 +39,15 @@ async def test_duplicate_webhook_deduplication():
 async def test_unverified_webhook_does_not_modify_cashflow():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Authenticate for forecast calls
+        res_login = await client.post("/auth/demo-login")
+        assert res_login.status_code == 200
+        token = res_login.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
         # Check initial forecast
-        res_fc1 = await client.post("/forecast/run?starting_balance=1800.0")
+        res_fc1 = await client.post("/forecast/run?starting_balance=1800.0", headers=headers)
+        assert res_fc1.status_code == 200
         shortfall_before = res_fc1.json()["shortfall_amount"]
         assert shortfall_before == 1400.0
 

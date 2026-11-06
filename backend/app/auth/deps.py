@@ -34,50 +34,39 @@ def get_current_user(
     db: Session = Depends(get_db)
 ) -> Owner:
     """
-    Enforces authentication.
-    In DEV_MODE, if no Bearer token is provided, gracefully falls back to the primary
-    seeded owner (Alex Morgan) to ensure seamless hackathon demo & automated test compatibility.
-    When a token IS provided, strictly isolates the user.
+    Enforces authentication across all protected financial endpoints.
+    Strictly verifies JWT Bearer token and rejects unauthenticated or expired requests.
+    Zero implicit first-user fallback.
     """
-    if credentials and credentials.credentials:
-        payload = decode_access_token(credentials.credentials)
-        if not payload or "sub" not in payload:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired access token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        user_id = payload.get("sub")
-        user = db.query(Owner).filter(Owner.id == user_id).first()
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User account not found",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        return user
-
-    # Development & Demo Fallback
-    if settings.DEV_MODE:
-        owner = db.query(Owner).first()
-        if owner:
-            return owner
-        # If no owner exists yet, create default Alex Morgan demo persona
-        demo_owner = Owner(
-            name="Alex Morgan",
-            email="alex.morgan.freelance@gmail.com",
-            currency="USD",
-            timezone="UTC",
-            is_demo=True,
-            is_active=True
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please provide a valid Bearer token.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-        db.add(demo_owner)
-        db.commit()
-        db.refresh(demo_owner)
-        return demo_owner
 
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Authentication required",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    payload = decode_access_token(credentials.credentials)
+    if not payload or "sub" not in payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired access token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_id = payload.get("sub")
+    user = db.query(Owner).filter(Owner.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is deactivated."
+        )
+
+    return user
+

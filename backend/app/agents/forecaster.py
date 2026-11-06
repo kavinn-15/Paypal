@@ -40,28 +40,50 @@ class ForecasterAgent:
     def run_forecast(
         self,
         obligation_id: Optional[int] = None,
-        starting_balance: float = 1800.0,
-        now: Optional[datetime] = None
+        starting_balance: Optional[float] = None,
+        now: Optional[datetime] = None,
+        owner_id: Optional[int] = None
     ) -> ForecastRunResponse:
         current_time = to_naive(now or datetime.now(timezone.utc))
 
-        # 1. Fetch obligation
+        # 1. Fetch obligation scoped to owner
+        obl_query = self.db.query(Obligation)
+        if owner_id:
+            obl_query = obl_query.filter(Obligation.owner_id == owner_id)
+
         if obligation_id:
-            obligation = self.db.query(Obligation).filter(Obligation.id == obligation_id).first()
+            obligation = obl_query.filter(Obligation.id == obligation_id).first()
         else:
-            obligation = self.db.query(Obligation).filter(Obligation.status != "paid").order_by(Obligation.due_date.asc()).first()
+            obligation = obl_query.filter(Obligation.status != "paid").order_by(Obligation.due_date.asc()).first()
 
         if not obligation:
             raise ValueError("No active contractor obligation found to protect.")
 
+        actual_owner_id = owner_id or obligation.owner_id
+        owner = self.db.query(Owner).filter(Owner.id == actual_owner_id).first()
+
+        # If starting_balance is not explicitly provided, calculate authoritative balance from ledger
+        if starting_balance is None:
+            if owner:
+                from backend.app.services.financial_service import FinancialService
+                starting_balance = float(FinancialService.get_confirmed_balance(self.db, owner))
+            else:
+                starting_balance = 1800.0
+
         obl_due = to_naive(obligation.due_date)
 
-        # 2. Train model on payment history
-        history = self.db.query(PaymentHistory).all()
+        # 2. Train model on user-specific payment history
+        hist_query = self.db.query(PaymentHistory).join(PaymentHistory.client)
+        if actual_owner_id:
+            hist_query = hist_query.filter(Client.owner_id == actual_owner_id)
+        history = hist_query.all()
         self.model.fit(history)
 
-        # 3. Predict open invoices
-        open_invoices = self.db.query(Invoice).filter(Invoice.status == "SENT").all()
+        # 3. Predict open invoices scoped strictly to this owner
+        inv_query = self.db.query(Invoice).join(Invoice.client)
+        if actual_owner_id:
+            inv_query = inv_query.filter(Client.owner_id == actual_owner_id)
+        open_invoices = inv_query.filter(Invoice.status.in_(["SENT", "DRAFT"])).all()
         run_id = f"fc_{uuid.uuid4().hex[:12]}"
 
         open_invoices_with_preds = []
@@ -185,6 +207,7 @@ class ForecasterAgent:
 
         # 8. Persist Forecast Run
         forecast_record = Forecast(
+            owner_id=obligation.owner_id,
             run_id=run_id,
             obligation_id=obligation.id,
             created_at=current_time,
@@ -225,19 +248,37 @@ class ForecasterAgent:
 
     def run_multi_horizon(
         self,
-        starting_balance: float = 1800.0,
-        now: Optional[datetime] = None
+        starting_balance: Optional[float] = None,
+        now: Optional[datetime] = None,
+        owner_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
-        Executes multi-horizon forecasting (7d, 30d, 60d, 90d).
+        Executes multi-horizon forecasting (7d, 30d, 60d, 90d) scoped strictly to authenticated owner.
         """
         from backend.app.ml.simulation import run_multi_horizon_simulation
 
         current_time = to_naive(now or datetime.now(timezone.utc))
-        history = self.db.query(PaymentHistory).all()
+
+        if starting_balance is None:
+            if owner_id:
+                owner = self.db.query(Owner).filter(Owner.id == owner_id).first()
+                if owner:
+                    from backend.app.services.financial_service import FinancialService
+                    starting_balance = float(FinancialService.get_confirmed_balance(self.db, owner))
+            if starting_balance is None:
+                starting_balance = 1800.0
+
+        hist_query = self.db.query(PaymentHistory).join(PaymentHistory.client)
+        if owner_id:
+            hist_query = hist_query.filter(Client.owner_id == owner_id)
+        history = hist_query.all()
         self.model.fit(history)
 
-        open_invoices = self.db.query(Invoice).filter(Invoice.status == "SENT").all()
+        inv_query = self.db.query(Invoice).join(Invoice.client)
+        if owner_id:
+            inv_query = inv_query.filter(Client.owner_id == owner_id)
+        open_invoices = inv_query.filter(Invoice.status.in_(["SENT", "DRAFT"])).all()
+
         predicted_inflows = []
         for inv in open_invoices:
             due_d = to_naive(inv.due_date)
@@ -249,7 +290,11 @@ class ForecasterAgent:
                 "client_name": inv.client.name
             })
 
-        obligations_records = self.db.query(Obligation).filter(Obligation.status != "paid").all()
+        obl_query = self.db.query(Obligation).filter(Obligation.status != "paid")
+        if owner_id:
+            obl_query = obl_query.filter(Obligation.owner_id == owner_id)
+        obligations_records = obl_query.all()
+
         obligations = [{
             "amount": float(o.amount),
             "due_date": to_naive(o.due_date),

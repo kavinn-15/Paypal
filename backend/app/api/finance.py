@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from backend.app.db import get_db
 from backend.app.models import Owner, FinancialEntry
 from backend.app.schemas import (
-    FinancialEntryCreate, FinancialEntryOut, FinancialSummaryResponse
+    FinancialEntryCreate, FinancialEntryOut, FinancialSummaryResponse, LedgerIntegrityReport
 )
 from backend.app.auth.deps import get_current_user
 from backend.app.services.financial_service import FinancialService
@@ -24,6 +24,17 @@ def get_financial_summary(
     and emergency reserve ratio. Never conflates expected income with confirmed cash.
     """
     return FinancialService.get_summary(db, current_user)
+
+
+@router.get("/integrity-check", response_model=LedgerIntegrityReport)
+def check_ledger_integrity(
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_current_user)
+):
+    """
+    Verifies mathematical integrity of the financial ledger.
+    """
+    return FinancialService.check_integrity(db, current_user)
 
 
 @router.get("/timeline")
@@ -93,3 +104,4 @@ def delete_financial_entry(
     db.delete(entry)
     db.commit()
     return None
+

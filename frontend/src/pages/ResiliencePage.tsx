@@ -178,3 +178,4 @@ export const ResiliencePage: React.FC = () => {
     </div>
   );
 };
+

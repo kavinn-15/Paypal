@@ -13,8 +13,13 @@ def setup_db():
 async def test_what_if_simulation_presets_and_scenarios():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res_login = await client.post("/auth/demo-login")
+        assert res_login.status_code == 200
+        token = res_login.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
         # 1. Check presets
-        res_presets = await client.get("/simulation/presets")
+        res_presets = await client.get("/simulation/presets", headers=headers)
         assert res_presets.status_code == 200
         presets = res_presets.json()
         assert len(presets) >= 5
@@ -28,7 +33,7 @@ async def test_what_if_simulation_presets_and_scenarios():
             "run_name": "Test 5-Day Delay",
             "scenario_type": "client_delay_5d",
             "delay_days": 5
-        })
+        }, headers=headers)
         assert res_delay.status_code == 200
         data_delay = res_delay.json()
         assert "baseline" in data_delay
@@ -41,7 +46,7 @@ async def test_what_if_simulation_presets_and_scenarios():
             "run_name": "Emergency Hardware Shock",
             "scenario_type": "emergency_expense",
             "emergency_amount": 500.0
-        })
+        }, headers=headers)
         assert res_em.status_code == 200
         data_em = res_em.json()
         assert data_em["simulated"]["shortfall_amount"] >= data_em["baseline"]["shortfall_amount"]
@@ -51,8 +56,9 @@ async def test_what_if_simulation_presets_and_scenarios():
             "run_name": "Contractor 50/50 Split",
             "scenario_type": "contractor_split",
             "contractor_split_pct": 50.0
-        })
+        }, headers=headers)
         assert res_split.status_code == 200
         data_split = res_split.json()
         # Splitting contractor reduces shortfall on Friday
         assert data_split["simulated"]["shortfall_amount"] < data_split["baseline"]["shortfall_amount"]
+

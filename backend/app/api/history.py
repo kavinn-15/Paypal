@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 from typing import List
 from backend.app.db import get_db
-from backend.app.models import PaymentHistory, Invoice, Client
+from backend.app.models import PaymentHistory, Invoice, Client, Owner
 from backend.app.schemas import PaymentHistoryOut
+from backend.app.auth.deps import get_current_user
 from backend.app.paypal.client import paypal_client, PayPalError
 from backend.app.guardrail.audit import append_audit_log
 
@@ -12,13 +13,25 @@ router = APIRouter(prefix="/history", tags=["Payment History"])
 
 
 @router.get("", response_model=List[PaymentHistoryOut])
-def list_payment_history(db: Session = Depends(get_db)):
-    return db.query(PaymentHistory).order_by(PaymentHistory.paid_date.desc()).all()
+def list_payment_history(
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_current_user)
+):
+    """Returns chronological payment history strictly for the authenticated user's clients."""
+    return db.query(PaymentHistory).join(PaymentHistory.client).filter(
+        Client.owner_id == current_user.id
+    ).order_by(PaymentHistory.paid_date.desc()).all()
 
 
 @router.post("/sync")
-async def sync_history(db: Session = Depends(get_db)):
-    """Pulls recent transactions via PayPal Transaction Search and reconciles against invoices."""
+async def sync_history(
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_current_user)
+):
+    """
+    Pulls recent transactions via PayPal Transaction Search and reconciles against
+    the authenticated user's open invoices.
+    """
     now = datetime.now(timezone.utc)
     start_date = (now - timedelta(days=90)).strftime("%Y-%m-%dT00:00:00Z")
     end_date = now.strftime("%Y-%m-%dT23:59:59Z")
@@ -38,7 +51,11 @@ async def sync_history(db: Session = Depends(get_db)):
                 continue
 
             payer_email = payer_info.get("email_address", "").lower()
-            matching_client = db.query(Client).filter(Client.email == payer_email).first()
+            matching_client = db.query(Client).filter(
+                Client.email == payer_email,
+                Client.owner_id == current_user.id
+            ).first()
+
             if matching_client:
                 # Find matching unpaid invoice
                 inv = db.query(Invoice).filter(
@@ -65,16 +82,20 @@ async def sync_history(db: Session = Depends(get_db)):
 
         append_audit_log(
             db=db,
-            actor="system",
-            event="TRANSACTION_HISTORY_SYNCED",
-            payload={"transactions_found": len(tx_details), "reconciled_invoices": reconciled_count}
+            actor="owner",
+            event="TRANSACTION_SEARCH_SYNC_COMPLETED",
+            payload={
+                "start_date": start_date,
+                "end_date": end_date,
+                "reconciled_count": reconciled_count
+            },
+            owner_id=current_user.id
         )
 
-        return {"success": True, "reconciled_count": reconciled_count, "transactions_pulled": len(tx_details)}
-    except PayPalError as e:
-        # In sandbox or demo mode if reporting endpoint is unavailable, return graceful explanation
         return {
-            "success": False,
-            "message": f"Sandbox reporting synchronization unavailable: {str(e)}. Relying on seeded history."
+            "success": True,
+            "reconciled_count": reconciled_count,
+            "message": f"Successfully synced transactions. {reconciled_count} invoice(s) reconciled."
         }
-
+    except PayPalError as e:
+        raise HTTPException(status_code=502, detail=f"PayPal Transaction Search failed: {str(e)}")

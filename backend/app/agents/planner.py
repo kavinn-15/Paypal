@@ -48,7 +48,10 @@ class RescuePlanEngine:
         start_time = to_naive(forecast_response.created_at)
         obl_due = to_naive(obligation_obj.due_date)
 
-        open_invoices_models = self.db.query(Invoice).filter(Invoice.status == "SENT").all()
+        open_invoices_models = self.db.query(Invoice).join(Invoice.client).filter(
+            Invoice.client.has(owner_id=obligation_obj.owner_id),
+            Invoice.status.in_(["SENT", "DRAFT"])
+        ).all()
         open_invoices = []
         for inv in open_invoices_models:
             # find matching prediction from forecast
@@ -127,6 +130,7 @@ class RescuePlanEngine:
         )
 
         plan_a_db = RescuePlan(
+            owner_id=obligation_obj.owner_id,
             run_id=run_id,
             plan_type="A",
             details={"invoice_id": top_target["invoice_id"] if top_target else None, "type": "reminder"},
@@ -146,6 +150,7 @@ class RescuePlanEngine:
         self.db.flush()
 
         action_a_db = Action(
+            owner_id=obligation_obj.owner_id,
             plan_id=plan_a_db.id,
             action_type="SEND_REMINDER",
             recipient=plan_a_recipient,
@@ -237,6 +242,7 @@ class RescuePlanEngine:
         )
 
         plan_b_db = RescuePlan(
+            owner_id=obligation_obj.owner_id,
             run_id=run_id,
             plan_type="B",
             details={
@@ -260,6 +266,7 @@ class RescuePlanEngine:
         self.db.flush()
 
         action_b_db = Action(
+            owner_id=obligation_obj.owner_id,
             plan_id=plan_b_db.id,
             action_type="APPLY_DISCOUNT",
             recipient=disc_client_name,
@@ -355,6 +362,7 @@ class RescuePlanEngine:
         )
 
         plan_c_db = RescuePlan(
+            owner_id=obligation_obj.owner_id,
             run_id=run_id,
             plan_type="C",
             details={
@@ -379,6 +387,7 @@ class RescuePlanEngine:
         self.db.flush()
 
         action_c_db = Action(
+            owner_id=obligation_obj.owner_id,
             plan_id=plan_c_db.id,
             action_type="SCHEDULE_PAYOUT_SPLIT",
             recipient=obligation_obj.payee_name,

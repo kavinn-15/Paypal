@@ -13,7 +13,12 @@ def setup_db():
 async def test_financial_resilience_score_calculation():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        res = await client.get("/resilience/score?starting_balance=1800.0")
+        res_login = await client.post("/auth/demo-login")
+        assert res_login.status_code == 200
+        token = res_login.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        res = await client.get("/resilience/score?starting_balance=1800.0", headers=headers)
         assert res.status_code == 200
         data = res.json()
 
@@ -35,3 +40,4 @@ async def test_financial_resilience_score_calculation():
         assert len(data["improving_factors"]) > 0
         assert len(data["reducing_factors"]) > 0
         assert len(data["recommended_actions"]) > 0
+

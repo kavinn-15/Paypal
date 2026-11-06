@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from backend.app.db import get_db
 from backend.app.config import settings
-from backend.app.models import PayPalConnection
+from backend.app.models import PayPalConnection, Owner
+from backend.app.auth.deps import get_current_user
 from backend.app.paypal.client import paypal_client, PayPalError
 from backend.app.schemas import PayPalConnectionStatus, SandboxTestResponse
 
@@ -11,8 +12,12 @@ router = APIRouter(prefix="/paypal", tags=["PayPal Connection"])
 
 
 @router.get("/connection", response_model=PayPalConnectionStatus)
-def get_connection_status(db: Session = Depends(get_db)):
-    conn = db.query(PayPalConnection).first()
+def get_connection_status(
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_current_user)
+):
+    """Retrieves PayPal sandbox connection health for the authenticated user."""
+    conn = db.query(PayPalConnection).filter(PayPalConnection.owner_id == current_user.id).first()
     if not conn:
         return PayPalConnectionStatus(
             connected=False,
@@ -33,18 +38,30 @@ def get_connection_status(db: Session = Depends(get_db)):
 
 
 @router.post("/test-connection", response_model=SandboxTestResponse)
-async def test_connection(db: Session = Depends(get_db)):
-    """Hits the real PayPal Sandbox OAuth2 token endpoint to verify client credentials."""
+async def test_connection(
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_current_user)
+):
+    """Hits the real PayPal Sandbox OAuth2 token endpoint to verify client credentials for user."""
     try:
         token = await paypal_client._get_access_token(force_refresh=True)
         now = datetime.now(timezone.utc)
 
-        conn = db.query(PayPalConnection).first()
-        if conn:
+        conn = db.query(PayPalConnection).filter(PayPalConnection.owner_id == current_user.id).first()
+        if not conn:
+            conn = PayPalConnection(
+                owner_id=current_user.id,
+                environment="sandbox",
+                status="connected",
+                last_checked_at=now,
+                client_id_preview=settings.PAYPAL_CLIENT_ID[:8] + "..."
+            )
+            db.add(conn)
+        else:
             conn.status = "connected"
             conn.last_checked_at = now
             conn.client_id_preview = settings.PAYPAL_CLIENT_ID[:8] + "..."
-            db.commit()
+        db.commit()
 
         return SandboxTestResponse(
             success=True,
@@ -54,29 +71,28 @@ async def test_connection(db: Session = Depends(get_db)):
             token_preview=f"{token[:12]}... (valid 3600s)"
         )
     except PayPalError as e:
-        conn = db.query(PayPalConnection).first()
+        conn = db.query(PayPalConnection).filter(PayPalConnection.owner_id == current_user.id).first()
         if conn:
             conn.status = "error"
             conn.last_checked_at = datetime.now(timezone.utc)
             db.commit()
-
-        return SandboxTestResponse(
-            success=False,
-            status_code=e.status_code or 401,
-            environment="sandbox",
-            message=f"PayPal Sandbox Authentication Failed: {str(e)}",
-            token_preview=None
-        )
+        raise HTTPException(status_code=502, detail=f"PayPal Sandbox OAuth2 failed: {str(e)}")
 
 
-@router.post("/register-webhook")
-async def register_webhook():
-    """Helper to register public webhook URL with PayPal Sandbox."""
-    public_url = settings.PUBLIC_BASE_URL.rstrip("/")
-    target_url = f"{public_url}/webhooks/paypal"
+@router.post("/webhook/register")
+async def register_webhook(
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_current_user)
+):
+    """Registers application webhook URL with PayPal Sandbox API."""
+    webhook_url = f"{settings.PUBLIC_BASE_URL.rstrip('/')}/webhooks/paypal"
     try:
-        res = await paypal_client.register_webhook(target_url)
-        return {"success": True, "webhook_id": res.get("id"), "url": target_url}
+        res = await paypal_client.register_webhook(webhook_url=webhook_url)
+        return {
+            "success": True,
+            "webhook_id": res.get("id"),
+            "url": webhook_url,
+            "message": "Webhook successfully registered with PayPal Sandbox."
+        }
     except PayPalError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
+        raise HTTPException(status_code=502, detail=f"Webhook registration failed: {str(e)}")

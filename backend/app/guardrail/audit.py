@@ -38,7 +38,8 @@ def append_audit_log(
     db: Session,
     actor: str,
     event: str,
-    payload: Dict[str, Any]
+    payload: Dict[str, Any],
+    owner_id: Optional[int] = None
 ) -> AuditLog:
     """Appends an immutable, hash-chained record to the audit log."""
     last_entry = db.query(AuditLog).order_by(AuditLog.id.desc()).first()
@@ -48,6 +49,7 @@ def append_audit_log(
     new_hash = compute_hash(prev_hash, now, actor, event, payload)
 
     entry = AuditLog(
+        owner_id=owner_id,
         ts=now,
         actor=actor,
         event=event,

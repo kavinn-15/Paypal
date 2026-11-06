@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, Dict, Any
 from backend.app.db import get_db
-from backend.app.models import Forecast, RescuePlan, Action, Obligation
+from backend.app.models import Forecast, RescuePlan, Action, Obligation, Owner
 from backend.app.agents.forecaster import ForecasterAgent
 from backend.app.agents.planner import RescuePlanEngine
+from backend.app.auth.deps import get_current_user
+from backend.app.services.financial_service import FinancialService
 from backend.app.schemas import PlansComparisonResponse, RescuePlanOut, ActionOut, DailyProjection, ObligationOut
 
 router = APIRouter(prefix="/forecast", tags=["Forecast & Rescue Plans"])
@@ -13,19 +15,28 @@ router = APIRouter(prefix="/forecast", tags=["Forecast & Rescue Plans"])
 @router.post("/run", response_model=PlansComparisonResponse)
 def run_forecast_and_plans(
     obligation_id: Optional[int] = Query(None, description="Optional obligation ID"),
-    starting_balance: float = Query(1800.0, description="Starting cash balance"),
+    starting_balance: Optional[float] = Query(None, description="Starting cash balance (defaults to authoritative reconciled ledger)"),
     discount_pct: float = Query(3.0, description="Discount percentage for Plan B"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_current_user)
 ):
     """
-    Executes end-to-end forecasting pipeline:
-    1. Trains payment delay model on historical data.
-    2. Runs Monte Carlo simulations & detects first shortfall date.
-    3. Ranks driver clients & produces validated plain-language explanation.
-    4. Generates exactly three Rescue Plans (A, B, C) with approval hashes.
+    Executes end-to-end forecasting pipeline scoped strictly to the authenticated user:
+    1. Derives authoritative cash balance from reconciled ledger if not overridden.
+    2. Trains payment delay model on user's payment history with Empirical Bayes shrinkage.
+    3. Runs Monte Carlo simulations & detects first shortfall date.
+    4. Ranks driver clients & produces validated plain-language explanation.
+    5. Generates three Rescue Plans (A, B, C) with cryptographic HMAC approval hashes.
     """
+    if starting_balance is None:
+        starting_balance = float(FinancialService.get_confirmed_balance(db, current_user))
+
     forecaster = ForecasterAgent(db)
-    forecast_res = forecaster.run_forecast(obligation_id=obligation_id, starting_balance=starting_balance)
+    forecast_res = forecaster.run_forecast(
+        obligation_id=obligation_id,
+        starting_balance=starting_balance,
+        owner_id=current_user.id
+    )
 
     planner = RescuePlanEngine(db)
     comparison = planner.generate_plans_for_forecast(forecast_res, discount_pct=discount_pct)
@@ -33,18 +44,33 @@ def run_forecast_and_plans(
 
 
 @router.get("/latest", response_model=PlansComparisonResponse)
-def get_latest_forecast(db: Session = Depends(get_db)):
-    """Retrieves the most recent forecast run and rescue plans from the database."""
-    forecast = db.query(Forecast).order_by(Forecast.id.desc()).first()
+def get_latest_forecast(
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_current_user)
+):
+    """Retrieves the most recent forecast run and rescue plans for the authenticated user."""
+    forecast = db.query(Forecast).filter(
+        Forecast.owner_id == current_user.id
+    ).order_by(Forecast.id.desc()).first()
+
     if not forecast:
-        # Run default forecast if none exists
-        return run_forecast_and_plans(db=db)
+        return run_forecast_and_plans(db=db, current_user=current_user)
 
-    obligation = db.query(Obligation).filter(Obligation.id == forecast.obligation_id).first()
+    obligation = db.query(Obligation).filter(
+        Obligation.id == forecast.obligation_id,
+        Obligation.owner_id == current_user.id
+    ).first()
+
     if not obligation:
-        obligation = db.query(Obligation).first()
+        obligation = db.query(Obligation).filter(Obligation.owner_id == current_user.id).first()
 
-    plans_models = db.query(RescuePlan).filter(RescuePlan.run_id == forecast.run_id).all()
+    if not obligation:
+        raise HTTPException(status_code=404, detail="No active obligation found for current user.")
+
+    plans_models = db.query(RescuePlan).filter(
+        RescuePlan.run_id == forecast.run_id,
+        RescuePlan.owner_id == current_user.id
+    ).all()
     plans_out = []
 
     for p in plans_models:
@@ -59,7 +85,7 @@ def get_latest_forecast(db: Session = Depends(get_db)):
             cost_desc = "$0.00 concession cost. Zero revenue lost."
         elif p.plan_type == "B":
             desc = "Apply limited early-pay discount to accelerate settlement before Friday."
-            cost_desc = f"${p.cost:,.2f} discount cost."
+            cost_desc = f"${float(p.cost):,.2f} discount cost."
         elif p.plan_type == "C":
             desc = f"Send reminder to client and split {obligation.payee_name}'s payout into two installments."
             cost_desc = "$0.00 cash cost (goodwill proxy)."
@@ -68,11 +94,11 @@ def get_latest_forecast(db: Session = Depends(get_db)):
             id=p.id,
             run_id=p.run_id,
             plan_type=p.plan_type,
-            name=f"Plan {p.plan_type}: {('Collect Without Concessions' if p.plan_type == 'A' else 'Limited Early-Pay Discount' if p.plan_type == 'B' else 'Collect Plus Agreed Contractor Split')}",
+            name=f"Plan {p.plan_type}",
             description=desc,
-            cost=p.cost,
+            cost=float(p.cost),
             cost_description=cost_desc,
-            incoming_needed=p.incoming_needed,
+            incoming_needed=float(p.incoming_needed),
             selected_clients=p.selected_clients,
             rationale=p.rationale,
             forecast_with_plan=[DailyProjection(**x) for x in p.forecast_with_plan],
@@ -85,23 +111,22 @@ def get_latest_forecast(db: Session = Depends(get_db)):
     return PlansComparisonResponse(
         run_id=forecast.run_id,
         obligation=ObligationOut.model_validate(obligation),
-        shortfall_amount=forecast.shortfall_amount,
+        shortfall_amount=float(forecast.shortfall_amount),
         first_shortfall_date=forecast.first_shortfall_date.strftime("%Y-%m-%d") if forecast.first_shortfall_date else None,
-        tradeoff_summary=forecast.driver_explanation or "Review the three rescue plans below.",
-        plans=plans_out
+        starting_balance=float(forecast.starting_balance),
+        plans=plans_out,
+        recommended_plan=plans_out[0].plan_type if plans_out else "A",
+        rationale=forecast.driver_explanation or "Optimal recovery strategy based on client payment probability."
     )
 
 
 @router.get("/horizons")
 def get_multi_horizon_forecast(
-    starting_balance: float = Query(1800.0, description="Starting cash balance"),
-    db: Session = Depends(get_db)
-):
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_current_user)
+) -> Dict[str, Any]:
     """
-    Computes deterministic multi-horizon cash flow projections (7d, 30d, 60d, 90d)
-    with minimum projected balance, shortfall risks, and runway coverage.
+    Returns 7-day, 30-day, 60-day, and 90-day trajectory forecasts for the authenticated user.
     """
     forecaster = ForecasterAgent(db)
-    return forecaster.run_multi_horizon(starting_balance=starting_balance)
-
-
+    return forecaster.run_multi_horizon(owner_id=current_user.id)
