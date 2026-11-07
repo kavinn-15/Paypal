@@ -76,43 +76,43 @@ export const ResetPasswordPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-ink-950 flex flex-col justify-between text-white selection:bg-electric selection:text-white">
       {/* Header */}
-      <div className="max-w-[1440px] mx-auto w-full px-4 sm:px-6 py-6 flex items-center justify-between">
+      <div className="max-w-[1440px] mx-auto w-full px-3 sm:px-6 py-4 sm:py-6 flex items-center justify-between">
         <Link to="/" className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-lg bg-ink-900 border border-electric/40 flex items-center justify-center font-mono font-bold text-electric text-xs shadow-glow-electric">
+          <div className="w-8 h-8 rounded-lg bg-ink-900 border border-electric/40 flex items-center justify-center font-mono font-bold text-electric text-xs shadow-glow-electric shrink-0">
             CL
           </div>
-          <span className="font-extrabold text-base tracking-tight text-white flex items-center gap-1.5">
+          <span className="font-extrabold text-sm sm:text-base tracking-tight text-white flex items-center gap-1.5">
             Cashflow Lifeline
           </span>
         </Link>
-        <Link to="/login" className="text-xs text-sardine-muted hover:text-white transition-colors">
+        <Link to="/login" className="text-xs text-sardine-muted hover:text-white transition-colors py-1.5">
           &larr; Back to Sign In
         </Link>
       </div>
 
       {/* Main Card */}
-      <div className="max-w-md w-full mx-auto px-4 py-8">
-        <div className="rounded-2xl border border-ink-800 bg-ink-900/90 backdrop-blur-xl p-6 sm:p-8 shadow-2xl space-y-6">
+      <div className="max-w-md w-full mx-auto px-3 sm:px-4 py-4 sm:py-8">
+        <div className="rounded-2xl border border-ink-800 bg-ink-900/90 backdrop-blur-xl p-4 sm:p-8 shadow-2xl space-y-4 sm:space-y-6">
           <div className="space-y-1.5 text-center">
-            <h1 className="text-2xl font-black text-white tracking-tight">Set New Password</h1>
+            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">Set New Password</h1>
             <p className="text-xs text-sardine-muted">
               Choose a strong, secure password for your account
             </p>
           </div>
 
           {!token && (
-            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start space-x-2.5">
+            <div className="p-3 sm:p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start space-x-2.5">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
-              <div>
+              <div className="leading-relaxed break-words flex-1">
                 No reset token was found in the URL. If you received an email, please ensure you clicked the full URL.
               </div>
             </div>
           )}
 
           {error && (
-            <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start space-x-2.5">
+            <div className="p-3 sm:p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start space-x-2.5">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
-              <div className="leading-relaxed">{error}</div>
+              <div className="leading-relaxed break-words flex-1">{error}</div>
             </div>
           )}
 
@@ -120,7 +120,7 @@ export const ResetPasswordPage: React.FC = () => {
             <div className="space-y-4">
               <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs space-y-2">
                 <div className="flex items-center space-x-2 font-bold text-sm text-emerald-200">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>Password Successfully Updated</span>
                 </div>
                 <p className="leading-relaxed text-slate-300">
@@ -131,10 +131,10 @@ export const ResetPasswordPage: React.FC = () => {
               <div className="pt-2 text-center">
                 <Link
                   to="/login"
-                  className="w-full py-3 rounded-xl bg-electric hover:bg-electric-600 text-white font-bold text-xs sm:text-sm shadow-glow-electric inline-flex items-center justify-center space-x-2 transition-all"
+                  className="w-full py-3 rounded-xl bg-electric hover:bg-electric-600 text-white font-bold text-xs sm:text-sm shadow-glow-electric inline-flex items-center justify-center space-x-2 transition-all min-h-[44px]"
                 >
                   <span>Sign In with New Password</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <ArrowRight className="w-4 h-4 shrink-0" />
                 </Link>
               </div>
             </div>
@@ -156,7 +156,8 @@ export const ResetPasswordPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-sardine-muted hover:text-white"
+                    className="absolute right-2 top-2 p-1.5 text-sardine-muted hover:text-white rounded-md min-w-[36px] min-h-[36px] flex items-center justify-center"
+                    aria-label="Toggle password visibility"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -178,7 +179,8 @@ export const ResetPasswordPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-3 text-sardine-muted hover:text-white"
+                    className="absolute right-2 top-2 p-1.5 text-sardine-muted hover:text-white rounded-md min-w-[36px] min-h-[36px] flex items-center justify-center"
+                    aria-label="Toggle confirm password visibility"
                   >
                     {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -200,36 +202,36 @@ export const ResetPasswordPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading || !token}
-                className="w-full py-3 rounded-xl bg-electric hover:bg-electric-600 text-white font-bold text-xs sm:text-sm shadow-glow-electric transition-all flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer pt-3"
+                className="w-full py-3 rounded-xl bg-electric hover:bg-electric-600 text-white font-bold text-xs sm:text-sm shadow-glow-electric transition-all flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer min-h-[44px]"
               >
                 {loading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
                     <span>Updating password...</span>
                   </>
                 ) : (
                   <>
                     <span>Reset Password &amp; Invalidate Sessions</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight className="w-4 h-4 shrink-0" />
                   </>
                 )}
               </button>
             </form>
           )}
 
-          <div className="border-t border-ink-800 pt-4 flex items-center justify-between text-xs text-sardine-muted">
+          <div className="border-t border-ink-800 pt-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-sardine-muted">
             <div className="flex items-center space-x-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>Token revoked upon use</span>
             </div>
-            <Link to="/login" className="text-electric-300 font-bold hover:underline">
+            <Link to="/login" className="text-electric-300 font-bold hover:underline py-1">
               Return to Sign In &rarr;
             </Link>
           </div>
         </div>
       </div>
 
-      <div className="py-6 text-center text-[11px] text-sardine-muted">
+      <div className="py-4 sm:py-6 px-3 text-center text-[11px] text-sardine-muted">
         PayPal AI Hackathon 2026 &bull; Strict token invalidation and session purge
       </div>
     </div>

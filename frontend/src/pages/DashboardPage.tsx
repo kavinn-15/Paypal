@@ -88,9 +88,11 @@ export const DashboardPage: React.FC = () => {
 
   if (isLoading && !data) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-3">
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-3 p-4">
         <RefreshCw className="w-8 h-8 text-electric animate-spin" />
-        <p className="text-sm font-semibold text-ink">Running Forecaster Agent & training delay models...</p>
+        <p className="text-xs sm:text-sm font-semibold text-ink text-center">
+          Running Forecaster Agent &amp; training delay models...
+        </p>
       </div>
     );
   }
@@ -100,27 +102,27 @@ export const DashboardPage: React.FC = () => {
   const isCovered = data.shortfall_amount === 0 || activeAction?.state === 'confirmed';
 
   return (
-    <div className="space-y-6 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="space-y-4 sm:space-y-6 max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 w-full overflow-hidden">
       {/* Notifications Banner */}
       {notification && (
         <div
-          className={`p-4 rounded-xl border text-xs sm:text-sm flex items-center justify-between shadow-xs ${
+          className={`p-3.5 sm:p-4 rounded-xl border text-xs sm:text-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-xs ${
             notification.type === 'success'
               ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
               : 'bg-rose-50 text-rose-800 border-rose-300'
           }`}
         >
-          <div className="flex items-center space-x-2">
+          <div className="flex items-start space-x-2">
             {notification.type === 'success' ? (
-              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
             ) : (
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
             )}
-            <span>{notification.message}</span>
+            <span className="leading-relaxed">{notification.message}</span>
           </div>
           <button
             onClick={() => setNotification(null)}
-            className="text-xs font-bold text-sardine-slate hover:text-ink ml-4"
+            className="text-xs font-bold text-sardine-slate hover:text-ink self-end sm:self-auto shrink-0 min-h-[32px] px-2 flex items-center"
           >
             Dismiss
           </button>
@@ -136,8 +138,8 @@ export const DashboardPage: React.FC = () => {
         isCovered={isCovered}
       />
 
-      {/* 2. Bento Grid: Trajectory Chart (2 cols) + Agentic Risk Intelligence (1 col) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* 2. Bento Grid: Trajectory Chart (2 cols on lg) + Agentic Risk Intelligence (1 col) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         <div className="lg:col-span-2">
           <ForecastChart
             projections={data.plans[0]?.forecast_without_plan || []}
@@ -157,10 +159,12 @@ export const DashboardPage: React.FC = () => {
 
       {/* 3. Bento Grid: Three Rescue Plans Side-by-Side Comparison */}
       <div className="space-y-3">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1.5 sm:gap-2">
           <div>
-            <div className="flex items-center space-x-2">
-              <h2 className="text-lg font-extrabold text-ink tracking-tight">Rescue Plan Options</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base sm:text-lg font-extrabold text-ink tracking-tight">
+                Rescue Plan Options
+              </h2>
               <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-ink text-white rounded-md">
                 Cheapest Safe Fixes
               </span>
@@ -169,12 +173,12 @@ export const DashboardPage: React.FC = () => {
               Deterministic, costed options to plausibly protect Friday's payout. Approve one exact action.
             </p>
           </div>
-          <span className="text-xs text-sardine-slate font-medium italic">
+          <span className="text-[11px] text-sardine-slate font-medium italic">
             *All plans state 'plausibly protects', never 'guarantees'.
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {data.plans.map((plan) => (
             <RescuePlanCard
               key={plan.id}
@@ -193,20 +197,20 @@ export const DashboardPage: React.FC = () => {
       {activeAction && <ActionTimeline action={activeAction} />}
 
       {/* 5. Bento Tile: Hackathon Fast-Track Sandbox Bar */}
-      <div className="bento-ink p-6 border border-slate-800 shadow-bento">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="bento-ink p-4 sm:p-6 border border-slate-800 shadow-bento w-full overflow-hidden">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div className="space-y-1">
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="px-2 py-0.5 rounded-full bg-electric-500/20 text-electric-300 border border-electric-400/30 text-[10px] font-bold uppercase tracking-wider">
                 PayPal AI Hackathon Fast-Track
               </span>
               <span className="text-xs text-sardine-muted font-medium">Under 3-Minute Live Verification</span>
             </div>
-            <h3 className="text-base font-bold text-white tracking-tight">
+            <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
               Simulate Client Payment Arrival (Sandbox Webhook)
             </h3>
-            <p className="text-xs text-sardine-muted max-w-xl">
-              Fires a verified <code className="text-electric-300 bg-slate-900 px-1 py-0.5 rounded">INVOICING.INVOICE.PAID</code> webhook event. Moves the approved action to{' '}
+            <p className="text-xs text-sardine-muted max-w-xl leading-relaxed">
+              Fires a verified <code className="text-electric-300 bg-slate-900 px-1 py-0.5 rounded text-[11px]">INVOICING.INVOICE.PAID</code> webhook event. Moves the approved action to{' '}
               <strong className="text-emerald-400">CONFIRMED</strong> and recalculates balance to show the contractor obligation is fully covered.
             </p>
           </div>
@@ -214,7 +218,7 @@ export const DashboardPage: React.FC = () => {
           <button
             onClick={handleSimulatePayment}
             disabled={isSimulating}
-            className="flex items-center space-x-2 px-5 py-3 bg-electric hover:bg-electric-600 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-glow-electric transition-all disabled:opacity-50 shrink-0"
+            className="w-full sm:w-auto flex items-center justify-center space-x-2 px-5 py-3 bg-electric hover:bg-electric-600 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-glow-electric transition-all disabled:opacity-50 shrink-0 min-h-[44px]"
           >
             <Zap className={`w-4 h-4 text-white ${isSimulating ? 'animate-bounce' : ''}`} />
             <span>{isSimulating ? 'Processing Webhook...' : 'Simulate Client Payment ($2,000)'}</span>

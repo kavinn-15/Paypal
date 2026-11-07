@@ -96,14 +96,14 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
         </label>
       )}
 
-      <div className="flex rounded-xl shadow-xs border border-slate-200 focus-within:border-electric focus-within:ring-2 focus-within:ring-electric/20 bg-white transition-all overflow-hidden">
+      <div className="flex rounded-xl shadow-xs border border-slate-200 focus-within:border-electric focus-within:ring-2 focus-within:ring-electric/20 bg-white transition-all overflow-hidden min-h-[44px]">
         {/* Country selector dropdown */}
-        <div className="relative border-r border-slate-200 bg-slate-50 flex items-center shrink-0">
+        <div className="relative border-r border-slate-200 bg-slate-50 flex items-center shrink-0 max-w-[105px] sm:max-w-[140px] md:max-w-none">
           <select
             value={selectedCountry.dialCode}
             onChange={handleCountryChange}
             disabled={disabled}
-            className="appearance-none bg-transparent pl-3 pr-7 py-2.5 text-xs sm:text-sm font-semibold text-ink cursor-pointer focus:outline-none disabled:opacity-60"
+            className="appearance-none bg-transparent pl-2.5 sm:pl-3 pr-6 sm:pr-7 py-2.5 text-xs sm:text-sm font-semibold text-ink cursor-pointer focus:outline-none disabled:opacity-60 w-full truncate min-h-[44px]"
             title="Select country code"
           >
             {COUNTRIES.map((c) => (
@@ -112,13 +112,13 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
               </option>
             ))}
           </select>
-          <ChevronDown className="w-3.5 h-3.5 text-sardine-slate absolute right-2 pointer-events-none" />
+          <ChevronDown className="w-3.5 h-3.5 text-sardine-slate absolute right-1.5 sm:right-2 pointer-events-none" />
         </div>
 
         {/* National Number Input */}
-        <div className="relative flex-1 flex items-center">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-            <Phone className="h-4 w-4" />
+        <div className="relative flex-1 flex items-center min-w-0">
+          <div className="absolute inset-y-0 left-0 pl-2.5 sm:pl-3 flex items-center pointer-events-none text-slate-400">
+            <Phone className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </div>
           <input
             type="tel"
@@ -127,7 +127,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
             onChange={handleNumberChange}
             disabled={disabled}
             placeholder={placeholder || selectedCountry.formatPlaceholder}
-            className="w-full pl-9 pr-3 py-2.5 text-xs sm:text-sm font-mono text-ink placeholder:text-slate-400 focus:outline-none bg-transparent disabled:opacity-60"
+            className="w-full pl-8 sm:pl-9 pr-3 py-2.5 text-xs sm:text-sm font-mono text-ink placeholder:text-slate-400 focus:outline-none bg-transparent disabled:opacity-60 min-h-[44px]"
           />
         </div>
       </div>

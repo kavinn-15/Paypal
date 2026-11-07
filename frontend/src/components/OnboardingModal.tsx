@@ -113,26 +113,26 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-950/80 backdrop-blur-md">
-      <div className="w-full max-w-xl rounded-2xl border border-ink-700 bg-ink-900 text-white shadow-2xl overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-ink-950/80 backdrop-blur-md">
+      <div className="w-full max-w-xl max-h-[92vh] rounded-2xl border border-ink-700 bg-ink-900 text-white shadow-2xl overflow-hidden flex flex-col">
         {/* Header with progress */}
-        <div className="p-5 border-b border-ink-800 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-7 h-7 rounded-lg bg-electric/20 border border-electric/40 text-electric flex items-center justify-center font-bold text-xs">
+        <div className="p-4 sm:p-5 border-b border-ink-800 flex items-center justify-between shrink-0">
+          <div className="flex items-center space-x-2 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-electric/20 border border-electric/40 text-electric flex items-center justify-center font-bold text-xs shrink-0">
               {currentStep}/8
             </div>
-            <div>
-              <span className="text-xs font-bold text-white uppercase tracking-wider">
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-white uppercase tracking-wider block truncate">
                 Getting Started with Cashflow Lifeline
               </span>
-              <div className="text-[10px] text-sardine-muted">
+              <div className="text-[10px] text-sardine-muted truncate">
                 Step {currentStep} of 8 &bull; Can be updated anytime in Settings
               </div>
             </div>
           </div>
           <button
             onClick={handleSkip}
-            className="text-sardine-muted hover:text-white p-1 rounded-lg text-xs flex items-center space-x-1"
+            className="text-sardine-muted hover:text-white p-1.5 rounded-lg text-xs flex items-center space-x-1 shrink-0 min-h-[36px]"
           >
             <span>Skip Tour</span>
             <X className="w-4 h-4" />
@@ -140,7 +140,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
         </div>
 
         {/* Step Progress Bar */}
-        <div className="w-full bg-ink-950 h-1">
+        <div className="w-full bg-ink-950 h-1 shrink-0">
           <div
             className="bg-electric h-1 transition-all duration-300"
             style={{ width: `${(currentStep / 8) * 100}%` }}
@@ -148,7 +148,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
         </div>
 
         {/* Step Content */}
-        <div className="p-6 sm:p-8 flex-1 min-h-[300px]">
+        <div className="p-4 sm:p-6 sm:p-8 flex-1 min-h-[220px] overflow-y-auto">
           {/* Step 1: Welcome */}
           {currentStep === 1 && (
             <div className="space-y-4 text-center py-4">
@@ -391,11 +391,11 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
         </div>
 
         {/* Footer controls */}
-        <div className="p-4 bg-ink-950 border-t border-ink-800 flex items-center justify-between">
+        <div className="p-3.5 sm:p-4 bg-ink-950 border-t border-ink-800 flex items-center justify-between shrink-0">
           {currentStep > 1 && currentStep < 8 ? (
             <button
               onClick={handleBack}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white flex items-center space-x-1"
+              className="px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white flex items-center space-x-1 min-h-[40px]"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back</span>
@@ -409,7 +409,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               <>
                 <button
                   onClick={handleNext}
-                  className="px-3 py-2 text-xs text-sardine-muted hover:text-white"
+                  className="px-2.5 sm:px-3 py-2 text-xs text-sardine-muted hover:text-white min-h-[40px] flex items-center"
                 >
                   Skip Step
                 </button>
@@ -419,7 +419,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                     else if (currentStep === 6) handleSaveObligation();
                     else handleNext();
                   }}
-                  className="px-5 py-2 rounded-xl bg-electric hover:bg-electric-600 text-white text-xs font-bold shadow-glow-electric flex items-center space-x-1.5 cursor-pointer"
+                  className="px-4 sm:px-5 py-2 rounded-xl bg-electric hover:bg-electric-600 text-white text-xs font-bold shadow-glow-electric flex items-center space-x-1.5 cursor-pointer min-h-[40px]"
                 >
                   <span>Continue</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -431,7 +431,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   onCompleted();
                   onClose();
                 }}
-                className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center space-x-1.5 cursor-pointer"
+                className="px-5 sm:px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center space-x-1.5 cursor-pointer min-h-[44px]"
               >
                 <span>Enter Dashboard</span>
                 <ArrowRight className="w-3.5 h-3.5" />

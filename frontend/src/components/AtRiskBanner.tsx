@@ -27,18 +27,18 @@ export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
 
   return (
     <div
-      className={`bento-card p-6 md:p-8 transition-all ${
+      className={`bento-card p-4 sm:p-6 md:p-8 transition-all ${
         isCovered
           ? 'bg-gradient-to-br from-emerald-500/10 via-white to-white border-emerald-300/80'
           : 'bg-white border-slate-200/90 shadow-bento'
       }`}
     >
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5 sm:gap-6">
         {/* Left Side: Problem Statement */}
         <div className="space-y-2 max-w-2xl">
-          <div className="flex items-center space-x-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <span
-              className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+              className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
                 isCovered
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                   : 'bg-rose-50 text-rose-700 border-rose-200'
@@ -51,7 +51,7 @@ export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
             </span>
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight leading-tight">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-ink tracking-tight leading-snug sm:leading-tight">
             {isCovered ? (
               <span>Contractor Payout to {obligation.payee_name} is Fully Covered</span>
             ) : (
@@ -73,28 +73,34 @@ export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
         </div>
 
         {/* Right Side: Bento Metrics Pod */}
-        <div className="w-full lg:w-auto shrink-0 grid grid-cols-3 gap-3 p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/70">
-          <div className="px-3 py-1">
-            <span className="text-[10px] font-bold uppercase text-sardine-slate block tracking-wider">Balance Today</span>
-            <span className="text-base sm:text-lg font-bold font-mono text-ink">
-              ${startingBalance.toLocaleString('en-US', { minimumFractionDigits: 0 })}
-            </span>
+        <div className="w-full lg:w-auto shrink-0 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/70">
+          <div className="px-3 py-1 flex sm:block justify-between items-center sm:text-left">
+            <div>
+              <span className="text-[10px] font-bold uppercase text-sardine-slate block tracking-wider">Balance Today</span>
+              <span className="text-base sm:text-lg font-bold font-mono text-ink">
+                ${startingBalance.toLocaleString('en-US', { minimumFractionDigits: 0 })}
+              </span>
+            </div>
             <span className="text-[10px] text-emerald-600 font-medium block">Healthy initial</span>
           </div>
 
-          <div className="px-3 py-1 border-x border-slate-200">
-            <span className="text-[10px] font-bold uppercase text-sardine-slate block tracking-wider">Due Friday</span>
-            <span className="text-base sm:text-lg font-bold font-mono text-rose-600">
-              ${obligation.amount.toLocaleString('en-US', { minimumFractionDigits: 0 })}
-            </span>
+          <div className="px-3 py-1 border-t sm:border-t-0 sm:border-x border-slate-200 pt-2 sm:pt-1 flex sm:block justify-between items-center sm:text-left">
+            <div>
+              <span className="text-[10px] font-bold uppercase text-sardine-slate block tracking-wider">Due Friday</span>
+              <span className="text-base sm:text-lg font-bold font-mono text-rose-600">
+                ${obligation.amount.toLocaleString('en-US', { minimumFractionDigits: 0 })}
+              </span>
+            </div>
             <span className="text-[10px] text-sardine-slate font-medium block">Contractor</span>
           </div>
 
-          <div className="px-3 py-1">
-            <span className="text-[10px] font-bold uppercase text-sardine-slate block tracking-wider">Protection Gap</span>
-            <span className={`text-base sm:text-lg font-extrabold font-mono ${isCovered ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {isCovered ? '$0.00' : `$${shortfallAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}`}
-            </span>
+          <div className="px-3 py-1 border-t sm:border-t-0 border-slate-200 pt-2 sm:pt-1 flex sm:block justify-between items-center sm:text-left">
+            <div>
+              <span className="text-[10px] font-bold uppercase text-sardine-slate block tracking-wider">Protection Gap</span>
+              <span className={`text-base sm:text-lg font-extrabold font-mono ${isCovered ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {isCovered ? '$0.00' : `$${shortfallAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}`}
+              </span>
+            </div>
             <span className="text-[10px] text-sardine-slate font-medium block">
               {isCovered ? 'Protected' : 'Shortfall'}
             </span>

@@ -40,7 +40,7 @@ export const RescuePlanCard: React.FC<RescuePlanCardProps> = ({
   return (
     <div
       onClick={onSelect}
-      className={`bento-card p-6 transition-all cursor-pointer relative flex flex-col justify-between ${
+      className={`bento-card p-4 sm:p-6 transition-all cursor-pointer relative flex flex-col justify-between ${
         isSelected
           ? 'border-electric ring-2 ring-electric/15 shadow-bento-hover'
           : 'border-slate-200/90 hover:border-slate-300 shadow-bento'
@@ -48,9 +48,9 @@ export const RescuePlanCard: React.FC<RescuePlanCardProps> = ({
     >
       <div>
         {/* Header Badge */}
-        <div className="flex justify-between items-center mb-3">
+        <div className="flex justify-between items-center mb-3 gap-2">
           <span
-            className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+            className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border truncate ${
               planPills[plan.plan_type].bg
             }`}
           >
@@ -58,7 +58,7 @@ export const RescuePlanCard: React.FC<RescuePlanCardProps> = ({
           </span>
 
           <span
-            className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+            className={`text-[10px] font-semibold px-2 py-0.5 rounded-md shrink-0 ${
               isSelected ? 'bg-electric text-white' : 'bg-slate-100 text-sardine-slate'
             }`}
           >
@@ -102,7 +102,7 @@ export const RescuePlanCard: React.FC<RescuePlanCardProps> = ({
           </p>
         </div>
 
-        {/* Remaining Risk Alert (Strictly using 'plausibly protects', never 'guarantees') */}
+        {/* Remaining Risk Alert */}
         <div className="p-3 bg-amber-50/50 rounded-xl border border-amber-200/70 my-3 text-[11px] leading-relaxed text-amber-950">
           <span className="font-bold block flex items-center space-x-1 text-amber-900">
             <ShieldAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" />
@@ -121,17 +121,17 @@ export const RescuePlanCard: React.FC<RescuePlanCardProps> = ({
               <Lock className="w-2.5 h-2.5 text-electric-300" />
               <span>HMAC-SHA256 Bound</span>
             </span>
-            <span className="text-[9px] text-sardine-muted truncate max-w-[120px] font-mono">
+            <span className="text-[9px] text-sardine-muted truncate max-w-[100px] sm:max-w-[120px] font-mono">
               {action.approval_hash.slice(0, 10)}...
             </span>
           </div>
           <div className="flex justify-between">
             <span className="text-sardine-muted">Action:</span>
-            <span className="text-electric-300 font-bold">{action.action_type}</span>
+            <span className="text-electric-300 font-bold truncate max-w-[140px] text-right">{action.action_type}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-sardine-muted">Target:</span>
-            <span className="text-white truncate max-w-[130px]">{action.recipient}</span>
+            <span className="text-white truncate max-w-[140px] text-right">{action.recipient}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-sardine-muted">Amount:</span>
@@ -145,10 +145,10 @@ export const RescuePlanCard: React.FC<RescuePlanCardProps> = ({
             <button
               onClick={handleApproveClick}
               disabled={isLoading}
-              className="w-full py-2.5 px-4 bg-electric hover:bg-electric-600 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center justify-center space-x-2 disabled:opacity-50"
+              className="w-full py-2.5 px-3 bg-electric hover:bg-electric-600 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center justify-center space-x-2 disabled:opacity-50 min-h-[44px] text-center"
             >
-              <Lock className="w-3.5 h-3.5" />
-              <span>Approve Exact Action ({action.recipient.split(' ')[0]} - ${action.amount.toFixed(0)})</span>
+              <Lock className="w-3.5 h-3.5 shrink-0" />
+              <span>Approve Action ({action.recipient.split(' ')[0]} - ${action.amount.toFixed(0)})</span>
             </button>
           )}
 
@@ -156,29 +156,29 @@ export const RescuePlanCard: React.FC<RescuePlanCardProps> = ({
             <button
               onClick={handleExecuteClick}
               disabled={isLoading}
-              className="w-full py-2.5 px-4 bg-ink hover:bg-ink-800 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center justify-center space-x-2 disabled:opacity-50"
+              className="w-full py-2.5 px-3 bg-ink hover:bg-ink-800 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center justify-center space-x-2 disabled:opacity-50 min-h-[44px]"
             >
-              <Send className="w-3.5 h-3.5 text-electric-300" />
+              <Send className="w-3.5 h-3.5 text-electric-300 shrink-0" />
               <span>Execute in PayPal Sandbox</span>
             </button>
           )}
 
           {action.state === 'executed' && (
-            <div className="w-full py-2 px-3 bg-amber-50 border border-amber-300/80 text-amber-800 rounded-xl text-xs font-semibold flex items-center justify-center space-x-2">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+            <div className="w-full py-2.5 px-3 bg-amber-50 border border-amber-300/80 text-amber-800 rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 min-h-[44px]">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0"></span>
               <span>Executed: Awaiting Sandbox Settlement</span>
             </div>
           )}
 
           {action.state === 'confirmed' && (
-            <div className="w-full py-2 px-3 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-xl text-xs font-semibold flex items-center justify-center space-x-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <div className="w-full py-2.5 px-3 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 min-h-[44px]">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>Payment Confirmed via Webhook</span>
             </div>
           )}
 
           {action.state === 'failed' && (
-            <div className="w-full py-2 px-3 bg-rose-50 border border-rose-300 text-rose-800 rounded-xl text-xs font-semibold text-center">
+            <div className="w-full py-2.5 px-3 bg-rose-50 border border-rose-300 text-rose-800 rounded-xl text-xs font-semibold text-center min-h-[44px] flex items-center justify-center">
               Failed: {action.error_message || 'Sandbox error'}
             </div>
           )}

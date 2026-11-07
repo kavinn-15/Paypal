@@ -100,51 +100,51 @@ export const PhoneVerificationPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-ink-950 flex flex-col justify-between text-white selection:bg-electric selection:text-white">
       {/* Top Simple Header */}
-      <div className="max-w-[1440px] mx-auto w-full px-4 sm:px-6 py-6 flex items-center justify-between">
+      <div className="max-w-[1440px] mx-auto w-full px-3 sm:px-6 py-4 sm:py-6 flex items-center justify-between">
         <Link to="/" className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-lg bg-ink-900 border border-electric/40 flex items-center justify-center font-mono font-bold text-electric text-xs shadow-glow-electric">
+          <div className="w-8 h-8 rounded-lg bg-ink-900 border border-electric/40 flex items-center justify-center font-mono font-bold text-electric text-xs shadow-glow-electric shrink-0">
             CL
           </div>
-          <span className="font-extrabold text-base tracking-tight text-white flex items-center gap-1.5">
+          <span className="font-extrabold text-sm sm:text-base tracking-tight text-white flex items-center gap-1.5">
             Cashflow Lifeline
-            <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-electric/15 text-electric-300 border border-electric/30">
+            <span className="hidden xs:inline-block text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-electric/15 text-electric-300 border border-electric/30">
               PayPal AI
             </span>
           </span>
         </Link>
-        <Link to="/login" className="text-xs text-sardine-muted hover:text-white transition-colors">
+        <Link to="/login" className="text-xs text-sardine-muted hover:text-white transition-colors py-1.5">
           &larr; Back to Sign In
         </Link>
       </div>
 
       {/* Main Verification Card */}
-      <div className="max-w-md w-full mx-auto px-4 py-8">
-        <div className="rounded-2xl border border-ink-800 bg-ink-900/90 backdrop-blur-xl p-6 sm:p-8 shadow-2xl space-y-6">
+      <div className="max-w-md w-full mx-auto px-3 sm:px-4 py-4 sm:py-8">
+        <div className="rounded-2xl border border-ink-800 bg-ink-900/90 backdrop-blur-xl p-4 sm:p-8 shadow-2xl space-y-4 sm:space-y-6">
           <div className="w-12 h-12 rounded-2xl bg-electric/10 border border-electric/30 text-electric flex items-center justify-center mx-auto shadow-glow-electric">
             <Phone className="w-6 h-6" />
           </div>
 
           <div className="space-y-1.5 text-center">
-            <h1 className="text-2xl font-black text-white tracking-tight">Verify Your Mobile Number</h1>
+            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">Verify Your Mobile Number</h1>
             <p className="text-xs text-sardine-muted leading-relaxed">
               We sent a 6-digit SMS verification code to
             </p>
-            <div className="inline-block px-3 py-1 bg-ink-950 border border-ink-800 rounded-lg font-mono text-xs font-bold text-electric-300">
+            <div className="inline-block px-3 py-1 bg-ink-950 border border-ink-800 rounded-lg font-mono text-xs font-bold text-electric-300 break-all max-w-full">
               {phoneNumber || 'your registered number'}
             </div>
           </div>
 
           {error && (
-            <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start space-x-2.5">
+            <div className="p-3 sm:p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start space-x-2.5">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
-              <div className="leading-relaxed">{error}</div>
+              <div className="leading-relaxed break-words flex-1">{error}</div>
             </div>
           )}
 
           {successMessage && (
-            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-start space-x-2.5">
+            <div className="p-3 sm:p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-start space-x-2.5">
               <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
-              <div className="leading-relaxed">{successMessage}</div>
+              <div className="leading-relaxed break-words flex-1">{successMessage}</div>
             </div>
           )}
 
@@ -163,11 +163,11 @@ export const PhoneVerificationPage: React.FC = () => {
                 placeholder="000000"
                 required
                 autoFocus
-                className="w-full text-center tracking-[0.4em] font-mono text-2xl py-3.5 bg-ink-950 border border-ink-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-electric transition-colors"
+                className="w-full text-center tracking-[0.2em] sm:tracking-[0.4em] font-mono text-xl sm:text-2xl py-3 sm:py-3.5 bg-ink-950 border border-ink-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-electric transition-colors"
               />
             </div>
 
-            <div className="flex items-center justify-between text-xs text-sardine-muted">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-sardine-muted">
               <span>
                 {cooldown > 0 ? (
                   <span>Resend in <strong className="text-white font-mono">{cooldown}s</strong></span>
@@ -176,7 +176,7 @@ export const PhoneVerificationPage: React.FC = () => {
                     type="button"
                     onClick={handleResend}
                     disabled={resending}
-                    className="text-electric-300 hover:text-white font-semibold flex items-center space-x-1"
+                    className="text-electric-300 hover:text-white font-semibold flex items-center space-x-1 min-h-[44px] sm:min-h-0 py-1"
                   >
                     <RotateCcw className={`w-3 h-3 ${resending ? 'animate-spin' : ''}`} />
                     <span>Resend SMS Code</span>
@@ -189,17 +189,17 @@ export const PhoneVerificationPage: React.FC = () => {
             <button
               type="submit"
               disabled={loading || otpCode.length !== 6}
-              className="w-full py-3.5 rounded-xl bg-electric hover:bg-electric-600 text-white font-bold text-xs sm:text-sm shadow-glow-electric transition-all flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+              className="w-full py-3.5 rounded-xl bg-electric hover:bg-electric-600 text-white font-bold text-xs sm:text-sm shadow-glow-electric transition-all flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer min-h-[44px]"
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
                   <span>Verifying SMS Code...</span>
                 </>
               ) : (
                 <>
                   <span>Verify Phone Number</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <ArrowRight className="w-4 h-4 shrink-0" />
                 </>
               )}
             </button>
@@ -210,27 +210,27 @@ export const PhoneVerificationPage: React.FC = () => {
             {emailParam && (
               <Link
                 to={`/verify-email?email=${encodeURIComponent(emailParam)}`}
-                className="text-electric-300 hover:underline flex items-center justify-center space-x-1"
+                className="text-electric-300 hover:underline flex items-center justify-center space-x-1 py-1.5 min-h-[44px] sm:min-h-0"
               >
-                <Mail className="w-3.5 h-3.5" />
+                <Mail className="w-3.5 h-3.5 shrink-0" />
                 <span>Verify Email Address instead</span>
               </Link>
             )}
 
-            <Link to="/dashboard" className="text-sardine-muted hover:text-white text-[11px] pt-1">
+            <Link to="/dashboard" className="text-sardine-muted hover:text-white text-[11px] py-1">
               Skip for now &amp; proceed to Dashboard &rarr;
             </Link>
           </div>
 
           <div className="border-t border-ink-800 pt-3 flex items-center justify-center space-x-1.5 text-[11px] text-sardine-muted">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span>Keyed HMAC-SHA256 OTP Protection &bull; Anti-tamper</span>
           </div>
         </div>
       </div>
 
       {/* Footer */}
-      <div className="py-6 text-center text-[11px] text-sardine-muted">
+      <div className="py-4 sm:py-6 px-3 text-center text-[11px] text-sardine-muted">
         PayPal AI Hackathon 2026 &bull; Secure Multi-Factor &bull; Multi-Tenant Privacy
       </div>
     </div>

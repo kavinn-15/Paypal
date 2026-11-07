@@ -53,31 +53,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full max-h-[92vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="bg-ink p-6 text-white relative">
+        <div className="bg-ink p-4 sm:p-6 text-white relative shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-electric font-bold font-mono">
+            <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-electric font-bold font-mono shrink-0">
               CL
             </div>
-            <div>
-              <h2 className="text-lg font-bold tracking-tight">Cashflow Lifeline</h2>
-              <p className="text-xs text-sardine-slate">Fintech Cashflow Intelligence Platform</p>
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-bold tracking-tight truncate">Cashflow Lifeline</h2>
+              <p className="text-xs text-sardine-slate truncate">Fintech Cashflow Intelligence Platform</p>
             </div>
           </div>
           <div className="mt-3 inline-flex items-center space-x-1.5 text-[11px] bg-electric/20 text-electric-300 border border-electric/30 px-2.5 py-0.5 rounded-full font-medium">
-            <Sparkles className="w-3 h-3 text-electric" />
+            <Sparkles className="w-3 h-3 text-electric shrink-0" />
             <span>PayPal AI Hackathon 2026</span>
           </div>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex border-b border-slate-200 bg-slate-50/50">
+        <div className="flex border-b border-slate-200 bg-slate-50/50 shrink-0">
           <button
             type="button"
             onClick={() => { setTab('login'); setError(null); }}
-            className={`flex-1 py-3 text-xs font-bold transition-colors ${
+            className={`flex-1 py-3 text-xs font-bold transition-colors min-h-[44px] ${
               tab === 'login'
                 ? 'text-ink border-b-2 border-electric bg-white'
                 : 'text-sardine-slate hover:text-ink'
@@ -88,7 +88,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           <button
             type="button"
             onClick={() => { setTab('register'); setError(null); }}
-            className={`flex-1 py-3 text-xs font-bold transition-colors ${
+            className={`flex-1 py-3 text-xs font-bold transition-colors min-h-[44px] ${
               tab === 'register'
                 ? 'text-ink border-b-2 border-electric bg-white'
                 : 'text-sardine-slate hover:text-ink'
@@ -99,11 +99,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         </div>
 
         {/* Form Body */}
-        <div className="p-6 space-y-4">
+        <div className="p-4 sm:p-6 space-y-4 overflow-y-auto">
           {error && (
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start space-x-2 text-rose-700 text-xs">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
+              <span className="break-words">{error}</span>
             </div>
           )}
 
@@ -114,7 +114,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                   Full Name
                 </label>
                 <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                   <input
                     type="text"
                     required
@@ -132,7 +132,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                 Email Address
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                 <input
                   type="email"
                   required
@@ -149,7 +149,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                 Password
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                 <input
                   type="password"
                   required
@@ -183,14 +183,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-2.5 bg-electric hover:bg-electric/90 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center space-x-1.5 disabled:opacity-50"
+              className="w-full mt-2 py-2.5 sm:py-3 bg-electric hover:bg-electric/90 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center space-x-1.5 disabled:opacity-50 min-h-[44px]"
             >
               {loading ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
+                <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
               ) : (
                 <>
                   <span>{tab === 'login' ? 'Sign In to Dashboard' : 'Create Free Account'}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  <ArrowRight className="w-3.5 h-3.5 shrink-0" />
                 </>
               )}
             </button>
@@ -210,9 +210,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             type="button"
             onClick={handleDemoLogin}
             disabled={loading}
-            className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-ink font-bold text-xs rounded-xl border border-slate-300 transition-colors flex items-center justify-center space-x-2"
+            className="w-full py-2.5 sm:py-3 bg-slate-100 hover:bg-slate-200 text-ink font-bold text-xs rounded-xl border border-slate-300 transition-colors flex items-center justify-center space-x-2 min-h-[44px]"
           >
-            <ShieldCheck className="w-4 h-4 text-electric" />
+            <ShieldCheck className="w-4 h-4 text-electric shrink-0" />
             <span>Explore Demo as Alex Morgan</span>
           </button>
         </div>

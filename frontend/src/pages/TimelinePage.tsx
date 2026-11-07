@@ -33,15 +33,15 @@ export const TimelinePage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-4 sm:space-y-6 w-full overflow-hidden">
       {/* Header Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b border-slate-200 pb-4 sm:pb-5">
         <div>
-          <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-black text-ink tracking-tight font-display">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-black text-ink tracking-tight font-display">
               Intelligent Financial Timeline
             </h1>
-            <span className="text-xs bg-slate-100 text-sardine-slate border border-slate-200 px-2.5 py-0.5 rounded-full font-bold">
+            <span className="text-[10px] sm:text-xs bg-slate-100 text-sardine-slate border border-slate-200 px-2.5 py-0.5 rounded-full font-bold">
               Cashflow Chronology
             </span>
           </div>
@@ -50,7 +50,7 @@ export const TimelinePage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center space-x-2 text-xs">
+        <div className="flex items-center space-x-2 text-xs self-start md:self-auto">
           <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-full font-bold border border-emerald-200">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
             <span>Confirmed</span>
@@ -64,34 +64,34 @@ export const TimelinePage: React.FC = () => {
 
       {/* Authoritative Position Cards */}
       {summary && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bento-card p-5 space-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="bento-card p-4 sm:p-5 space-y-1">
             <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Confirmed Available Cash</span>
-            <span className="font-mono font-black text-2xl text-ink block">
+            <span className="font-mono font-black text-xl sm:text-2xl text-ink block">
               ${summary.current_confirmed_balance.toLocaleString()} {summary.currency}
             </span>
             <span className="text-[11px] text-emerald-700 font-semibold block">Authoritative Liquid Balance</span>
           </div>
 
-          <div className="bento-card p-5 space-y-1">
+          <div className="bento-card p-4 sm:p-5 space-y-1">
             <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Expected Inflows (30d)</span>
-            <span className="font-mono font-black text-2xl text-emerald-600 block">
+            <span className="font-mono font-black text-xl sm:text-2xl text-emerald-600 block">
               +${summary.expected_inflows_30d.toLocaleString()} {summary.currency}
             </span>
             <span className="text-[11px] text-sardine-slate block">{summary.expected_inflows_count} pending receivables</span>
           </div>
 
-          <div className="bento-card p-5 space-y-1">
+          <div className="bento-card p-4 sm:p-5 space-y-1">
             <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Expected Outflows (30d)</span>
-            <span className="font-mono font-black text-2xl text-rose-600 block">
+            <span className="font-mono font-black text-xl sm:text-2xl text-rose-600 block">
               -${summary.expected_outflows_30d.toLocaleString()} {summary.currency}
             </span>
             <span className="text-[11px] text-sardine-slate block">{summary.pending_obligations_count} commitments</span>
           </div>
 
-          <div className="bento-card p-5 space-y-1">
+          <div className="bento-card p-4 sm:p-5 space-y-1">
             <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Emergency Reserve Ratio</span>
-            <span className="font-mono font-black text-2xl text-ink block">
+            <span className="font-mono font-black text-xl sm:text-2xl text-ink block">
               {(summary.reserve_coverage_ratio * 100).toFixed(0)}%
             </span>
             <span className="text-[11px] text-sardine-slate block">Target: ${summary.emergency_reserve_target.toLocaleString()}</span>
@@ -99,9 +99,51 @@ export const TimelinePage: React.FC = () => {
         </div>
       )}
 
-      {/* Chronological Table */}
+      {/* Chronological Table (Desktop: Full Table, Mobile: Responsive Card List) */}
       <div className="bento-card overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
+        {/* Mobile View: Cards on screens < md */}
+        <div className="block md:hidden divide-y divide-slate-100">
+          {timeline.map((item) => (
+            <div key={item.id} className="p-4 space-y-2.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center space-x-2">
+                  {item.direction === 'inflow' ? (
+                    <ArrowDownLeft className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <ArrowUpRight className="w-4 h-4 text-rose-600 shrink-0" />
+                  )}
+                  <span className="font-bold text-xs text-ink">{item.title}</span>
+                </div>
+                <span className={`font-mono font-black text-sm shrink-0 ${
+                  item.direction === 'inflow' ? 'text-emerald-700' : 'text-slate-900'
+                }`}>
+                  {item.direction === 'inflow' ? '+' : '-'}${item.amount.toLocaleString()} {item.currency}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between text-[11px] text-sardine-slate gap-2 pt-1 border-t border-slate-50">
+                <div className="flex items-center space-x-2">
+                  <span className="font-mono">{item.date}</span>
+                  <span>&bull;</span>
+                  <span className="capitalize">{item.category.replace('_', ' ')}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getStatusBadge(item.status)}`}>
+                    {item.status}
+                  </span>
+                  {item.reference_id && (
+                    <span className="font-mono text-[10px] text-sardine-muted truncate max-w-[100px]">
+                      #{item.reference_id}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop View: Full Table on screens >= md */}
+        <div className="hidden md:block responsive-table-container">
           <table className="min-w-full divide-y divide-slate-200 text-left text-xs">
             <thead className="bg-slate-50/80 text-sardine-slate font-bold uppercase tracking-wider text-[10px]">
               <tr>
@@ -150,4 +192,3 @@ export const TimelinePage: React.FC = () => {
     </div>
   );
 };
-

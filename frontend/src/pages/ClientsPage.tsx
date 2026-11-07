@@ -54,15 +54,15 @@ export const ClientsPage: React.FC = () => {
   const highRiskClient = clients.find(c => c.avg_delay_days >= 10);
 
   return (
-    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-4 sm:space-y-6 w-full overflow-hidden">
       {/* Bento Header Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b border-slate-200 pb-4 sm:pb-5">
         <div>
-          <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-black text-ink tracking-tight font-display">
-              Clients & Payment Patterns
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-black text-ink tracking-tight font-display">
+              Clients &amp; Payment Patterns
             </h1>
-            <span className="text-xs bg-slate-100 text-sardine-slate border border-slate-200 px-2.5 py-0.5 rounded-full font-bold">
+            <span className="text-[10px] sm:text-xs bg-slate-100 text-sardine-slate border border-slate-200 px-2.5 py-0.5 rounded-full font-bold">
               {clients.length} Seeded Profiles
             </span>
           </div>
@@ -72,9 +72,9 @@ export const ClientsPage: React.FC = () => {
         </div>
 
         {/* Top Summary Badges */}
-        <div className="flex items-center space-x-3">
-          <div className="bg-white border border-slate-200 rounded-xl px-3.5 py-1.5 flex items-center space-x-2 shadow-2xs">
-            <DollarSign className="w-4 h-4 text-electric" />
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
+          <div className="bg-white border border-slate-200 rounded-xl px-3.5 py-2 flex items-center space-x-2 shadow-2xs">
+            <DollarSign className="w-4 h-4 text-electric shrink-0" />
             <div className="text-left">
               <span className="text-[10px] uppercase font-bold text-sardine-muted block leading-tight">Total Open</span>
               <span className="font-mono font-black text-sm text-ink leading-tight">
@@ -84,8 +84,8 @@ export const ClientsPage: React.FC = () => {
           </div>
 
           {highRiskClient && (
-            <div className="bg-rose-50 border border-rose-200 rounded-xl px-3.5 py-1.5 flex items-center space-x-2 shadow-2xs">
-              <AlertTriangle className="w-4 h-4 text-rose-600" />
+            <div className="bg-rose-50 border border-rose-200 rounded-xl px-3.5 py-2 flex items-center space-x-2 shadow-2xs">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
               <div className="text-left">
                 <span className="text-[10px] uppercase font-bold text-rose-500 block leading-tight">Top Risk Driver</span>
                 <span className="font-bold text-xs text-rose-800 leading-tight">
@@ -98,7 +98,7 @@ export const ClientsPage: React.FC = () => {
       </div>
 
       {/* Bento Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {clients.map((c) => {
           const badge = getBehaviorBadge(c);
           const isPrimaryTarget = c.avg_delay_days >= 10;
@@ -106,22 +106,22 @@ export const ClientsPage: React.FC = () => {
           return (
             <div
               key={c.id}
-              className={`bento-card p-6 space-y-5 transition-all ${
-                isPrimaryTarget ? 'ring-2 ring-rose-500/30 border-rose-200 bg-linear-to-b from-white to-rose-50/20' : ''
+              className={`bento-card p-4 sm:p-6 space-y-4 sm:space-y-5 transition-all ${
+                isPrimaryTarget ? 'ring-2 ring-rose-500/30 border-rose-200 bg-gradient-to-b from-white to-rose-50/20' : ''
               }`}
             >
               {/* Card Header */}
               <div className="flex justify-between items-start gap-2">
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <h3 className="font-black text-base text-ink tracking-tight">{c.name}</h3>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <h3 className="font-black text-base text-ink tracking-tight truncate">{c.name}</h3>
                     {isPrimaryTarget && (
-                      <span className="text-[10px] font-extrabold uppercase bg-rose-600 text-white px-2 py-0.5 rounded-full shadow-2xs">
+                      <span className="text-[10px] font-extrabold uppercase bg-rose-600 text-white px-2 py-0.5 rounded-full shadow-2xs shrink-0">
                         Critical
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-sardine-slate mt-0.5">
+                  <p className="text-xs text-sardine-slate mt-0.5 truncate">
                     {c.email} &bull; <span className="font-semibold text-slate-700">{c.country}</span>
                   </p>
                 </div>
@@ -140,8 +140,8 @@ export const ClientsPage: React.FC = () => {
                 </span>
               </div>
 
-              {/* Stats Pod (Sardine Bento Sub-box) */}
-              <div className="grid grid-cols-2 gap-3 bg-slate-50/80 p-3.5 rounded-xl text-xs border border-slate-200/60">
+              {/* Stats Pod */}
+              <div className="grid grid-cols-2 gap-3 bg-slate-50/80 p-3 sm:p-3.5 rounded-xl text-xs border border-slate-200/60">
                 <div>
                   <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Avg Delay</span>
                   <span className={`font-mono font-bold text-sm ${c.avg_delay_days > 5 ? 'text-rose-600' : 'text-ink'}`}>
@@ -177,13 +177,13 @@ export const ClientsPage: React.FC = () => {
                   c.open_invoices.map((inv) => (
                     <div
                       key={inv.id}
-                      className="p-3 bg-white rounded-xl border border-slate-200 hover:border-electric/40 transition-colors flex justify-between items-center text-xs shadow-2xs"
+                      className="p-3 bg-white rounded-xl border border-slate-200 hover:border-electric/40 transition-colors flex flex-col sm:flex-row justify-between items-start sm:items-center text-xs shadow-2xs gap-2"
                     >
-                      <div>
+                      <div className="min-w-0">
                         <div className="font-black text-ink font-mono text-sm">
                           ${inv.amount.toLocaleString()} <span className="text-[11px] font-sans font-semibold text-sardine-slate">{inv.currency}</span>
                         </div>
-                        <div className="text-[11px] text-sardine-slate">
+                        <div className="text-[11px] text-sardine-slate truncate">
                           Due: <span className="font-semibold text-slate-700">{inv.due_date}</span> &bull; #{inv.paypal_invoice_id}
                         </div>
                       </div>
@@ -193,7 +193,7 @@ export const ClientsPage: React.FC = () => {
                           href={inv.pay_link}
                           target="_blank"
                           rel="noreferrer"
-                          className="px-2.5 py-1 bg-ink hover:bg-slate-800 text-white text-xs font-bold rounded-lg flex items-center space-x-1 shadow-2xs transition-all"
+                          className="w-full sm:w-auto px-3 py-1.5 bg-ink hover:bg-slate-800 text-white text-xs font-bold rounded-lg flex items-center justify-center space-x-1 shadow-2xs transition-all shrink-0 min-h-[36px]"
                         >
                           <span>PayPal Link</span>
                           <ExternalLink className="w-3 h-3 text-electric-soft" />

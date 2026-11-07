@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Sparkles,
@@ -28,6 +28,18 @@ export const LandingPage: React.FC = () => {
   const [demoLoading, setDemoLoading] = useState(false);
   const { demoLogin } = useAuth();
   const navigate = useNavigate();
+
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileMenuOpen]);
 
   const handleLaunchDemo = async () => {
     try {
@@ -144,7 +156,8 @@ export const LandingPage: React.FC = () => {
             <div className="flex md:hidden items-center space-x-2">
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="p-2 text-slate-400 hover:text-white focus:outline-none"
+                className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-ink-900 focus:outline-none transition-colors"
+                aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
               >
                 {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
@@ -154,19 +167,19 @@ export const LandingPage: React.FC = () => {
 
         {/* Mobile Dropdown Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-b border-ink-800 bg-ink-900 px-4 pt-3 pb-6 space-y-3">
-            <div className="flex flex-col space-y-2 text-sm font-medium text-slate-300">
-              <a href="#features" onClick={() => setMobileMenuOpen(false)} className="py-1 hover:text-white">Features</a>
-              <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)} className="py-1 hover:text-white">How It Works</a>
-              <a href="#preview" onClick={() => setMobileMenuOpen(false)} className="py-1 hover:text-white">Product Demo</a>
-              <a href="#security" onClick={() => setMobileMenuOpen(false)} className="py-1 hover:text-white">Security</a>
-              <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="py-1 hover:text-white">FAQ</a>
+          <div className="md:hidden border-b border-ink-800 bg-ink-900/98 backdrop-blur-xl px-4 pt-3 pb-6 space-y-4 animate-fadeIn">
+            <div className="flex flex-col space-y-1 text-sm font-medium text-slate-300">
+              <a href="#features" onClick={() => setMobileMenuOpen(false)} className="py-2.5 px-3 rounded-lg hover:bg-ink-800/80 hover:text-white transition-colors">Features</a>
+              <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)} className="py-2.5 px-3 rounded-lg hover:bg-ink-800/80 hover:text-white transition-colors">How It Works</a>
+              <a href="#preview" onClick={() => setMobileMenuOpen(false)} className="py-2.5 px-3 rounded-lg hover:bg-ink-800/80 hover:text-white transition-colors">Product Demo</a>
+              <a href="#security" onClick={() => setMobileMenuOpen(false)} className="py-2.5 px-3 rounded-lg hover:bg-ink-800/80 hover:text-white transition-colors">Security</a>
+              <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="py-2.5 px-3 rounded-lg hover:bg-ink-800/80 hover:text-white transition-colors">FAQ</a>
             </div>
-            <div className="pt-3 border-t border-ink-800 flex flex-col space-y-2">
+            <div className="pt-3 border-t border-ink-800 flex flex-col space-y-2.5">
               <button
                 onClick={() => { setMobileMenuOpen(false); handleLaunchDemo(); }}
                 disabled={demoLoading}
-                className="w-full py-2.5 rounded-lg text-xs font-semibold bg-ink-800 text-electric-300 border border-electric/30 text-center"
+                className="w-full py-3 rounded-xl text-xs font-semibold bg-ink-800 text-electric-300 border border-electric/30 text-center min-h-[44px] flex items-center justify-center"
               >
                 {demoLoading ? 'Launching Demo...' : 'Explore Demo (Alex Morgan Persona)'}
               </button>
@@ -174,14 +187,14 @@ export const LandingPage: React.FC = () => {
                 <Link
                   to="/login"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="py-2.5 rounded-lg text-xs font-semibold bg-ink-800 text-white text-center border border-slate-700"
+                  className="py-3 rounded-xl text-xs font-semibold bg-ink-800 text-white text-center border border-slate-700 min-h-[44px] flex items-center justify-center"
                 >
                   Sign In
                 </Link>
                 <Link
                   to="/register"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="py-2.5 rounded-lg text-xs font-semibold bg-electric text-white text-center shadow-glow-electric"
+                  className="py-3 rounded-xl text-xs font-semibold bg-electric text-white text-center shadow-glow-electric min-h-[44px] flex items-center justify-center"
                 >
                   Get Started
                 </Link>
@@ -192,46 +205,46 @@ export const LandingPage: React.FC = () => {
       </nav>
 
       {/* 2. Hero Section */}
-      <section className="relative overflow-hidden pt-12 pb-20 lg:pt-20 lg:pb-28">
+      <section className="relative overflow-hidden pt-8 pb-16 sm:pt-12 sm:pb-20 lg:pt-20 lg:pb-28">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(75,91,252,0.18),rgba(255,255,255,0))]" />
         
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="max-w-3xl mx-auto text-center space-y-6">
+        <div className="max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8 relative z-10">
+          <div className="max-w-3xl mx-auto text-center space-y-5 sm:space-y-6">
             <div className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full bg-electric-500/10 border border-electric-500/30 text-electric-300 text-xs font-medium">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>PayPal AI Hackathon 2026 &bull; Build What&rsquo;s Next</span>
+              <Sparkles className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">PayPal AI Hackathon 2026 &bull; Build What&rsquo;s Next</span>
             </div>
 
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-[1.1]">
+            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-[1.15] sm:leading-[1.1]">
               Stay Ahead of Cashflow. <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-electric-300 via-electric to-blue-400">
                 Never Be Surprised by a Shortfall.
               </span>
             </h1>
 
-            <p className="text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl mx-auto font-normal">
+            <p className="text-sm sm:text-base lg:text-lg text-slate-300 leading-relaxed max-w-2xl mx-auto font-normal">
               Cashflow Lifeline helps freelancers and small businesses predict payment delays, identify upcoming cash shortages and explore intelligent financial rescue strategies before problems become emergencies.
             </p>
 
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
               <Link
                 to="/register"
-                className="w-full sm:w-auto px-7 py-3.5 rounded-xl font-bold text-sm bg-electric text-white hover:bg-electric-600 shadow-glow-electric transition-all flex items-center justify-center space-x-2"
+                className="w-full sm:w-auto px-7 py-3.5 rounded-xl font-bold text-sm bg-electric text-white hover:bg-electric-600 shadow-glow-electric transition-all flex items-center justify-center space-x-2 min-h-[44px]"
               >
                 <span>Get Started Free</span>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-4 h-4 shrink-0" />
               </Link>
               <button
                 onClick={handleLaunchDemo}
                 disabled={demoLoading}
-                className="w-full sm:w-auto px-6 py-3.5 rounded-xl font-semibold text-sm bg-ink-900 text-white border border-slate-700 hover:border-electric hover:bg-ink-800 transition-all flex items-center justify-center space-x-2"
+                className="w-full sm:w-auto px-6 py-3.5 rounded-xl font-semibold text-sm bg-ink-900 text-white border border-slate-700 hover:border-electric hover:bg-ink-800 transition-all flex items-center justify-center space-x-2 min-h-[44px]"
               >
-                <Play className="w-3.5 h-3.5 fill-electric-300 text-electric-300" />
+                <Play className="w-3.5 h-3.5 fill-electric-300 text-electric-300 shrink-0" />
                 <span>{demoLoading ? 'Starting Demo...' : 'Explore Demo Sandbox'}</span>
               </button>
               <a
                 href="#how-it-works"
-                className="w-full sm:w-auto px-5 py-3.5 rounded-xl font-semibold text-sm text-slate-300 hover:text-white transition-colors"
+                className="w-full sm:w-auto px-5 py-3.5 rounded-xl font-semibold text-sm text-slate-300 hover:text-white transition-colors flex items-center justify-center min-h-[44px]"
               >
                 Explore How It Works &darr;
               </a>
@@ -243,11 +256,11 @@ export const LandingPage: React.FC = () => {
           </div>
 
           {/* Hero Dashboard Preview (Clearly Labeled Sample Data) */}
-          <div id="preview" className="mt-14 lg:mt-20 relative max-w-5xl mx-auto">
+          <div id="preview" className="mt-10 sm:mt-14 lg:mt-20 relative max-w-5xl mx-auto">
             {/* Sample Data Disclaimer Badge */}
-            <div className="flex items-center justify-between pb-3 px-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 px-1 sm:px-2">
               <div className="flex items-center space-x-2">
-                <span className="flex h-2 w-2 relative">
+                <span className="flex h-2 w-2 relative shrink-0">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
@@ -255,15 +268,15 @@ export const LandingPage: React.FC = () => {
                   Interactive Platform Preview
                 </span>
               </div>
-              <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30">
+              <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 self-start sm:self-auto">
                 Sample Data &mdash; Demonstration Only
               </span>
             </div>
 
             {/* Dashboard Card Container */}
-            <div className="rounded-2xl border border-ink-700 bg-ink-900/95 backdrop-blur-xl shadow-2xl p-4 sm:p-6 lg:p-8 space-y-6">
+            <div className="rounded-2xl border border-ink-700 bg-ink-900/95 backdrop-blur-xl shadow-2xl p-3.5 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
               {/* Header metrics row */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 <div className="bg-ink-950 p-4 rounded-xl border border-ink-800">
                   <div className="text-[11px] font-mono text-sardine-muted uppercase tracking-wider">
                     Available Balance
@@ -760,26 +773,26 @@ export const LandingPage: React.FC = () => {
       </section>
 
       {/* 8. Bottom CTA Banner */}
-      <section className="py-20 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="rounded-3xl border border-electric/30 bg-gradient-to-b from-electric/15 to-ink-900 p-8 sm:p-12 text-center space-y-6 relative overflow-hidden">
+      <section className="py-12 sm:py-20 max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="rounded-3xl border border-electric/30 bg-gradient-to-b from-electric/15 to-ink-900 p-6 sm:p-12 text-center space-y-5 sm:space-y-6 relative overflow-hidden">
           <div className="max-w-2xl mx-auto space-y-4">
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-white">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white">
               Ready to Protect Next Friday&rsquo;s Payout?
             </h2>
-            <p className="text-sm sm:text-base text-slate-300">
+            <p className="text-xs sm:text-sm lg:text-base text-slate-300">
               Create your account in under 60 seconds, connect PayPal Sandbox, and forecast your cashflow risk before it becomes an emergency.
             </p>
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link
                 to="/register"
-                className="w-full sm:w-auto px-7 py-3.5 rounded-xl font-bold text-sm bg-electric text-white hover:bg-electric-600 shadow-glow-electric transition-all"
+                className="w-full sm:w-auto px-7 py-3.5 rounded-xl font-bold text-sm bg-electric text-white hover:bg-electric-600 shadow-glow-electric transition-all min-h-[44px] flex items-center justify-center"
               >
                 Create Free Account
               </Link>
               <button
                 onClick={handleLaunchDemo}
                 disabled={demoLoading}
-                className="w-full sm:w-auto px-6 py-3.5 rounded-xl font-semibold text-sm bg-ink-950 text-white border border-slate-700 hover:border-electric transition-all"
+                className="w-full sm:w-auto px-6 py-3.5 rounded-xl font-semibold text-sm bg-ink-950 text-white border border-slate-700 hover:border-electric transition-all min-h-[44px] flex items-center justify-center"
               >
                 {demoLoading ? 'Starting...' : 'Explore Demo Persona'}
               </button>
@@ -789,13 +802,13 @@ export const LandingPage: React.FC = () => {
       </section>
 
       {/* 9. Public Footer */}
-      <footer className="border-t border-ink-800 bg-ink-950 py-12 text-xs text-sardine-muted">
+      <footer className="border-t border-ink-800 bg-ink-950 py-8 sm:py-12 text-xs text-sardine-muted">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 pb-10 border-b border-ink-800">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 pb-8 sm:pb-10 border-b border-ink-800">
             {/* Col 1 */}
-            <div className="space-y-3 col-span-2 md:col-span-1">
+            <div className="space-y-3 sm:col-span-2 md:col-span-1">
               <div className="flex items-center space-x-2">
-                <div className="w-7 h-7 rounded-lg bg-ink-900 border border-electric/40 flex items-center justify-center font-mono font-bold text-electric text-xs">
+                <div className="w-7 h-7 rounded-lg bg-ink-900 border border-electric/40 flex items-center justify-center font-mono font-bold text-electric text-xs shrink-0">
                   CL
                 </div>
                 <span className="font-extrabold text-sm text-white">Cashflow Lifeline</span>
@@ -808,46 +821,46 @@ export const LandingPage: React.FC = () => {
             {/* Col 2 */}
             <div className="space-y-2.5">
               <div className="font-bold text-white text-xs uppercase tracking-wider">Product</div>
-              <ul className="space-y-1.5">
-                <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
-                <li><a href="#how-it-works" className="hover:text-white transition-colors">How It Works</a></li>
-                <li><a href="#preview" className="hover:text-white transition-colors">Platform Demo</a></li>
-                <li><a href="#security" className="hover:text-white transition-colors">Security Architecture</a></li>
+              <ul className="space-y-1">
+                <li><a href="#features" className="hover:text-white transition-colors py-1 inline-block">Features</a></li>
+                <li><a href="#how-it-works" className="hover:text-white transition-colors py-1 inline-block">How It Works</a></li>
+                <li><a href="#preview" className="hover:text-white transition-colors py-1 inline-block">Platform Demo</a></li>
+                <li><a href="#security" className="hover:text-white transition-colors py-1 inline-block">Security Architecture</a></li>
               </ul>
             </div>
 
             {/* Col 3 */}
             <div className="space-y-2.5">
               <div className="font-bold text-white text-xs uppercase tracking-wider">Authentication</div>
-              <ul className="space-y-1.5">
-                <li><Link to="/login" className="hover:text-white transition-colors">Sign In</Link></li>
-                <li><Link to="/register" className="hover:text-white transition-colors">Register Account</Link></li>
-                <li><Link to="/forgot-password" className="hover:text-white transition-colors">Forgot Password</Link></li>
-                <li><button onClick={handleLaunchDemo} className="hover:text-white transition-colors text-left">Demo Persona</button></li>
+              <ul className="space-y-1">
+                <li><Link to="/login" className="hover:text-white transition-colors py-1 inline-block">Sign In</Link></li>
+                <li><Link to="/register" className="hover:text-white transition-colors py-1 inline-block">Register Account</Link></li>
+                <li><Link to="/forgot-password" className="hover:text-white transition-colors py-1 inline-block">Forgot Password</Link></li>
+                <li><button onClick={handleLaunchDemo} className="hover:text-white transition-colors text-left py-1 inline-block">Demo Persona</button></li>
               </ul>
             </div>
 
             {/* Col 4 */}
             <div className="space-y-2.5">
               <div className="font-bold text-white text-xs uppercase tracking-wider">Legal &amp; Privacy</div>
-              <ul className="space-y-1.5">
-                <li><span className="text-slate-400">PayPal AI Hackathon 2026</span></li>
-                <li><span className="text-slate-400">Strict Multi-Tenant Isolation</span></li>
-                <li><span className="text-slate-400">Deterministic Guardrails</span></li>
-                <li><span className="text-slate-400">PayPal Sandbox Environment</span></li>
+              <ul className="space-y-1">
+                <li className="py-1"><span className="text-slate-400">PayPal AI Hackathon 2026</span></li>
+                <li className="py-1"><span className="text-slate-400">Strict Multi-Tenant Isolation</span></li>
+                <li className="py-1"><span className="text-slate-400">Deterministic Guardrails</span></li>
+                <li className="py-1"><span className="text-slate-400">PayPal Sandbox Environment</span></li>
               </ul>
             </div>
           </div>
 
-          <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px]">
+          <div className="pt-6 sm:pt-8 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 text-[11px] text-center sm:text-left">
             <div>
               &copy; 2026 Cashflow Lifeline. Built for PayPal AI Hackathon (&ldquo;Build What&rsquo;s Next with PayPal and AI&rdquo;).
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 sm:gap-4">
               <span>PayPal Sandbox Verified</span>
-              <span>&bull;</span>
+              <span className="hidden sm:inline">&bull;</span>
               <span>SHA-256 Merkle Chain Audit</span>
-              <span>&bull;</span>
+              <span className="hidden sm:inline">&bull;</span>
               <span>Human-in-the-Loop Safeguards</span>
             </div>
           </div>

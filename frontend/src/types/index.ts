@@ -133,6 +133,7 @@ export interface DriverContribution {
   invoice_amount: number;
   expected_days_late: number;
   marginal_shortfall_delta: number;
+  marginal_shortfall_impact?: number;
   explanation: string;
 }
 
@@ -275,6 +276,9 @@ export interface AgentTraceStep {
   timestamp: string;
   summary: string;
   key_finding: string;
+  step_type?: string;
+  details?: string;
+  duration_ms?: number;
 }
 
 export interface SupervisorRunResponse {

@@ -38,15 +38,15 @@ export const AuditPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-4 sm:space-y-6 w-full overflow-hidden">
       {/* Bento Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b border-slate-200 pb-4 sm:pb-5">
         <div>
-          <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-black text-ink tracking-tight font-display">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-black text-ink tracking-tight font-display">
               Cryptographic Audit Trail
             </h1>
-            <span className="text-xs bg-slate-100 text-sardine-slate border border-slate-200 px-2.5 py-0.5 rounded-full font-bold">
+            <span className="text-[10px] sm:text-xs bg-slate-100 text-sardine-slate border border-slate-200 px-2.5 py-0.5 rounded-full font-bold">
               SHA-256 Chained
             </span>
           </div>
@@ -55,20 +55,21 @@ export const AuditPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <button
             onClick={fetchLogs}
             disabled={isLoading}
-            className="p-2.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-sardine-slate hover:text-ink transition-colors shadow-2xs"
+            className="p-2.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-sardine-slate hover:text-ink transition-colors shadow-2xs flex items-center justify-center min-h-[44px]"
             title="Refresh logs"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span className="sm:hidden ml-2 text-xs font-semibold">Refresh Ledger</span>
           </button>
 
           <button
             onClick={handleVerifyChain}
             disabled={isVerifying}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-ink hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-50 border border-slate-700 hover:border-electric"
+            className="flex items-center justify-center space-x-2 px-4 py-2.5 bg-ink hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-50 border border-slate-700 hover:border-electric min-h-[44px]"
           >
             <ShieldCheck className={`w-4 h-4 text-electric ${isVerifying ? 'animate-spin' : ''}`} />
             <span>{isVerifying ? 'Traversing Chain...' : 'Verify Chain Integrity'}</span>
@@ -79,7 +80,7 @@ export const AuditPage: React.FC = () => {
       {/* Verification Result Banner */}
       {verification && (
         <div
-          className={`p-4 rounded-2xl border flex items-center justify-between text-xs shadow-xs transition-all ${
+          className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs transition-all ${
             verification.chain_valid
               ? 'bg-emerald-50/90 text-emerald-900 border-emerald-300'
               : 'bg-rose-50 text-rose-900 border-rose-300'
@@ -87,11 +88,11 @@ export const AuditPage: React.FC = () => {
         >
           <div className="flex items-center space-x-3">
             {verification.chain_valid ? (
-              <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold shrink-0">
                 <CheckCircle2 className="w-5 h-5" />
               </div>
             ) : (
-              <div className="w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center font-bold">
+              <div className="w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center font-bold shrink-0">
                 <AlertTriangle className="w-5 h-5" />
               </div>
             )}
@@ -99,19 +100,19 @@ export const AuditPage: React.FC = () => {
               <span className="font-black text-sm block">
                 {verification.chain_valid ? 'Audit Ledger 100% Cryptographically Intact' : 'Audit Chain Tampering Detected!'}
               </span>
-              <span className="text-emerald-800/90">{verification.message}</span>
+              <span className="text-emerald-800/90 text-[11px] leading-relaxed">{verification.message}</span>
             </div>
           </div>
-          <span className="font-mono font-bold bg-white px-3 py-1.5 rounded-xl border border-emerald-200 text-emerald-800 shadow-2xs">
+          <span className="font-mono font-bold bg-white px-3 py-1.5 rounded-xl border border-emerald-200 text-emerald-800 shadow-2xs shrink-0 self-end sm:self-auto">
             {verification.total_blocks} Verified Blocks
           </span>
         </div>
       )}
 
       {/* Bento Grid Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <div className="bento-card p-4 flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-electric-50 border border-electric-200/80 flex items-center justify-center text-electric">
+          <div className="w-10 h-10 rounded-xl bg-electric-50 border border-electric-200/80 flex items-center justify-center text-electric shrink-0">
             <Database className="w-5 h-5" />
           </div>
           <div>
@@ -121,7 +122,7 @@ export const AuditPage: React.FC = () => {
         </div>
 
         <div className="bento-card p-4 flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 shrink-0">
             <Lock className="w-5 h-5" />
           </div>
           <div>
@@ -131,19 +132,58 @@ export const AuditPage: React.FC = () => {
         </div>
 
         <div className="bento-card p-4 flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 shrink-0">
             <Hash className="w-5 h-5" />
           </div>
           <div>
             <span className="text-[10px] font-bold uppercase tracking-wider text-sardine-muted block">Genesis Block</span>
-            <span className="font-mono font-bold text-xs text-sardine-slate">0000000000000000...</span>
+            <span className="font-mono font-bold text-xs text-sardine-slate truncate max-w-[150px] block">
+              0000000000000000...
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Ledger Table - Bento Card Container */}
+      {/* Ledger Table - Dual Desktop / Mobile View */}
       <div className="bento-card overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
+        {/* Mobile View: Clean card list for screens < md */}
+        <div className="block md:hidden divide-y divide-slate-100">
+          {logs.map((log) => (
+            <div key={log.id} className="p-4 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center space-x-2">
+                  <span className="font-bold text-xs text-ink font-mono">#{log.id}</span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${
+                      log.actor === 'owner'
+                        ? 'bg-electric-50 text-electric-700 border-electric-200'
+                        : log.actor === 'system'
+                        ? 'bg-purple-50 text-purple-700 border-purple-200'
+                        : log.actor === 'webhook'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    {log.actor}
+                  </span>
+                </div>
+                <span className="font-sans text-[11px] text-sardine-slate">
+                  {new Date(log.ts).toLocaleDateString()} {new Date(log.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+
+              <div className="font-bold text-xs text-ink">{log.event}</div>
+
+              <div className="text-[10px] font-mono text-sardine-slate space-y-0.5 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                <div className="truncate">Prev: <span className="text-slate-600">{log.prev_hash.slice(0, 16)}...</span></div>
+                <div className="truncate">Hash: <span className="text-emerald-700 font-bold">{log.hash.slice(0, 20)}...</span></div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop View: Full Table on >= md */}
+        <div className="hidden md:block responsive-table-container">
           <table className="min-w-full divide-y divide-slate-200 text-left text-xs">
             <thead className="bg-slate-50/80 text-sardine-slate font-bold uppercase tracking-wider text-[10px]">
               <tr>
@@ -159,7 +199,7 @@ export const AuditPage: React.FC = () => {
               {logs.map((log) => (
                 <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
                   <td className="px-5 py-3.5 font-bold text-ink">#{log.id}</td>
-                  <td className="px-5 py-3.5 text-sardine-slate font-sans text-xs">
+                  <td className="px-5 py-3.5 text-sardine-slate font-sans text-xs whitespace-nowrap">
                     {new Date(log.ts).toLocaleString()}
                   </td>
                   <td className="px-5 py-3.5">

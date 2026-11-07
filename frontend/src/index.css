@@ -18,7 +18,19 @@ html, body {
   color: #081026;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   overflow-x: hidden;
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* Safe area insets for mobile notches / home bars */
+@supports (padding: env(safe-area-inset-bottom)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
 }
 
 code, pre {
@@ -55,4 +67,36 @@ header::-webkit-scrollbar, nav::-webkit-scrollbar, header *::-webkit-scrollbar, 
   color: #FFFFFF;
   border: 1px solid #15254F;
   border-radius: 1rem;
+}
+
+/* Controlled responsive table container */
+.responsive-table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
+}
+
+.responsive-table-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.responsive-table-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.responsive-table-container::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 9999px;
+}
+
+.responsive-table-container::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Minimum 44px touch target utility for mobile buttons */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
 }

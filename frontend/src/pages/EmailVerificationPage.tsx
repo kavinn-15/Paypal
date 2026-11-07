@@ -143,11 +143,11 @@ export const EmailVerificationPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-ink-950 flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 selection:bg-electric selection:text-white relative overflow-hidden">
+    <div className="min-h-screen bg-ink-950 flex flex-col justify-center items-center py-8 sm:py-12 px-3 sm:px-6 lg:px-8 selection:bg-electric selection:text-white relative overflow-hidden">
       {/* Background glow effects */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[350px] bg-electric/15 blur-[120px] rounded-full pointer-events-none" />
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
+      <div className="w-full sm:max-w-md relative z-10">
         {/* Brand */}
         <div className="text-center">
           <Link to="/" className="inline-flex items-center space-x-2.5 group">
@@ -159,15 +159,15 @@ export const EmailVerificationPage: React.FC = () => {
             </span>
           </Link>
           <div className="mt-3 inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-electric/10 border border-electric/30 text-electric-300 text-xs font-semibold">
-            <ShieldCheck className="w-3.5 h-3.5" />
+            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
             <span>Secure Email Verification</span>
           </div>
-          <h2 className="mt-4 text-2xl font-bold tracking-tight text-white">
+          <h2 className="mt-4 text-xl sm:text-2xl font-bold tracking-tight text-white">
             Verify Your Email Address
           </h2>
-          <p className="mt-2 text-xs sm:text-sm text-sardine-muted">
+          <p className="mt-2 text-xs sm:text-sm text-sardine-muted break-words">
             We sent a 6-digit confirmation code to{' '}
-            <span className="text-white font-mono font-semibold">
+            <span className="text-white font-mono font-semibold break-all">
               {email ? maskEmail(email) : 'your inbox'}
             </span>
             . Enter the code below to unlock your financial workspace.
@@ -175,29 +175,29 @@ export const EmailVerificationPage: React.FC = () => {
         </div>
 
         {/* Card */}
-        <div className="mt-8 bg-ink-900/90 border border-ink-800 rounded-2xl p-6 sm:p-8 backdrop-blur-xl shadow-2xl">
+        <div className="mt-6 sm:mt-8 bg-ink-900/90 border border-ink-800 rounded-2xl p-4 sm:p-8 backdrop-blur-xl shadow-2xl">
           {error && (
-            <div className="mb-6 p-3.5 bg-rose-950/60 border border-rose-800/80 rounded-xl flex items-start space-x-2.5 text-xs text-rose-200 animate-fadeIn">
+            <div className="mb-4 sm:mb-6 p-3 sm:p-3.5 bg-rose-950/60 border border-rose-800/80 rounded-xl flex items-start space-x-2.5 text-xs text-rose-200 animate-fadeIn">
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-              <div className="flex-1">{error}</div>
+              <div className="flex-1 break-words">{error}</div>
             </div>
           )}
 
           {successMsg && (
-            <div className="mb-6 p-3.5 bg-emerald-950/60 border border-emerald-800/80 rounded-xl flex items-start space-x-2.5 text-xs text-emerald-200 animate-fadeIn">
+            <div className="mb-4 sm:mb-6 p-3 sm:p-3.5 bg-emerald-950/60 border border-emerald-800/80 rounded-xl flex items-start space-x-2.5 text-xs text-emerald-200 animate-fadeIn">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-              <div className="flex-1">{successMsg}</div>
+              <div className="flex-1 break-words">{successMsg}</div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-sardine-muted text-center mb-3">
                 6-Digit Security Code
               </label>
 
               {/* 6 Digit Input Boxes */}
-              <div className="flex justify-center gap-2 sm:gap-3" onPaste={handlePaste}>
+              <div className="flex justify-center gap-1.5 sm:gap-3" onPaste={handlePaste}>
                 {otpDigits.map((digit, index) => (
                   <input
                     key={index}
@@ -209,7 +209,7 @@ export const EmailVerificationPage: React.FC = () => {
                     value={digit}
                     onChange={(e) => handleDigitChange(index, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(index, e)}
-                    className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-mono font-bold bg-ink-950 border border-ink-700 rounded-xl text-white focus:outline-none focus:border-electric focus:ring-2 focus:ring-electric/30 transition-all"
+                    className="w-9 h-11 sm:w-12 sm:h-14 text-center text-lg sm:text-2xl font-mono font-bold bg-ink-950 border border-ink-700 rounded-lg sm:rounded-xl text-white focus:outline-none focus:border-electric focus:ring-2 focus:ring-electric/30 transition-all"
                   />
                 ))}
               </div>
@@ -218,26 +218,26 @@ export const EmailVerificationPage: React.FC = () => {
             <button
               type="submit"
               disabled={isSubmitting || fullOtp.length !== 6}
-              className="w-full py-3 px-4 rounded-xl font-semibold text-xs uppercase tracking-wider bg-electric hover:bg-electric-600 active:bg-electric-700 text-white shadow-glow-electric transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              className="w-full py-3 px-4 rounded-xl font-semibold text-xs uppercase tracking-wider bg-electric hover:bg-electric-600 active:bg-electric-700 text-white shadow-glow-electric transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 min-h-[44px]"
             >
               {isSubmitting ? (
                 <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
                   <span>Verifying Code...</span>
                 </>
               ) : (
                 <>
                   <span>Verify Email &amp; Continue</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <ArrowRight className="w-4 h-4 shrink-0" />
                 </>
               )}
             </button>
           </form>
 
           {/* Resend Action with Cooldown */}
-          <div className="mt-6 pt-5 border-t border-ink-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-sardine-muted">
+          <div className="mt-5 sm:mt-6 pt-4 sm:pt-5 border-t border-ink-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-sardine-muted">
             <span className="flex items-center space-x-1.5">
-              <Mail className="w-3.5 h-3.5 text-sardine-slate" />
+              <Mail className="w-3.5 h-3.5 text-sardine-slate shrink-0" />
               <span>Didn&rsquo;t get the code?</span>
             </span>
 
@@ -250,11 +250,11 @@ export const EmailVerificationPage: React.FC = () => {
                 type="button"
                 onClick={handleResend}
                 disabled={isResending}
-                className="font-semibold text-electric hover:text-electric-300 transition-colors disabled:opacity-50 flex items-center space-x-1"
+                className="font-semibold text-electric hover:text-electric-300 transition-colors disabled:opacity-50 flex items-center space-x-1 min-h-[44px] sm:min-h-0 py-1"
               >
                 {isResending ? (
                   <>
-                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    <RefreshCw className="w-3 h-3 animate-spin shrink-0" />
                     <span>Sending...</span>
                   </>
                 ) : (
@@ -272,9 +272,9 @@ export const EmailVerificationPage: React.FC = () => {
                 await logout();
                 navigate('/login');
               }}
-              className="inline-flex items-center space-x-1.5 text-xs text-sardine-slate hover:text-rose-400 transition-colors"
+              className="inline-flex items-center space-x-1.5 text-xs text-sardine-slate hover:text-rose-400 transition-colors py-1.5 min-h-[44px] sm:min-h-0"
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut className="w-3.5 h-3.5 shrink-0" />
               <span>Sign out or use a different account</span>
             </button>
           </div>

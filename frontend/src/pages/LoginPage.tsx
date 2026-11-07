@@ -214,37 +214,37 @@ export const LoginPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-ink-950 flex flex-col justify-between text-white selection:bg-electric selection:text-white">
       {/* Top Simple Header */}
-      <div className="max-w-[1440px] mx-auto w-full px-4 sm:px-6 py-6 flex items-center justify-between">
+      <div className="max-w-[1440px] mx-auto w-full px-3 sm:px-6 py-4 sm:py-6 flex items-center justify-between">
         <Link to="/" className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-lg bg-ink-900 border border-electric/40 flex items-center justify-center font-mono font-bold text-electric text-xs shadow-glow-electric">
+          <div className="w-8 h-8 rounded-lg bg-ink-900 border border-electric/40 flex items-center justify-center font-mono font-bold text-electric text-xs shadow-glow-electric shrink-0">
             CL
           </div>
-          <span className="font-extrabold text-base tracking-tight text-white flex items-center gap-1.5">
+          <span className="font-extrabold text-sm sm:text-base tracking-tight text-white flex items-center gap-1.5">
             Cashflow Lifeline
-            <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-electric/15 text-electric-300 border border-electric/30">
+            <span className="hidden xs:inline-block text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-electric/15 text-electric-300 border border-electric/30">
               PayPal AI
             </span>
           </span>
         </Link>
-        <Link to="/" className="text-xs text-sardine-muted hover:text-white transition-colors">
+        <Link to="/" className="text-xs text-sardine-muted hover:text-white transition-colors py-1.5">
           &larr; Back to Home
         </Link>
       </div>
 
       {/* Main Login Card */}
-      <div className="max-w-md w-full mx-auto px-4 py-6">
-        <div className="rounded-2xl border border-ink-800 bg-ink-900/90 backdrop-blur-xl p-6 sm:p-8 shadow-2xl space-y-6">
+      <div className="max-w-md w-full mx-auto px-3 sm:px-4 py-4 sm:py-6">
+        <div className="rounded-2xl border border-ink-800 bg-ink-900/90 backdrop-blur-xl p-4 sm:p-8 shadow-2xl space-y-4 sm:space-y-6">
           <div className="space-y-1.5 text-center">
-            <h1 className="text-2xl font-black text-white tracking-tight">Sign In</h1>
+            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">Sign In</h1>
             <p className="text-xs text-sardine-muted">
               Access your real-time cashflow predictions and rescue inbox
             </p>
           </div>
 
           {error && (
-            <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start space-x-2.5">
+            <div className="p-3 sm:p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start space-x-2.5">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
-              <div className="leading-relaxed">{error}</div>
+              <div className="leading-relaxed break-words flex-1">{error}</div>
             </div>
           )}
 
@@ -253,12 +253,12 @@ export const LoginPage: React.FC = () => {
             type="button"
             onClick={handleGoogleSignIn}
             disabled={googleLoading || loading}
-            className="w-full py-2.5 px-4 rounded-xl bg-ink-950 border border-ink-700 hover:border-slate-500 text-white text-xs font-semibold flex items-center justify-center space-x-2.5 transition-all shadow-xs disabled:opacity-50 cursor-pointer"
+            className="w-full py-3 px-4 rounded-xl bg-ink-950 border border-ink-700 hover:border-slate-500 text-white text-xs font-semibold flex items-center justify-center space-x-2.5 transition-all shadow-xs disabled:opacity-50 cursor-pointer min-h-[44px]"
           >
             {googleLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin text-electric" />
+              <Loader2 className="w-4 h-4 animate-spin text-electric shrink-0" />
             ) : (
-              <GoogleIcon className="w-4 h-4" />
+              <GoogleIcon className="w-4 h-4 shrink-0" />
             )}
             <span>Continue with Google</span>
           </button>
@@ -279,13 +279,13 @@ export const LoginPage: React.FC = () => {
                 setActiveTab('email');
                 setError(null);
               }}
-              className={`py-2 px-1 text-center rounded-lg text-xs font-semibold transition-all flex items-center justify-center space-x-1.5 ${
+              className={`py-2 px-1 text-center rounded-lg text-[11px] sm:text-xs font-semibold transition-all flex items-center justify-center space-x-1 sm:space-x-1.5 min-h-[40px] ${
                 activeTab === 'email'
                   ? 'bg-electric text-white shadow-xs'
                   : 'text-sardine-muted hover:text-white hover:bg-ink-900'
               }`}
             >
-              <Mail className="w-3.5 h-3.5" />
+              <Mail className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Email</span>
             </button>
 
@@ -295,13 +295,13 @@ export const LoginPage: React.FC = () => {
                 setActiveTab('phone_password');
                 setError(null);
               }}
-              className={`py-2 px-1 text-center rounded-lg text-xs font-semibold transition-all flex items-center justify-center space-x-1.5 ${
+              className={`py-2 px-1 text-center rounded-lg text-[11px] sm:text-xs font-semibold transition-all flex items-center justify-center space-x-1 sm:space-x-1.5 min-h-[40px] ${
                 activeTab === 'phone_password'
                   ? 'bg-electric text-white shadow-xs'
                   : 'text-sardine-muted hover:text-white hover:bg-ink-900'
               }`}
             >
-              <Phone className="w-3.5 h-3.5" />
+              <Phone className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Phone + Pwd</span>
             </button>
 
@@ -311,13 +311,13 @@ export const LoginPage: React.FC = () => {
                 setActiveTab('phone_otp');
                 setError(null);
               }}
-              className={`py-2 px-1 text-center rounded-lg text-xs font-semibold transition-all flex items-center justify-center space-x-1.5 ${
+              className={`py-2 px-1 text-center rounded-lg text-[11px] sm:text-xs font-semibold transition-all flex items-center justify-center space-x-1 sm:space-x-1.5 min-h-[40px] ${
                 activeTab === 'phone_otp'
                   ? 'bg-electric text-white shadow-xs'
                   : 'text-sardine-muted hover:text-white hover:bg-ink-900'
               }`}
             >
-              <KeyRound className="w-3.5 h-3.5" />
+              <KeyRound className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Phone OTP</span>
             </button>
           </div>

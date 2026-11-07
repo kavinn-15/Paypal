@@ -58,8 +58,8 @@ const AuthenticatedLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-between">
-      <div>
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-between w-full overflow-x-hidden">
+      <div className="flex-1 flex flex-col w-full">
         <Navbar
           onResetDemo={handleResetDemo}
           isResetting={isResetting}
@@ -67,7 +67,7 @@ const AuthenticatedLayout: React.FC = () => {
           onLogout={handleLogout}
         />
 
-        <main>
+        <main className="flex-1 w-full">
           <Outlet />
         </main>
       </div>
@@ -85,16 +85,16 @@ const AuthenticatedLayout: React.FC = () => {
         }}
       />
 
-      <footer className="border-t border-slate-200 py-6 text-center text-xs text-sardine-slate bg-white">
-        <div className="max-w-[1440px] mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-2">
-          <div>
-            <strong>Cashflow Lifeline</strong> &mdash; Built for PayPal AI Hackathon 2026 (&ldquo;Build What&rsquo;s Next with PayPal and AI&rdquo;)
+      <footer className="border-t border-slate-200 py-5 sm:py-6 text-xs text-sardine-slate bg-white w-full">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-3 text-center sm:text-left">
+          <div className="text-xs">
+            <strong className="text-ink">Cashflow Lifeline</strong> &mdash; Built for PayPal AI Hackathon 2026 (&ldquo;Build What&rsquo;s Next with PayPal and AI&rdquo;)
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-x-2 sm:gap-x-3 gap-y-1 text-[11px] sm:text-xs">
             <span>PayPal Sandbox Verified</span>
-            <span>&bull;</span>
-            <span>Deterministic Guardrail Security</span>
-            <span>&bull;</span>
+            <span className="hidden sm:inline">&bull;</span>
+            <span>Deterministic Guardrails</span>
+            <span className="hidden sm:inline">&bull;</span>
             <span>SHA-256 Merkle Chain Audit</span>
           </div>
         </div>
