@@ -232,7 +232,15 @@ export const api = {
     return res;
   },
 
-  register: async (data: { name: string; email: string; password: string; currency?: string }) => {
+  register: async (data: {
+    name: string;
+    email: string;
+    password: string;
+    currency?: string;
+    preferred_currency?: string;
+    country?: string;
+    business_type?: string;
+  }) => {
     const res = await request<any>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -242,13 +250,36 @@ export const api = {
     return res;
   },
 
+  forgotPassword: async (email: string) => {
+    return request<{ status: string; message: string; dev_reset_link?: string }>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  resetPassword: async (token: string, newPassword: string) => {
+    return request<{ status: string; message: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, new_password: newPassword }),
+    });
+  },
+
+  verifyEmail: async (token: string) => {
+    return request<{ status: string; message: string }>('/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+  },
+
   logout: async () => {
     try {
       const refreshToken = getStoredRefreshToken();
-      await request<{ status: string; message: string }>('/auth/logout', {
-        method: 'POST',
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      });
+      if (refreshToken) {
+        await request<{ status: string; message: string }>('/auth/logout', {
+          method: 'POST',
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+      }
     } catch {
       // ignore
     } finally {

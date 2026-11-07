@@ -1,6 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { PublicRoute } from './components/PublicRoute';
 import { Navbar } from './components/Navbar';
-import { AuthModal } from './components/AuthModal';
+import { OnboardingModal } from './components/OnboardingModal';
+
+// Pages
+import { LandingPage } from './pages/LandingPage';
+import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { WhatIfPage } from './pages/WhatIfPage';
 import { SupervisorPage } from './pages/SupervisorPage';
@@ -11,22 +22,16 @@ import { ApprovalInboxPage } from './pages/ApprovalInboxPage';
 import { ClientsPage } from './pages/ClientsPage';
 import { AuditPage } from './pages/AuditPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { api, getStoredToken } from './api/client';
+import { api } from './api/client';
 
-export const App: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<string>('dashboard');
+const AuthenticatedLayout: React.FC = () => {
+  const { currentUser, logout } = useAuth();
   const [isResetting, setIsResetting] = useState<boolean>(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
 
   useEffect(() => {
-    const token = getStoredToken();
-    if (token) {
-      api.getCurrentUser()
-        .then((user) => setCurrentUser(user))
-        .catch(() => {
-          setCurrentUser(null);
-        });
+    if (sessionStorage.getItem('cashflow_show_onboarding') === 'true') {
+      setShowOnboarding(true);
     }
   }, []);
 
@@ -44,48 +49,36 @@ export const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    await api.logout();
-    setCurrentUser(null);
-    window.location.reload();
-  };
-
-  const handleAuthSuccess = (user: any) => {
-    setCurrentUser(user);
-    setIsAuthModalOpen(false);
-    window.location.reload();
+    await logout();
+    window.location.href = '/';
   };
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-between">
       <div>
         <Navbar
-          currentTab={currentTab}
-          onTabChange={setCurrentTab}
           onResetDemo={handleResetDemo}
           isResetting={isResetting}
           currentUser={currentUser}
-          onOpenAuth={() => setIsAuthModalOpen(true)}
           onLogout={handleLogout}
         />
 
         <main>
-          {currentTab === 'dashboard' && <DashboardPage />}
-          {currentTab === 'whatif' && <WhatIfPage />}
-          {currentTab === 'supervisor' && <SupervisorPage />}
-          {currentTab === 'negotiation' && <NegotiationPage />}
-          {currentTab === 'resilience' && <ResiliencePage />}
-          {currentTab === 'timeline' && <TimelinePage />}
-          {currentTab === 'clients' && <ClientsPage />}
-          {currentTab === 'inbox' && <ApprovalInboxPage />}
-          {currentTab === 'audit' && <AuditPage />}
-          {currentTab === 'settings' && <SettingsPage />}
+          <Outlet />
         </main>
       </div>
 
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={handleAuthSuccess}
+      <OnboardingModal
+        isOpen={showOnboarding}
+        onClose={() => {
+          sessionStorage.removeItem('cashflow_show_onboarding');
+          setShowOnboarding(false);
+        }}
+        currentUser={currentUser}
+        onCompleted={() => {
+          sessionStorage.removeItem('cashflow_show_onboarding');
+          setShowOnboarding(false);
+        }}
       />
 
       <footer className="border-t border-slate-200 py-6 text-center text-xs text-sardine-slate bg-white">
@@ -98,10 +91,85 @@ export const App: React.FC = () => {
             <span>&bull;</span>
             <span>Deterministic Guardrail Security</span>
             <span>&bull;</span>
-            <span>Zero Hallucinations</span>
+            <span>SHA-256 Merkle Chain Audit</span>
           </div>
         </div>
       </footer>
     </div>
+  );
+};
+
+export const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public Landing Page */}
+          <Route path="/" element={<LandingPage />} />
+
+          {/* Authentication Pages (redirect if already logged in) */}
+          <Route
+            path="/login"
+            element={
+              <PublicRoute>
+                <LoginPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              <PublicRoute>
+                <RegisterPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/forgot-password"
+            element={
+              <PublicRoute>
+                <ForgotPasswordPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/reset-password"
+            element={
+              <PublicRoute>
+                <ResetPasswordPage />
+              </PublicRoute>
+            }
+          />
+
+          {/* Protected Financial Routes */}
+          <Route
+            element={
+              <ProtectedRoute>
+                <AuthenticatedLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/whatif" element={<WhatIfPage />} />
+            <Route path="/supervisor" element={<SupervisorPage />} />
+            <Route path="/negotiation" element={<NegotiationPage />} />
+            <Route path="/resilience" element={<ResiliencePage />} />
+            <Route path="/timeline" element={<TimelinePage />} />
+            <Route path="/clients" element={<ClientsPage />} />
+            <Route path="/invoices" element={<ClientsPage />} />
+            <Route path="/obligations" element={<DashboardPage />} />
+            <Route path="/forecast" element={<DashboardPage />} />
+            <Route path="/plans" element={<DashboardPage />} />
+            <Route path="/inbox" element={<ApprovalInboxPage />} />
+            <Route path="/approvals" element={<ApprovalInboxPage />} />
+            <Route path="/audit" element={<AuditPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 };

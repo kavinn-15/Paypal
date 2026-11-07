@@ -3,7 +3,47 @@ export interface Owner {
   name: string;
   email: string;
   currency?: string;
+  preferred_currency?: string;
+  country?: string;
+  business_type?: string;
+  email_verified?: boolean;
+  account_status?: string;
   is_demo?: boolean;
+}
+
+export interface UserProfile {
+  id: number;
+  name: string;
+  email: string;
+  currency: string;
+  preferred_currency?: string;
+  country?: string;
+  business_type?: string;
+  email_verified?: boolean;
+  account_status?: string;
+  timezone: string;
+  is_demo: boolean;
+  created_at: string;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  token_type: string;
+  user_id: number;
+  email: string;
+  name: string;
+  currency: string;
+  country?: string;
+  business_type?: string;
+  email_verified?: boolean;
+  is_demo: boolean;
+}
+
+export interface ForgotPasswordResponse {
+  status: string;
+  message: string;
+  dev_reset_link?: string;
 }
 
 export interface Obligation {

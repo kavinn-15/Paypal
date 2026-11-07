@@ -11,9 +11,13 @@ from pydantic import BaseModel, Field, EmailStr, ConfigDict
 class UserRegister(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     email: EmailStr
-    password: str = Field(min_length=6, max_length=100)
-    currency: str = Field(default="USD", max_length=10)
+    password: str = Field(min_length=8, max_length=100)
+    currency: Optional[str] = Field(default="USD", max_length=10)
+    preferred_currency: Optional[str] = Field(default="USD", max_length=10)
+    country: Optional[str] = Field(default="US", max_length=50)
+    business_type: Optional[str] = Field(default="Freelancer", max_length=50)
     timezone: str = Field(default="UTC", max_length=50)
+    terms_accepted: Optional[bool] = Field(default=True)
 
 
 class UserLogin(BaseModel):
@@ -30,10 +34,32 @@ class TokenResponse(BaseModel):
     name: str
     currency: str
     is_demo: bool
+    country: Optional[str] = "US"
+    business_type: Optional[str] = "Freelancer"
+    email_verified: Optional[bool] = True
 
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordResponse(BaseModel):
+    status: str = "success"
+    message: str
+    dev_reset_link: Optional[str] = None
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8, max_length=100)
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
 
 
 class UserProfile(BaseModel):
@@ -42,6 +68,11 @@ class UserProfile(BaseModel):
     email: EmailStr
     currency: str
     timezone: str
+    country: Optional[str] = "US"
+    business_type: Optional[str] = "Freelancer"
+    preferred_currency: Optional[str] = "USD"
+    email_verified: bool = True
+    account_status: str = "active"
     is_demo: bool
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)

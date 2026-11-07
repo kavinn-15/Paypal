@@ -51,3 +51,28 @@ def init_db():
     # Import models so all tables are registered before creating
     import backend.app.models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+
+    # Seamless SQLite column migration if table already existed
+    if DATABASE_URL.startswith("sqlite"):
+        try:
+            with engine.connect() as conn:
+                from sqlalchemy import text
+                res = conn.execute(text("PRAGMA table_info(owners);")).fetchall()
+                existing_cols = {row[1] for row in res}
+                cols_to_add = [
+                    ("country", "VARCHAR(50) DEFAULT 'US'"),
+                    ("business_type", "VARCHAR(50) DEFAULT 'Freelancer'"),
+                    ("preferred_currency", "VARCHAR(10) DEFAULT 'USD'"),
+                    ("email_verified", "BOOLEAN DEFAULT 1"),
+                    ("account_status", "VARCHAR(20) DEFAULT 'active'"),
+                    ("password_reset_token", "VARCHAR(255)"),
+                    ("reset_token_expires_at", "DATETIME"),
+                    ("email_verification_token", "VARCHAR(255)"),
+                    ("updated_at", "DATETIME")
+                ]
+                for col_name, col_def in cols_to_add:
+                    if col_name not in existing_cols:
+                        conn.execute(text(f"ALTER TABLE owners ADD COLUMN {col_name} {col_def};"))
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"SQLite owners schema update warning: {e}")
