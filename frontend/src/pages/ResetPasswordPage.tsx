@@ -60,7 +60,11 @@ export const ResetPasswordPage: React.FC = () => {
 
     setLoading(true);
     try {
-      await api.resetPassword(token, newPassword);
+      try {
+        await api.confirmPasswordResetWithOtp(token, newPassword);
+      } catch {
+        await api.resetPassword(token, newPassword);
+      }
       setSuccess(true);
     } catch (err: any) {
       setError(err.message || 'Invalid or expired password reset token. Please request a new link.');

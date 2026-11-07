@@ -32,8 +32,44 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = Field(default=1440)  # 24 hours
     JWT_REFRESH_EXPIRE_DAYS: int = Field(default=7)  # 7 days
     PUBLIC_BASE_URL: str = Field(default="http://localhost:8000")
+    APP_BASE_URL: str = Field(default="http://localhost:5173")
     DATABASE_URL: str = Field(default="sqlite:///./cashflow.db")
     ALLOWED_ORIGINS: str = Field(default="http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173")
+
+    # OTP & Verification Security
+    OTP_PEPPER: str = Field(default="cashflow-lifeline-otp-pepper-secret-key-32b")
+    OTP_EXPIRE_MINUTES: int = Field(default=10)
+    OTP_RESEND_COOLDOWN_SECONDS: int = Field(default=60)
+    OTP_MAX_ATTEMPTS: int = Field(default=5)
+    RESET_TOKEN_EXPIRE_MINUTES: int = Field(default=15)
+
+    # Email Service Configuration
+    EMAIL_PROVIDER: str = Field(default="console")  # "console", "smtp", "resend", "sendgrid"
+    EMAIL_FROM: str = Field(default="security@cashflowlifeline.com")
+    EMAIL_API_KEY: Optional[str] = Field(default=None)
+    SMTP_HOST: Optional[str] = Field(default=None)
+    SMTP_PORT: int = Field(default=587)
+    SMTP_USER: Optional[str] = Field(default=None)
+    SMTP_PASSWORD: Optional[str] = Field(default=None)
+    SMTP_USE_TLS: bool = Field(default=True)
+
+    # SMS Service Configuration
+    SMS_PROVIDER: str = Field(default="console")  # "console", "twilio", "msg91", "sns", "exotel"
+    SMS_ENABLED: bool = Field(default=True)
+    SMS_API_KEY: Optional[str] = Field(default=None)
+    SMS_AUTH_TOKEN: Optional[str] = Field(default=None)
+    SMS_ACCOUNT_SID: Optional[str] = Field(default=None)
+    SMS_SENDER_ID: str = Field(default="CFLIFE")
+    SMS_TEMPLATE_ID: Optional[str] = Field(default=None)
+    SMS_OTP_EXPIRE_MINUTES: int = Field(default=5)  # 5 minutes required
+    SMS_RESEND_COOLDOWN_SECONDS: int = Field(default=60)
+    DEFAULT_COUNTRY_DIAL_CODE: str = Field(default="+91")
+    DEFAULT_COUNTRY_REGION: str = Field(default="IN")
+
+    # Google OAuth 2.0 / OpenID Connect
+    GOOGLE_CLIENT_ID: Optional[str] = Field(default=None)
+    GOOGLE_CLIENT_SECRET: Optional[str] = Field(default=None)
+    GOOGLE_REDIRECT_URI: str = Field(default="http://localhost:5173/auth/callback/google")
 
     # Policy Limits
     MAX_DISCOUNT_PCT: float = Field(default=5.0)  # maximum 5% early payment discount

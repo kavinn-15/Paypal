@@ -13,7 +13,9 @@ import {
   NegotiationDraft,
   ResilienceScoreResponse,
   FinancialSummaryResponse,
-  TimelineEntry
+  TimelineEntry,
+  TokenResponse,
+  PhoneAuthResponse
 } from '../types';
 
 const API_BASE = '/api';
@@ -236,6 +238,8 @@ export const api = {
     name: string;
     email: string;
     password: string;
+    phone_number?: string;
+    phone_country_code?: string;
     currency?: string;
     preferred_currency?: string;
     country?: string;
@@ -250,10 +254,112 @@ export const api = {
     return res;
   },
 
+  // Phone Authentication & SMS OTP Endpoints
+  requestPhoneVerification: async (phoneNumber: string, countryCode: string = '+91') => {
+    return request<PhoneAuthResponse>('/auth/phone/verification/request', {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: phoneNumber, phone_country_code: countryCode }),
+    });
+  },
+
+  verifyPhoneOtp: async (phoneNumber: string, otp: string) => {
+    return request<PhoneAuthResponse>('/auth/phone/verification/verify', {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: phoneNumber, otp }),
+    });
+  },
+
+  resendPhoneOtp: async (phoneNumber: string) => {
+    return request<PhoneAuthResponse>('/auth/phone/verification/resend', {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: phoneNumber }),
+    });
+  },
+
+  requestPhoneLoginOtp: async (phoneNumber: string) => {
+    return request<PhoneAuthResponse>('/auth/phone/login/request-otp', {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: phoneNumber }),
+    });
+  },
+
+  verifyPhoneLoginOtp: async (phoneNumber: string, otp: string) => {
+    const res = await request<TokenResponse>('/auth/phone/login/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: phoneNumber, otp }),
+    });
+    setStoredTokens(res.access_token, res.refresh_token);
+    if (res.email) localStorage.setItem('cashflow_user_email', res.email);
+    return res;
+  },
+
+  loginWithPhonePassword: async (phoneNumber: string, password: string) => {
+    const res = await request<TokenResponse>('/auth/phone/login/password', {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: phoneNumber, password }),
+    });
+    setStoredTokens(res.access_token, res.refresh_token);
+    if (res.email) localStorage.setItem('cashflow_user_email', res.email);
+    return res;
+  },
+
+  requestPhonePasswordReset: async (phoneNumber: string) => {
+    return request<PhoneAuthResponse>('/auth/phone/password-reset/request', {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: phoneNumber }),
+    });
+  },
+
+  verifyPhonePasswordResetOtp: async (phoneNumber: string, otp: string) => {
+    return request<{ status: string; reset_token: string; message: string }>('/auth/phone/password-reset/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: phoneNumber, otp }),
+    });
+  },
+
+  confirmPhonePasswordReset: async (resetToken: string, newPassword: string) => {
+    return request<{ status: string; message: string }>('/auth/phone/password-reset/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ reset_token: resetToken, new_password: newPassword }),
+    });
+  },
+
+  requestPhoneChange: async (currentPassword: string, newPhoneNumber: string, countryCode: string = '+91') => {
+    return request<PhoneAuthResponse>('/auth/phone/change/request', {
+      method: 'POST',
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_phone_number: newPhoneNumber,
+        phone_country_code: countryCode,
+      }),
+    });
+  },
+
+  verifyPhoneChange: async (newPhoneNumber: string, otp: string) => {
+    return request<PhoneAuthResponse>('/auth/phone/change/verify', {
+      method: 'POST',
+      body: JSON.stringify({ new_phone_number: newPhoneNumber, otp }),
+    });
+  },
+
   forgotPassword: async (email: string) => {
-    return request<{ status: string; message: string; dev_reset_link?: string }>('/auth/forgot-password', {
+    return request<{ status: string; message: string; dev_reset_link?: string }>('/auth/password-reset/request', {
       method: 'POST',
       body: JSON.stringify({ email }),
+    });
+  },
+
+  verifyPasswordResetOtp: async (email: string, otp: string) => {
+    return request<{ status: string; reset_token: string; message: string }>('/auth/password-reset/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email, otp }),
+    });
+  },
+
+  confirmPasswordResetWithOtp: async (resetToken: string, newPassword: string) => {
+    return request<{ status: string; message: string }>('/auth/password-reset/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ reset_token: resetToken, new_password: newPassword }),
     });
   },
 
@@ -264,11 +370,47 @@ export const api = {
     });
   },
 
+  verifyEmailOtp: async (email: string, otp: string) => {
+    return request<{ status: string; message: string; email_verified: boolean }>('/auth/email/verify', {
+      method: 'POST',
+      body: JSON.stringify({ email, otp }),
+    });
+  },
+
+  resendVerificationOtp: async (email: string) => {
+    return request<{ status: string; message: string; cooldown_seconds: number }>('/auth/email/verification/resend', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
   verifyEmail: async (token: string) => {
     return request<{ status: string; message: string }>('/auth/verify-email', {
       method: 'POST',
       body: JSON.stringify({ token }),
     });
+  },
+
+  getGoogleAuthUrl: async () => {
+    return request<{ auth_url: string; state: string }>('/auth/google/start');
+  },
+
+  submitGoogleToken: async (credential: string) => {
+    const res = await request<TokenResponse>('/auth/google/token', {
+      method: 'POST',
+      body: JSON.stringify({ credential }),
+    });
+    setStoredTokens(res.access_token, res.refresh_token);
+    if (res.email) localStorage.setItem('cashflow_user_email', res.email);
+    return res;
+  },
+
+  completeGoogleCallback: async (code: string, state?: string) => {
+    const query = state ? `?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}` : `?code=${encodeURIComponent(code)}`;
+    const res = await request<TokenResponse>(`/auth/google/callback${query}`);
+    setStoredTokens(res.access_token, res.refresh_token);
+    if (res.email) localStorage.setItem('cashflow_user_email', res.email);
+    return res;
   },
 
   logout: async () => {

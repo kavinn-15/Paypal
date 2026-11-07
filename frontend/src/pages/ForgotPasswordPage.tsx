@@ -1,36 +1,71 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-import { Mail, AlertCircle, CheckCircle2, ArrowRight, Loader2, KeyRound } from 'lucide-react';
+import { PhoneInput } from '../components/PhoneInput';
+import {
+  Mail,
+  Phone,
+  AlertCircle,
+  CheckCircle2,
+  ArrowRight,
+  Loader2,
+  KeyRound,
+  ShieldCheck
+} from 'lucide-react';
+
+type RecoveryMethod = 'email' | 'phone';
 
 export const ForgotPasswordPage: React.FC = () => {
+  const [method, setMethod] = useState<RecoveryMethod>('email');
   const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneCountryCode, setPhoneCountryCode] = useState('+91');
+
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [devResetLink, setDevResetLink] = useState<string | null>(null);
+
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setDevResetLink(null);
 
-    if (!email.trim() || !email.includes('@')) {
-      setError('Please provide a valid business email address.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await api.forgotPassword(email.trim().toLowerCase());
-      setSubmitted(true);
-      if (res.dev_reset_link) {
-        setDevResetLink(res.dev_reset_link);
+    if (method === 'email') {
+      if (!email.trim() || !email.includes('@')) {
+        setError('Please provide a valid business email address.');
+        return;
       }
-    } catch (err: any) {
-      setError(err.message || 'Unable to process recovery request. Please try again.');
-    } finally {
-      setLoading(false);
+
+      setLoading(true);
+      try {
+        const res = await api.forgotPassword(email.trim().toLowerCase());
+        setSubmitted(true);
+        if (res.dev_reset_link) {
+          setDevResetLink(res.dev_reset_link);
+        }
+      } catch (err: any) {
+        setError(err.message || 'Unable to process recovery request. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      if (!phoneNumber.trim()) {
+        setError('Please provide your registered mobile phone number.');
+        return;
+      }
+
+      setLoading(true);
+      try {
+        await api.requestPhonePasswordReset(phoneNumber.trim());
+        setSubmitted(true);
+      } catch (err: any) {
+        setError(err.message || 'Unable to send SMS reset code. Please verify the number.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -61,8 +96,45 @@ export const ForgotPasswordPage: React.FC = () => {
           <div className="space-y-1.5 text-center">
             <h1 className="text-2xl font-black text-white tracking-tight">Account Recovery</h1>
             <p className="text-xs text-sardine-muted">
-              Enter your registered email to receive single-use password reset instructions
+              Choose your recovery channel to receive single-use password reset instructions
             </p>
+          </div>
+
+          {/* Recovery Channel Selector */}
+          <div className="grid grid-cols-2 gap-1 p-1 bg-ink-950 rounded-xl border border-ink-800">
+            <button
+              type="button"
+              onClick={() => {
+                setMethod('email');
+                setError(null);
+                setSubmitted(false);
+              }}
+              className={`py-2 px-2 text-center rounded-lg text-xs font-semibold transition-all flex items-center justify-center space-x-1.5 ${
+                method === 'email'
+                  ? 'bg-electric text-white shadow-xs'
+                  : 'text-sardine-muted hover:text-white'
+              }`}
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span>Email Reset</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMethod('phone');
+                setError(null);
+                setSubmitted(false);
+              }}
+              className={`py-2 px-2 text-center rounded-lg text-xs font-semibold transition-all flex items-center justify-center space-x-1.5 ${
+                method === 'phone'
+                  ? 'bg-electric text-white shadow-xs'
+                  : 'text-sardine-muted hover:text-white'
+              }`}
+            >
+              <Phone className="w-3.5 h-3.5" />
+              <span>Mobile SMS OTP</span>
+            </button>
           </div>
 
           {error && (
@@ -77,12 +149,31 @@ export const ForgotPasswordPage: React.FC = () => {
               <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs space-y-2">
                 <div className="flex items-center space-x-2 font-bold text-sm text-emerald-200">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Recovery Instructions Generated</span>
+                  <span>Recovery Instructions Dispatched</span>
                 </div>
                 <p className="leading-relaxed text-slate-300">
-                  If an account exists for <strong className="text-white">{email}</strong>, a cryptographically signed reset token has been issued with a 15-minute expiration period.
+                  {method === 'email' ? (
+                    <>
+                      If an account exists for <strong className="text-white">{email}</strong>, a single-use 6-digit recovery code has been sent.
+                    </>
+                  ) : (
+                    <>
+                      If an account is associated with <strong className="text-white font-mono">{phoneNumber}</strong>, a single-use 6-digit SMS code has been sent.
+                    </>
+                  )}
                 </p>
               </div>
+
+              <Link
+                to={
+                  method === 'email'
+                    ? `/verify-otp?email=${encodeURIComponent(email)}&type=email`
+                    : `/verify-otp?phone=${encodeURIComponent(phoneNumber)}&type=phone`
+                }
+                className="w-full py-3 px-4 rounded-xl font-semibold text-xs uppercase tracking-wider bg-electric hover:bg-electric-600 text-white shadow-glow-electric transition-all flex items-center justify-center space-x-2"
+              >
+                <span>Enter 6-Digit Reset Code &rarr;</span>
+              </Link>
 
               {devResetLink && (
                 <div className="p-4 rounded-xl bg-electric/10 border border-electric/30 space-y-2 text-xs">
@@ -90,7 +181,7 @@ export const ForgotPasswordPage: React.FC = () => {
                     Development Sandbox Mode Preview
                   </div>
                   <p className="text-slate-300 text-[11px]">
-                    SMTP email delivery is in sandbox mode. You can test token completion directly:
+                    Delivery is in sandbox console mode. You can test token completion directly:
                   </p>
                   <Link
                     to={devResetLink}
@@ -112,23 +203,38 @@ export const ForgotPasswordPage: React.FC = () => {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1">
-                <label className="block text-xs font-semibold text-slate-300">
-                  Registered Work Email
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-sardine-muted absolute left-3 top-3.5 pointer-events-none" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="sarah@agency.com"
-                    required
-                    autoFocus
-                    className="w-full pl-9 pr-3 py-2.5 bg-ink-950 border border-ink-700 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-electric transition-colors"
+              {method === 'email' ? (
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    Registered Work Email
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-sardine-muted absolute left-3 top-3.5 pointer-events-none" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="sarah@agency.com"
+                      required
+                      autoFocus
+                      className="w-full pl-9 pr-3 py-2.5 bg-ink-950 border border-ink-700 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-electric transition-colors"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1 bg-ink-950/70 p-3 rounded-xl border border-ink-800">
+                  <PhoneInput
+                    value={phoneNumber}
+                    onChange={(full, code) => {
+                      setPhoneNumber(full);
+                      setPhoneCountryCode(code);
+                    }}
+                    defaultCountryCode="+91"
+                    label="Registered Mobile Phone"
+                    placeholder="98765 43210"
                   />
                 </div>
-              </div>
+              )}
 
               <button
                 type="submit"
@@ -138,7 +244,7 @@ export const ForgotPasswordPage: React.FC = () => {
                 {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Generating token...</span>
+                    <span>Dispatching instructions...</span>
                   </>
                 ) : (
                   <>
@@ -159,10 +265,10 @@ export const ForgotPasswordPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="py-6 text-center text-[11px] text-sardine-muted">
-        PayPal AI Hackathon 2026 &bull; Cryptographic single-use token invalidation
+      <div className="py-6 text-center text-[11px] text-sardine-muted flex items-center justify-center space-x-2">
+        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+        <span>PayPal AI Hackathon 2026 &bull; Cryptographic single-use token invalidation</span>
       </div>
     </div>
   );
 };
-

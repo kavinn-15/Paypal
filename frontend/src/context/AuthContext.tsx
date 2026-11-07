@@ -6,17 +6,29 @@ interface AuthContextType {
   currentUser: UserProfile | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isEmailVerified: boolean;
+  isPhoneVerified: boolean;
   login: (email: string, password: string) => Promise<any>;
+  loginWithPhonePassword: (phoneNumber: string, password: string) => Promise<any>;
+  loginWithPhoneOtp: (phoneNumber: string, otp: string) => Promise<any>;
   demoLogin: () => Promise<any>;
   register: (data: {
     name: string;
     email: string;
     password: string;
+    phone_number?: string;
+    phone_country_code?: string;
     currency?: string;
     preferred_currency?: string;
     country?: string;
     business_type?: string;
   }) => Promise<any>;
+  verifyEmailOtp: (email: string, otp: string) => Promise<any>;
+  resendVerificationOtp: (email: string) => Promise<any>;
+  verifyPhoneOtp: (phoneNumber: string, otp: string) => Promise<any>;
+  resendPhoneOtp: (phoneNumber: string) => Promise<any>;
+  loginWithGoogleToken: (credential: string) => Promise<any>;
+  loginWithGoogleCode: (code: string, state?: string) => Promise<any>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -71,10 +83,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const loginWithPhonePassword = async (phoneNumber: string, password: string) => {
+    setIsLoading(true);
+    try {
+      const res = await api.loginWithPhonePassword(phoneNumber, password);
+      await refreshUser();
+      return res;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loginWithPhoneOtp = async (phoneNumber: string, otp: string) => {
+    setIsLoading(true);
+    try {
+      const res = await api.verifyPhoneLoginOtp(phoneNumber, otp);
+      await refreshUser();
+      return res;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const register = async (data: {
     name: string;
     email: string;
     password: string;
+    phone_number?: string;
+    phone_country_code?: string;
     currency?: string;
     preferred_currency?: string;
     country?: string;
@@ -83,6 +119,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       const res = await api.register(data);
+      await refreshUser();
+      return res;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyEmailOtp = async (email: string, otp: string) => {
+    setIsLoading(true);
+    try {
+      const res = await api.verifyEmailOtp(email, otp);
+      await refreshUser();
+      return res;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resendVerificationOtp = async (email: string) => {
+    return api.resendVerificationOtp(email);
+  };
+
+  const verifyPhoneOtp = async (phoneNumber: string, otp: string) => {
+    setIsLoading(true);
+    try {
+      const res = await api.verifyPhoneOtp(phoneNumber, otp);
+      await refreshUser();
+      return res;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resendPhoneOtp = async (phoneNumber: string) => {
+    return api.resendPhoneOtp(phoneNumber);
+  };
+
+  const loginWithGoogleToken = async (credential: string) => {
+    setIsLoading(true);
+    try {
+      const res = await api.submitGoogleToken(credential);
+      await refreshUser();
+      return res;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loginWithGoogleCode = async (code: string, state?: string) => {
+    setIsLoading(true);
+    try {
+      const res = await api.completeGoogleCallback(code, state);
       await refreshUser();
       return res;
     } finally {
@@ -100,15 +188,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const isEmailVerified = Boolean(
+    currentUser && (currentUser.is_demo || currentUser.email_verified === true)
+  );
+
+  const isPhoneVerified = Boolean(
+    currentUser && (currentUser.is_demo || currentUser.phone_verified === true)
+  );
+
   return (
     <AuthContext.Provider
       value={{
         currentUser,
         isLoading,
         isAuthenticated: !!currentUser,
+        isEmailVerified,
+        isPhoneVerified,
         login,
+        loginWithPhonePassword,
+        loginWithPhoneOtp,
         demoLogin,
         register,
+        verifyEmailOtp,
+        resendVerificationOtp,
+        verifyPhoneOtp,
+        resendPhoneOtp,
+        loginWithGoogleToken,
+        loginWithGoogleCode,
         logout,
         refreshUser,
       }}

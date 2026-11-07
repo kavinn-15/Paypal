@@ -3,18 +3,32 @@ import uuid
 import bcrypt
 import jwt
 from typing import Optional, Dict, Any
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, VerificationError
 from backend.app.config import settings
+
+# RFC 9106 recommended Argon2id parameters
+_argon2_hasher = PasswordHasher(time_cost=2, memory_cost=65536, parallelism=1)
 
 
 def hash_password(password: str) -> str:
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
-    return hashed.decode("utf-8")
+    """Hash password using Argon2id with random salt."""
+    return _argon2_hasher.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verifies plain password against Argon2id or legacy bcrypt hash."""
     if not hashed_password:
         return False
+    # If Argon2 hash
+    if hashed_password.startswith("$argon2"):
+        try:
+            return _argon2_hasher.verify(hashed_password, plain_password)
+        except (VerifyMismatchError, VerificationError):
+            return False
+        except Exception:
+            return False
+    # Fallback to bcrypt verification for existing hashes
     try:
         return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
     except Exception:

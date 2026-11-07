@@ -2,6 +2,10 @@ export interface Owner {
   id: number;
   name: string;
   email: string;
+  phone_number?: string;
+  phone_country_code?: string;
+  phone_verified?: boolean;
+  phone_verified_at?: string;
   currency?: string;
   preferred_currency?: string;
   country?: string;
@@ -15,6 +19,10 @@ export interface UserProfile {
   id: number;
   name: string;
   email: string;
+  phone_number?: string;
+  phone_country_code?: string;
+  phone_verified?: boolean;
+  phone_verified_at?: string;
   currency: string;
   preferred_currency?: string;
   country?: string;
@@ -32,6 +40,9 @@ export interface TokenResponse {
   token_type: string;
   user_id: number;
   email: string;
+  phone_number?: string;
+  phone_country_code?: string;
+  phone_verified?: boolean;
   name: string;
   currency: string;
   country?: string;
@@ -40,10 +51,43 @@ export interface TokenResponse {
   is_demo: boolean;
 }
 
+export interface PhoneAuthResponse {
+  status: string;
+  message: string;
+  phone_number?: string;
+  phone_verified?: boolean;
+  cooldown_seconds?: number;
+  reset_token?: string;
+  dev_otp?: string;
+}
+
 export interface ForgotPasswordResponse {
   status: string;
   message: string;
   dev_reset_link?: string;
+}
+
+export interface EmailVerifyOtpResponse {
+  status: string;
+  message: string;
+  email_verified: boolean;
+}
+
+export interface ResendVerificationResponse {
+  status: string;
+  message: string;
+  cooldown_seconds: number;
+}
+
+export interface PasswordResetVerifyOtpResponse {
+  status: string;
+  reset_token: string;
+  message: string;
+}
+
+export interface GoogleAuthUrlResponse {
+  auth_url: string;
+  state: string;
 }
 
 export interface Obligation {

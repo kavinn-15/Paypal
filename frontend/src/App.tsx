@@ -11,7 +11,11 @@ import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { VerifyOtpPage } from './pages/VerifyOtpPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { EmailVerificationPage } from './pages/EmailVerificationPage';
+import { PhoneVerificationPage } from './pages/PhoneVerificationPage';
+import { GoogleCallbackPage } from './pages/GoogleCallbackPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { WhatIfPage } from './pages/WhatIfPage';
 import { SupervisorPage } from './pages/SupervisorPage';
@@ -133,6 +137,14 @@ export const App: React.FC = () => {
             }
           />
           <Route
+            path="/verify-otp"
+            element={
+              <PublicRoute>
+                <VerifyOtpPage />
+              </PublicRoute>
+            }
+          />
+          <Route
             path="/reset-password"
             element={
               <PublicRoute>
@@ -140,6 +152,9 @@ export const App: React.FC = () => {
               </PublicRoute>
             }
           />
+          <Route path="/verify-email" element={<EmailVerificationPage />} />
+          <Route path="/verify-phone" element={<PhoneVerificationPage />} />
+          <Route path="/auth/callback/google" element={<GoogleCallbackPage />} />
 
           {/* Protected Financial Routes */}
           <Route

@@ -70,3 +70,18 @@ def get_current_user(
 
     return user
 
+
+def get_verified_current_user(
+    current_user: Owner = Depends(get_current_user)
+) -> Owner:
+    """
+    Enforces that the user has verified their email before accessing protected financial endpoints.
+    Demo accounts (is_demo=True) are pre-verified.
+    """
+    if not current_user.is_demo and not current_user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email address not verified. Please verify your email via 6-digit OTP to access financial records."
+        )
+    return current_user
+

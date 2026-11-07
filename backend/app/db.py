@@ -68,7 +68,12 @@ def init_db():
                     ("password_reset_token", "VARCHAR(255)"),
                     ("reset_token_expires_at", "DATETIME"),
                     ("email_verification_token", "VARCHAR(255)"),
-                    ("updated_at", "DATETIME")
+                    ("updated_at", "DATETIME"),
+                    ("email_verified_at", "DATETIME"),
+                    ("phone_number", "VARCHAR(32)"),
+                    ("phone_country_code", "VARCHAR(8) DEFAULT '+91'"),
+                    ("phone_verified", "BOOLEAN DEFAULT 0"),
+                    ("phone_verified_at", "DATETIME")
                 ]
                 for col_name, col_def in cols_to_add:
                     if col_name not in existing_cols:

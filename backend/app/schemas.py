@@ -12,6 +12,8 @@ class UserRegister(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     email: EmailStr
     password: str = Field(min_length=8, max_length=100)
+    phone_number: Optional[str] = None
+    phone_country_code: Optional[str] = Field(default="+91", max_length=8)
     currency: Optional[str] = Field(default="USD", max_length=10)
     preferred_currency: Optional[str] = Field(default="USD", max_length=10)
     country: Optional[str] = Field(default="US", max_length=50)
@@ -37,10 +39,22 @@ class TokenResponse(BaseModel):
     country: Optional[str] = "US"
     business_type: Optional[str] = "Freelancer"
     email_verified: Optional[bool] = True
+    phone_number: Optional[str] = None
+    phone_country_code: Optional[str] = None
+    phone_verified: Optional[bool] = False
 
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+
+
+class EmailVerifyOtpRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6)
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -53,6 +67,22 @@ class ForgotPasswordResponse(BaseModel):
     dev_reset_link: Optional[str] = None
 
 
+class PasswordResetVerifyOTPRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6)
+
+
+class PasswordResetVerifyOTPResponse(BaseModel):
+    status: str = "success"
+    reset_token: str
+    message: str
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    reset_token: str
+    new_password: str = Field(min_length=8, max_length=100)
+
+
 class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str = Field(min_length=8, max_length=100)
@@ -60,6 +90,15 @@ class ResetPasswordRequest(BaseModel):
 
 class VerifyEmailRequest(BaseModel):
     token: str
+
+
+class GoogleAuthUrlResponse(BaseModel):
+    auth_url: str
+    state: str
+
+
+class GoogleTokenRequest(BaseModel):
+    credential: str
 
 
 class UserProfile(BaseModel):
@@ -72,10 +111,74 @@ class UserProfile(BaseModel):
     business_type: Optional[str] = "Freelancer"
     preferred_currency: Optional[str] = "USD"
     email_verified: bool = True
+    email_verified_at: Optional[datetime] = None
+    phone_number: Optional[str] = None
+    phone_country_code: Optional[str] = None
+    phone_verified: bool = False
+    phone_verified_at: Optional[datetime] = None
     account_status: str = "active"
     is_demo: bool
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+
+# ==========================================
+# Phone & SMS Authentication Schemas
+# ==========================================
+
+class PhoneVerificationRequest(BaseModel):
+    phone_number: str
+    country_code: Optional[str] = "+91"
+
+
+class PhoneVerifyOtpRequest(BaseModel):
+    phone_number: str
+    otp: str = Field(min_length=6, max_length=6)
+
+
+class PhoneResendOtpRequest(BaseModel):
+    phone_number: str
+
+
+class PhoneLoginOtpRequest(BaseModel):
+    phone_number: str
+
+
+class PhoneLoginVerifyOtpRequest(BaseModel):
+    phone_number: str
+    otp: str = Field(min_length=6, max_length=6)
+
+
+class PhoneLoginPasswordRequest(BaseModel):
+    phone_number: str
+    password: str
+
+
+class PhonePasswordResetRequest(BaseModel):
+    phone_number: str
+
+
+class PhonePasswordResetVerifyRequest(BaseModel):
+    phone_number: str
+    otp: str = Field(min_length=6, max_length=6)
+
+
+class PhoneChangeRequest(BaseModel):
+    current_password: str
+    new_phone_number: str
+    country_code: Optional[str] = "+91"
+
+
+class PhoneChangeVerifyRequest(BaseModel):
+    new_phone_number: str
+    otp: str = Field(min_length=6, max_length=6)
+
+
+class PhoneAuthResponse(BaseModel):
+    status: str = "success"
+    message: str
+    phone_number: Optional[str] = None
+    cooldown_seconds: Optional[int] = None
 
 
 # ==========================================

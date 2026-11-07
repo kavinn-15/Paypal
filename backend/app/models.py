@@ -20,6 +20,11 @@ class Owner(Base):
     business_type = Column(String(50), nullable=True, default="Freelancer")
     preferred_currency = Column(String(10), nullable=True, default="USD")
     email_verified = Column(Boolean, default=True, nullable=False)
+    email_verified_at = Column(DateTime, nullable=True)
+    phone_number = Column(String(32), unique=True, index=True, nullable=True)
+    phone_country_code = Column(String(8), nullable=True, default="+91")
+    phone_verified = Column(Boolean, default=False, nullable=False)
+    phone_verified_at = Column(DateTime, nullable=True)
     account_status = Column(String(20), default="active", nullable=False)
     password_reset_token = Column(String(255), nullable=True, index=True)
     reset_token_expires_at = Column(DateTime, nullable=True)
@@ -40,6 +45,9 @@ class Owner(Base):
     actions = relationship("Action", back_populates="owner", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="owner", cascade="all, delete-orphan")
     refresh_tokens = relationship("RefreshToken", back_populates="owner", cascade="all, delete-orphan")
+    otps = relationship("EmailOTP", back_populates="owner", cascade="all, delete-orphan")
+    phone_otps = relationship("PhoneOTP", back_populates="owner", cascade="all, delete-orphan")
+    oauth_identities = relationship("OAuthIdentity", back_populates="owner", cascade="all, delete-orphan")
 
 
 class PayPalConnection(Base):
@@ -377,3 +385,72 @@ class ExchangeRate(Base):
     timestamp = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
     __table_args__ = (UniqueConstraint("from_currency", "to_currency", name="uq_from_to_currency"),)
+
+
+class EmailOTP(Base):
+    """
+    Cryptographic single-use 6-digit email OTPs.
+    Only keyed HMAC hashes are stored; plain OTPs are never stored or logged.
+    """
+    __tablename__ = "email_otps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=True, index=True)
+    email = Column(String(255), nullable=False, index=True)
+    otp_hash = Column(String(255), nullable=False)
+    purpose = Column(String(50), nullable=False)  # "email_verification" or "password_reset"
+    expires_at = Column(DateTime, nullable=False)
+    attempts_count = Column(Integer, default=0, nullable=False)
+    max_attempts = Column(Integer, default=5, nullable=False)
+    consumed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    owner = relationship("Owner", back_populates="otps")
+
+
+class OAuthIdentity(Base):
+    """
+    Federated OAuth identities (Google, Microsoft) securely linked to an Owner account.
+    Stores stable provider subject identifier ('sub').
+    """
+    __tablename__ = "oauth_identities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider = Column(String(50), nullable=False)  # "google", "microsoft"
+    provider_user_id = Column(String(255), nullable=False)  # Google sub
+    email = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_user_id", name="uq_oauth_provider_user"),
+        Index("ix_oauth_identities_provider_sub", "provider", "provider_user_id"),
+    )
+
+    owner = relationship("Owner", back_populates="oauth_identities")
+
+
+class PhoneOTP(Base):
+    """
+    Cryptographic single-use 6-digit SMS phone OTPs.
+    Only keyed HMAC hashes are stored; plain OTPs are never stored or logged.
+    """
+    __tablename__ = "phone_otps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=True, index=True)
+    phone_number = Column(String(32), nullable=False, index=True)
+    otp_hash = Column(String(255), nullable=False)
+    purpose = Column(String(50), nullable=False)  # "phone_verification", "phone_login", "password_reset", "phone_change"
+    expires_at = Column(DateTime, nullable=False)
+    attempts_count = Column(Integer, default=0, nullable=False)
+    max_attempts = Column(Integer, default=5, nullable=False)
+    consumed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_phone_otps_phone_purpose", "phone_number", "purpose"),
+    )
+
+    owner = relationship("Owner", back_populates="phone_otps")
+

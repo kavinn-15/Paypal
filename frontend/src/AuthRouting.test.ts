@@ -70,3 +70,63 @@ describe('Password Validation Logic', () => {
     expect(evaluatePassword('DecentPass1')).toBe(3);
   });
 });
+
+describe('OTP & Security Helpers', () => {
+  const maskEmail = (val: string) => {
+    if (!val || !val.includes('@')) return val;
+    const [name, domain] = val.split('@');
+    if (name.length <= 2) return `${name}***@${domain}`;
+    return `${name[0]}***${name[name.length - 1]}@${domain}`;
+  };
+
+  const cleanOtpInput = (raw: string) => {
+    return raw.replace(/\D/g, '').slice(0, 6);
+  };
+
+  it('masks emails to protect user privacy', () => {
+    expect(maskEmail('alex@example.com')).toBe('a***x@example.com');
+    expect(maskEmail('ed@company.org')).toBe('ed***@company.org');
+    expect(maskEmail('security-lead@fintech.io')).toBe('s***d@fintech.io');
+  });
+
+  it('sanitizes and constrains OTP code digits', () => {
+    expect(cleanOtpInput('12a3b4c5d6e7f')).toBe('123456');
+    expect(cleanOtpInput(' 9 8 7 6 5 4 ')).toBe('987654');
+    expect(cleanOtpInput('123')).toBe('123');
+  });
+});
+
+describe('Phone Number & SMS Auth Logic', () => {
+  const maskPhone = (val: string) => {
+    if (!val || val.length < 8) return val;
+    const prefix = val.slice(0, 4);
+    const suffix = val.slice(-3);
+    return `${prefix}*** ***${suffix}`;
+  };
+
+  const sanitizeNationalNumber = (raw: string) => {
+    return raw.replace(/[^\d]/g, '');
+  };
+
+  const buildE164Number = (dialCode: string, national: string) => {
+    const cleaned = sanitizeNationalNumber(national);
+    if (!cleaned) return '';
+    return `${dialCode}${cleaned}`;
+  };
+
+  it('masks phone numbers correctly to protect identity', () => {
+    expect(maskPhone('+919876543210')).toBe('+919*** ***210');
+    expect(maskPhone('+12025550123')).toBe('+120*** ***123');
+  });
+
+  it('builds canonical E.164 phone numbers with India dial code default', () => {
+    expect(buildE164Number('+91', '98765 43210')).toBe('+919876543210');
+    expect(buildE164Number('+1', '(202) 555-0123')).toBe('+12025550123');
+    expect(buildE164Number('+44', '7911 123456')).toBe('+447911123456');
+  });
+
+  it('handles empty or whitespace phone inputs safely', () => {
+    expect(buildE164Number('+91', '   ')).toBe('');
+    expect(sanitizeNationalNumber('')).toBe('');
+  });
+});

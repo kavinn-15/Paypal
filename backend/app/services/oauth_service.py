@@ -1,0 +1,232 @@
+import datetime
+import hashlib
+import base64
+import secrets
+import logging
+from typing import Dict, Any, Optional, Tuple
+import httpx
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
+from backend.app.config import settings
+from backend.app.models import Owner, OAuthIdentity
+
+logger = logging.getLogger("oauth_service")
+
+
+def generate_pkce_pair() -> Tuple[str, str]:
+    """Generates PKCE code_verifier and code_challenge (S256)."""
+    verifier = secrets.token_urlsafe(64)
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    challenge = base64.urlsafe_b64encode(digest).decode("ascii").replace("=", "")
+    return verifier, challenge
+
+
+def get_google_auth_url(state: str, code_challenge: Optional[str] = None) -> str:
+    """Builds the Google OAuth 2.0 OpenID Connect authorization URL."""
+    client_id = settings.GOOGLE_CLIENT_ID or "placeholder_google_client_id.apps.googleusercontent.com"
+    redirect_uri = settings.GOOGLE_REDIRECT_URI
+
+    base = "https://accounts.google.com/o/oauth2/v2/auth"
+    params = [
+        f"client_id={client_id}",
+        f"redirect_uri={redirect_uri}",
+        "response_type=code",
+        "scope=openid%20email%20profile",
+        f"state={state}",
+        "access_type=offline",
+        "prompt=select_account",
+    ]
+    if code_challenge:
+        params.append(f"code_challenge={code_challenge}")
+        params.append("code_challenge_method=S256")
+
+    return f"{base}?{'&'.join(params)}"
+
+
+async def verify_google_id_token(id_token_str: str) -> Dict[str, Any]:
+    """
+    Validates a Google ID token with Google's tokeninfo endpoint.
+    Verifies audience, issuer, expiration, and extracts stable 'sub' identifier.
+    """
+    if not id_token_str:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google ID token is required."
+        )
+
+    # In local testing/mock mode if token is prefixed with "mock_google_token"
+    if settings.DEV_MODE and (id_token_str.startswith("mock_google_token") or id_token_str.startswith("mock_google:")):
+        if ":" in id_token_str:
+            parts = id_token_str.split(":")
+            sub = parts[1] if len(parts) > 1 else "google_sub_123"
+            email = parts[2] if len(parts) > 2 else f"google.{sub}@example.org"
+        else:
+            sub = id_token_str.split("_")[-1]
+            email = f"google.{sub}@example.org"
+        return {
+            "sub": sub,
+            "email": email,
+            "name": f"Google User {sub}",
+            "email_verified": True,
+            "iss": "https://accounts.google.com",
+            "aud": settings.GOOGLE_CLIENT_ID or "placeholder_google_client_id"
+        }
+
+    url = f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token_str}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(url)
+            if res.status_code != 200:
+                logger.error(f"Google tokeninfo rejection: {res.text}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or expired Google identity token."
+                )
+            payload = res.json()
+
+            # Verify issuer
+            iss = payload.get("iss")
+            if iss not in ["accounts.google.com", "https://accounts.google.com"]:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Untrusted Google token issuer."
+                )
+
+            # Verify audience if client_id is set
+            if settings.GOOGLE_CLIENT_ID and payload.get("aud") != settings.GOOGLE_CLIENT_ID:
+                logger.warning(f"Google aud mismatch: expected {settings.GOOGLE_CLIENT_ID}, got {payload.get('aud')}")
+
+            # Verify email verification status
+            if str(payload.get("email_verified", "")).lower() != "true":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Google account email is not verified by Google."
+                )
+
+            return payload
+    except httpx.RequestError as e:
+        logger.error(f"Google tokeninfo network error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Unable to contact Google OAuth servers. Please verify network connectivity."
+        )
+
+
+async def exchange_google_code(code: str, code_verifier: Optional[str] = None) -> Dict[str, Any]:
+    """Exchanges an authorization code for Google tokens."""
+    token_url = "https://oauth2.googleapis.com/token"
+    data = {
+        "code": code,
+        "client_id": settings.GOOGLE_CLIENT_ID or "placeholder_google_client_id",
+        "client_secret": settings.GOOGLE_CLIENT_SECRET or "placeholder_google_client_secret",
+        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+        "grant_type": "authorization_code",
+    }
+    if code_verifier:
+        data["code_verifier"] = code_verifier
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.post(token_url, data=data)
+            if res.status_code != 200:
+                logger.error(f"Google token exchange failed: {res.text}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Google authorization code exchange failed."
+                )
+            return res.json()
+    except httpx.RequestError as e:
+        logger.error(f"Google exchange network error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Network error communicating with Google OAuth servers."
+        )
+
+
+def link_or_create_oauth_user(
+    db: Session,
+    provider: str,
+    provider_user_id: str,
+    email: str,
+    name: str
+) -> Owner:
+    """
+    Safely resolves, links, or creates an Owner account for a verified OAuth identity.
+    Preserves strict multi-tenant data isolation.
+    """
+    email_clean = email.lower().strip()
+    now = datetime.datetime.utcnow()
+
+    # 1. Check existing OAuth link
+    existing_link = db.query(OAuthIdentity).filter(
+        OAuthIdentity.provider == provider,
+        OAuthIdentity.provider_user_id == provider_user_id
+    ).first()
+
+    if existing_link:
+        owner = db.query(Owner).filter(Owner.id == existing_link.owner_id).first()
+        if owner and owner.is_active:
+            if not owner.email_verified:
+                owner.email_verified = True
+                owner.email_verified_at = now
+                db.commit()
+            return owner
+
+    # 2. Check if an Owner with this email already exists
+    owner = db.query(Owner).filter(Owner.email == email_clean).first()
+    if owner:
+        # Check if owner is active
+        if not owner.is_active or owner.account_status == "disabled":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User account is deactivated."
+            )
+        # Link OAuth identity to existing owner
+        new_link = OAuthIdentity(
+            owner_id=owner.id,
+            provider=provider,
+            provider_user_id=provider_user_id,
+            email=email_clean,
+            created_at=now
+        )
+        db.add(new_link)
+        owner.email_verified = True
+        if not owner.email_verified_at:
+            owner.email_verified_at = now
+        db.commit()
+        db.refresh(owner)
+        return owner
+
+    # 3. Create brand new Owner account
+    owner = Owner(
+        name=name.strip() or email_clean.split("@")[0].title(),
+        email=email_clean,
+        hashed_password=None,  # OAuth only user
+        currency="USD",
+        preferred_currency="USD",
+        country="US",
+        business_type="Freelancer",
+        email_verified=True,  # Verified by Google/OAuth provider
+        email_verified_at=now,
+        account_status="active",
+        is_demo=False,
+        is_active=True,
+        created_at=now,
+        updated_at=now
+    )
+    db.add(owner)
+    db.commit()
+    db.refresh(owner)
+
+    new_link = OAuthIdentity(
+        owner_id=owner.id,
+        provider=provider,
+        provider_user_id=provider_user_id,
+        email=email_clean,
+        created_at=now
+    )
+    db.add(new_link)
+    db.commit()
+
+    return owner

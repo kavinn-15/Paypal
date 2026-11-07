@@ -70,20 +70,20 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-50 w-full pt-2.5 pb-2.5 px-3 sm:px-6">
+    <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-50 w-full py-3.5 sm:py-4 px-3 sm:px-6 overflow-visible shadow-xs">
       <div className="max-w-[1440px] mx-auto">
-        <div className="flex items-center justify-between min-h-[56px] gap-2 sm:gap-4">
+        <div className="flex items-center justify-between min-h-[58px] gap-2 sm:gap-4">
           {/* Brand */}
           <Link
             to="/dashboard"
-            className="flex items-center space-x-2.5 cursor-pointer shrink-0 select-none group"
+            className="flex items-center space-x-2.5 cursor-pointer shrink-0 select-none group py-1"
           >
-            <div className="w-9 h-9 rounded-xl bg-ink text-white flex items-center justify-center font-extrabold text-xs border border-slate-700/80 shadow-xs group-hover:border-electric transition-colors">
+            <div className="w-9 h-9 rounded-xl bg-ink text-white flex items-center justify-center font-extrabold text-xs border border-slate-700/80 shadow-xs group-hover:border-electric transition-colors shrink-0">
               <span className="text-electric font-mono font-bold">CL</span>
             </div>
             <div className="flex flex-col justify-center">
               <div className="flex items-center space-x-1.5">
-                <span className="font-black text-sm lg:text-base text-ink tracking-tight whitespace-nowrap leading-none">
+                <span className="font-black text-sm lg:text-base text-ink tracking-tight whitespace-nowrap leading-normal">
                   Cashflow Lifeline
                 </span>
                 <span className="hidden xl:inline-flex items-center space-x-1 text-[9px] font-bold uppercase tracking-wider bg-electric-50 text-electric-700 border border-electric-200/80 px-1.5 py-0.5 rounded-full whitespace-nowrap">
@@ -91,7 +91,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span>PayPal AI</span>
                 </span>
               </div>
-              <span className="text-[10px] text-sardine-slate hidden md:block mt-0.5 font-medium leading-none">
+              <span className="text-[10px] text-sardine-slate hidden md:block mt-0.5 font-medium leading-normal">
                 Predict &bull; Protect &bull; Execute
               </span>
             </div>
@@ -99,7 +99,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Desktop Navigation Links - Swiss minimal tabs (zero slide bar) */}
           <nav
-            className="hidden lg:flex items-center space-x-0.5 xl:space-x-1 shrink select-none py-1 overflow-hidden"
+            className="hidden lg:flex items-center space-x-0.5 xl:space-x-1 shrink select-none py-1 overflow-visible"
           >
             {navItems.map((item) => {
               const Icon = item.icon;
