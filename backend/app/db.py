@@ -78,6 +78,39 @@ def init_db():
                 for col_name, col_def in cols_to_add:
                     if col_name not in existing_cols:
                         conn.execute(text(f"ALTER TABLE owners ADD COLUMN {col_name} {col_def};"))
+
+                # Invoices migration
+                res_inv = conn.execute(text("PRAGMA table_info(invoices);")).fetchall()
+                inv_cols = {row[1] for row in res_inv}
+                if "is_simulated_paid" not in inv_cols:
+                    conn.execute(text("ALTER TABLE invoices ADD COLUMN is_simulated_paid BOOLEAN DEFAULT 0;"))
+
+                # Actions migration
+                res_act = conn.execute(text("PRAGMA table_info(actions);")).fetchall()
+                act_cols = {row[1] for row in res_act}
+                if "approved_payload_hash" not in act_cols:
+                    conn.execute(text("ALTER TABLE actions ADD COLUMN approved_payload_hash VARCHAR(64);"))
+                if "is_simulated" not in act_cols:
+                    conn.execute(text("ALTER TABLE actions ADD COLUMN is_simulated BOOLEAN DEFAULT 0;"))
+
+                # Obligations migration
+                res_obl = conn.execute(text("PRAGMA table_info(obligations);")).fetchall()
+                obl_cols = {row[1] for row in res_obl}
+                for c_name, c_def in [
+                    ("split_consent_recorded", "BOOLEAN DEFAULT 0"),
+                    ("split_consent_source", "VARCHAR(100)"),
+                    ("split_consent_timestamp", "DATETIME"),
+                    ("split_consent_is_simulated", "BOOLEAN DEFAULT 0"),
+                ]:
+                    if c_name not in obl_cols:
+                        conn.execute(text(f"ALTER TABLE obligations ADD COLUMN {c_name} {c_def};"))
+
+                # Payment History migration
+                res_ph = conn.execute(text("PRAGMA table_info(payment_history);")).fetchall()
+                ph_cols = {row[1] for row in res_ph}
+                if "transaction_reference" not in ph_cols:
+                    conn.execute(text("ALTER TABLE payment_history ADD COLUMN transaction_reference VARCHAR(255);"))
+
                 conn.commit()
         except Exception as e:
-            logger.warning(f"SQLite owners schema update warning: {e}")
+            logger.warning(f"SQLite schema update warning: {e}")

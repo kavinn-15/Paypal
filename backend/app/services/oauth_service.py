@@ -115,6 +115,16 @@ async def verify_google_id_token(id_token_str: str) -> Dict[str, Any]:
 
 async def exchange_google_code(code: str, code_verifier: Optional[str] = None) -> Dict[str, Any]:
     """Exchanges an authorization code for Google tokens."""
+    if settings.DEV_MODE and (code.startswith("mock_google_") or not settings.GOOGLE_CLIENT_ID or "placeholder" in (settings.GOOGLE_CLIENT_ID or "")):
+        sub = "dev_google_user_101"
+        email = "google.dev.user@example.com"
+        return {
+            "access_token": "mock_google_access_token",
+            "id_token": f"mock_google:{sub}:{email}",
+            "expires_in": 3600,
+            "token_type": "Bearer"
+        }
+
     token_url = "https://oauth2.googleapis.com/token"
     data = {
         "code": code,

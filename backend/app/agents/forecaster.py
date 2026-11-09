@@ -139,27 +139,67 @@ class ForecasterAgent:
                 is_cold_start=pred.get("is_cold_start", False)
             ))
 
-        # 4. Project timeline through obligation due date + 7 days
+        # 4. Fetch scheduled financial expenses (excluding cancelled, paid, and double-counted contractor obligations)
+        from backend.app.models import FinancialEntry
+        expense_entries = self.db.query(FinancialEntry).filter(
+            FinancialEntry.owner_id == actual_owner_id,
+            FinancialEntry.entry_type.in_(["expense", "expected_expense"]),
+            FinancialEntry.status.in_(["expected", "confirmed"]),
+            FinancialEntry.is_cancelled == False
+        ).all()
+
+        scheduled_expenses = []
+        for ent in expense_entries:
+            ent_date = to_naive(ent.transaction_date)
+            # Only include future expenses within horizon
+            if ent_date.date() < current_time.date():
+                continue
+            # Avoid double-counting contractor obligations
+            if ent.reference_id and (f"obl_{ent.reference_id}" == f"obl_{obligation.id}" or ent.reference_id == str(obligation.id)):
+                continue
+            if ent.canonical_id and (f"obl_{obligation.id}" in ent.canonical_id or f"payout_{obligation.id}" in ent.canonical_id):
+                continue
+            if ent.category == "contractor" and obligation.payee_name.lower() in ent.title.lower():
+                continue
+
+            scheduled_expenses.append({
+                "title": ent.title,
+                "amount": float(ent.amount),
+                "due_date": ent_date,
+                "currency": ent.currency,
+                "category": ent.category
+            })
+
+        all_outflows = [{
+            "amount": float(obligation.amount),
+            "due_date": obl_due,
+            "payee_name": obligation.payee_name
+        }]
+        for exp in scheduled_expenses:
+            all_outflows.append({
+                "amount": exp["amount"],
+                "due_date": exp["due_date"],
+                "payee_name": exp["title"]
+            })
+
+        # 5. Project timeline through obligation due date + 7 days
         horizon_end = max(obl_due + timedelta(days=7), current_time + timedelta(days=14))
         raw_projections, first_shortfall_date, shortfall_amount = project_cashflow_timeline(
             starting_balance=starting_balance,
             predicted_inflows=open_invoices_with_preds,
-            obligations=[{
-                "amount": float(obligation.amount),
-                "due_date": obl_due,
-                "payee_name": obligation.payee_name
-            }],
+            obligations=all_outflows,
             start_date=current_time,
             end_date=horizon_end
         )
 
-        # 5. Monte Carlo simulation
+        # 6. Monte Carlo simulation including scheduled expenses
         p_shortfall, ci_low_band, ci_high_band = run_monte_carlo_simulation(
             starting_balance=starting_balance,
             open_invoices_with_preds=open_invoices_with_preds,
             obligation_amount=float(obligation.amount),
             obligation_due_date=obl_due,
             start_date=current_time,
+            scheduled_expenses=scheduled_expenses,
             num_simulations=1000
         )
 
@@ -180,13 +220,14 @@ class ForecasterAgent:
                 ci_high=high
             ))
 
-        # 6. Rank driver clients
+        # 7. Rank driver clients
         driver_items = compute_driver_ranking(
             starting_balance=starting_balance,
             open_invoices_with_preds=open_invoices_with_preds,
             obligation_amount=float(obligation.amount),
             obligation_due_date=obl_due,
-            start_date=current_time
+            start_date=current_time,
+            scheduled_expenses=scheduled_expenses
         )
         driver_rankings = [DriverContribution(**d) for d in driver_items]
 

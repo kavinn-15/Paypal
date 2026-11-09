@@ -190,6 +190,11 @@ export const LoginPage: React.FC = () => {
     try {
       const res = await api.getGoogleAuthUrl();
       if (res.auth_url) {
+        // If placeholder credentials are used in local dev mode, simulate callback directly
+        if (res.auth_url.includes('placeholder_google_client_id')) {
+          navigate(`/auth/callback/google?code=mock_google_dev_user&state=${encodeURIComponent(res.state || 'dev_state')}`);
+          return;
+        }
         window.location.href = res.auth_url;
       }
     } catch (err: any) {

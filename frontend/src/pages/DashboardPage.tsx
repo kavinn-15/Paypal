@@ -76,7 +76,7 @@ export const DashboardPage: React.FC = () => {
       await api.simulateWebhook();
       setNotification({
         type: 'success',
-        message: `PayPal Sandbox Webhook Fired! Verified payment received. Action moved to CONFIRMED. Cashflow recalculated.`,
+        message: 'Simulated payment processed successfully. Demo forecast recalculated. This is not a verified PayPal payment.',
       });
       await fetchForecast();
     } catch (err: any) {
@@ -134,7 +134,7 @@ export const DashboardPage: React.FC = () => {
         obligation={data.obligation}
         shortfallAmount={data.shortfall_amount}
         firstShortfallDate={data.first_shortfall_date}
-        startingBalance={1800.0}
+        startingBalance={data.starting_balance ?? 1800.0}
         isCovered={isCovered}
       />
 
@@ -151,8 +151,8 @@ export const DashboardPage: React.FC = () => {
         <div>
           <DriverExplanationCard
             explanationText={data.tradeoff_summary}
-            driverRankings={[]}
-            isSourceSeeded={true}
+            driverRankings={data.driver_rankings || []}
+            isSourceSeeded={false}
           />
         </div>
       </div>
@@ -207,11 +207,11 @@ export const DashboardPage: React.FC = () => {
               <span className="text-xs text-sardine-muted font-medium">Under 3-Minute Live Verification</span>
             </div>
             <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
-              Simulate Client Payment Arrival (Sandbox Webhook)
+              Simulate Client Payment Arrival (Development Testing)
             </h3>
             <p className="text-xs text-sardine-muted max-w-xl leading-relaxed">
-              Fires a verified <code className="text-electric-300 bg-slate-900 px-1 py-0.5 rounded text-[11px]">INVOICING.INVOICE.PAID</code> webhook event. Moves the approved action to{' '}
-              <strong className="text-emerald-400">CONFIRMED</strong> and recalculates balance to show the contractor obligation is fully covered.
+              Fires a simulated <code className="text-electric-300 bg-slate-900 px-1 py-0.5 rounded text-[11px]">INVOICING.INVOICE.PAID</code> event to test cashflow recalculation.
+              Visibly stamped as a <strong className="text-amber-400">Simulated Payment</strong>. Genuine <strong className="text-emerald-400">CONFIRMED</strong> status requires verified PayPal webhook signatures.
             </p>
           </div>
 

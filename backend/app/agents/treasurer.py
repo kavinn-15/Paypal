@@ -72,12 +72,14 @@ class TreasurerAgent:
             "installment_2": {
                 "amount": inst2,
                 "date": inst2_date,
-                "date_str": inst2_date.strftime("%Y-%m-%d")
+                "date_str": inst2_date.strftime("%Y-%m-%d"),
+                "status": "proposed",  # Explicitly labeled as proposed rather than scheduled (no automated persistent scheduler)
+                "scheduling_available": False
             },
             "goodwill_cost_proxy": 0.0,  # Cash outlay cost is $0.00
             "qualitative_risk": (
                 "Possible strain on contractor relationship; requires contractor agreement in writing. "
-                "Second installment remains an active liability that must be funded by subsequent payments."
+                "Second installment is proposed (not automated scheduled) and must be manually funded by subsequent payments."
             )
         }
 

@@ -253,12 +253,21 @@ def seed_database(clean: bool = False, demo_mode: bool = True):
                 currency="USD",
                 due_date=due_friday,
                 split_allowed=True,
+                split_consent_recorded=True,
+                split_consent_source="written_email_agreement",
+                split_consent_timestamp=now,
+                split_consent_is_simulated=True,
                 status="pending"
             )
             db.add(contractor_obligation)
         else:
             contractor_obligation.amount = 3200.0
             contractor_obligation.due_date = due_friday
+            contractor_obligation.split_allowed = True
+            contractor_obligation.split_consent_recorded = True
+            contractor_obligation.split_consent_source = "written_email_agreement"
+            contractor_obligation.split_consent_timestamp = now
+            contractor_obligation.split_consent_is_simulated = True
             contractor_obligation.status = "pending"
 
         # Opening confirmed cash balance entry ($1,800.00)

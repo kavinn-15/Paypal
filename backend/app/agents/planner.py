@@ -10,7 +10,9 @@ from backend.app.schemas import (
 )
 from backend.app.agents.collector import CollectorAgent
 from backend.app.agents.treasurer import TreasurerAgent
-from backend.app.guardrail.approval import generate_approval_hash
+from backend.app.guardrail.approval import (
+    generate_approval_hash, compute_action_payload, generate_payload_hash, generate_canonical_approval_signature
+)
 from backend.app.llm.client import llm_service
 from backend.app.ml.simulation import project_cashflow_timeline
 
@@ -171,6 +173,15 @@ class RescuePlanEngine:
             approval_status="draft"
         )
         self.db.add(msg_a)
+        self.db.flush()
+
+        # Compute complete canonical payload signature
+        canonical_a = compute_action_payload(action_a_db)
+        p_hash_a = generate_payload_hash(canonical_a)
+        sig_a = generate_canonical_approval_signature(p_hash_a)
+        action_a_db.approval_hash = sig_a
+        action_a_db.approved_payload_hash = p_hash_a
+        self.db.flush()
 
         plans_out.append(RescuePlanOut(
             id=plan_a_db.id,
@@ -287,6 +298,15 @@ class RescuePlanEngine:
             approval_status="draft"
         )
         self.db.add(msg_b)
+        self.db.flush()
+
+        # Compute complete canonical payload signature
+        canonical_b = compute_action_payload(action_b_db)
+        p_hash_b = generate_payload_hash(canonical_b)
+        sig_b = generate_canonical_approval_signature(p_hash_b)
+        action_b_db.approval_hash = sig_b
+        action_b_db.approved_payload_hash = p_hash_b
+        self.db.flush()
 
         plans_out.append(RescuePlanOut(
             id=plan_b_db.id,
@@ -311,124 +331,143 @@ class RescuePlanEngine:
 
         # -------------------------------------------------------------
         # PLAN C: Collect plus agreed contractor split
+        # Only generated when split permission is explicitly True.
+        # Safe failure: No unsafe automatic 50/50 fallback if permission is False or None.
         # -------------------------------------------------------------
-        split_proposal = self.treasurer.propose_split_option(
-            obligation=obligation_obj,
-            starting_balance=starting_balance,
-            expected_next_inflow_date=obligation_obj.due_date + timedelta(days=5)
-        )
+        split_proposal = None
+        plan_c_risk = "Contractor split option unavailable or split permission not granted."
+        if obligation_obj.split_allowed is True and getattr(obligation_obj, "split_consent_recorded", False) is True:
+            split_proposal = self.treasurer.propose_split_option(
+                obligation=obligation_obj,
+                starting_balance=starting_balance,
+                expected_next_inflow_date=obligation_obj.due_date + timedelta(days=5)
+            )
 
-        plan_c_inst1 = split_proposal["installment_1"]["amount"] if split_proposal else round(float(obligation_obj.amount) * 0.5, 2)
-        plan_c_inst2 = split_proposal["installment_2"]["amount"] if split_proposal else round(float(obligation_obj.amount) * 0.5, 2)
-        inst2_date_str = split_proposal["installment_2"]["date_str"] if split_proposal else "next week"
+        if split_proposal is not None:
+            plan_c_inst1 = split_proposal["installment_1"]["amount"]
+            plan_c_inst2 = split_proposal["installment_2"]["amount"]
+            inst2_date_str = split_proposal["installment_2"]["date_str"]
 
-        plan_c_risk = (
-            "Requires explicit contractor consent in writing; second installment remains an obligation "
-            "that must be funded by subsequent client payments."
-        )
-        plan_c_rationale = (
-            f"Pays contractor {obligation_obj.payee_name} ${plan_c_inst1:,.2f} on Friday (fully covered by current "
-            f"balance) and defers ${plan_c_inst2:,.2f} to {inst2_date_str} when client funds arrive."
-        )
+            plan_c_risk = (
+                "Requires explicit contractor consent in writing; second installment is proposed (not automated scheduled) "
+                "and must be manually disbursed once subsequent client payments settle."
+            )
+            plan_c_rationale = (
+                f"Pays contractor {obligation_obj.payee_name} ${plan_c_inst1:,.2f} on Friday (fully covered by current "
+                f"balance) and proposes deferring ${plan_c_inst2:,.2f} to {inst2_date_str} when client funds arrive."
+            )
 
-        # Forecast with Plan C: Friday outflow is reduced to installment 1
-        plan_c_with_proj, _, _ = project_cashflow_timeline(
-            starting_balance=starting_balance,
-            predicted_inflows=[{"amount": inv["amount"], "expected_pay_date": inv["expected_pay_date"]} for inv in open_invoices],
-            obligations=[
-                {"amount": plan_c_inst1, "due_date": obl_due, "payee_name": obligation_obj.payee_name},
-                {"amount": plan_c_inst2, "due_date": obl_due + timedelta(days=5), "payee_name": obligation_obj.payee_name}
-            ],
-            start_date=start_time,
-            end_date=obl_due + timedelta(days=7)
-        )
+            # Forecast with Plan C: Friday outflow is reduced to installment 1
+            plan_c_with_proj, _, _ = project_cashflow_timeline(
+                starting_balance=starting_balance,
+                predicted_inflows=[{"amount": inv["amount"], "expected_pay_date": inv["expected_pay_date"]} for inv in open_invoices],
+                obligations=[
+                    {"amount": plan_c_inst1, "due_date": obl_due, "payee_name": obligation_obj.payee_name},
+                    {"amount": plan_c_inst2, "due_date": obl_due + timedelta(days=5), "payee_name": obligation_obj.payee_name}
+                ],
+                start_date=start_time,
+                end_date=obl_due + timedelta(days=7)
+            )
 
-        plan_c_idempotency = f"act_split_{obligation_obj.id}_{uuid.uuid4().hex[:8]}"
-        plan_c_hash = generate_approval_hash(
-            recipient=obligation_obj.payee_name,
-            amount=plan_c_inst1,
-            currency="USD",
-            action_type="SCHEDULE_PAYOUT_SPLIT",
-            idempotency_key=plan_c_idempotency
-        )
+            plan_c_idempotency = f"act_split_{obligation_obj.id}_{uuid.uuid4().hex[:8]}"
+            plan_c_hash = generate_approval_hash(
+                recipient=obligation_obj.payee_name,
+                amount=plan_c_inst1,
+                currency="USD",
+                action_type="SCHEDULE_PAYOUT_SPLIT",
+                idempotency_key=plan_c_idempotency
+            )
 
-        plan_c_msg_draft = llm_service.draft_contractor_split_message(
-            contractor_name=obligation_obj.payee_name,
-            total_amount=float(obligation_obj.amount),
-            first_installment=plan_c_inst1,
-            first_date_str=obligation_obj.due_date.strftime("%b %d"),
-            second_installment=plan_c_inst2,
-            second_date_str=inst2_date_str
-        )
+            plan_c_msg_draft = llm_service.draft_contractor_split_message(
+                contractor_name=obligation_obj.payee_name,
+                total_amount=float(obligation_obj.amount),
+                first_installment=plan_c_inst1,
+                first_date_str=obligation_obj.due_date.strftime("%b %d"),
+                second_installment=plan_c_inst2,
+                second_date_str=inst2_date_str
+            )
 
-        plan_c_db = RescuePlan(
-            owner_id=obligation_obj.owner_id,
-            run_id=run_id,
-            plan_type="C",
-            details={
-                "installment_1": plan_c_inst1,
-                "installment_2": plan_c_inst2,
-                "installment_2_date": inst2_date_str,
-                "split_allowed": obligation_obj.split_allowed
-            },
-            cost=0.0,
-            incoming_needed=0.0,  # $1800 balance covers $1600 inst 1!
-            selected_clients=scored_targets[:1],
-            rationale=plan_c_rationale,
-            forecast_with_plan=plan_c_with_proj,
-            forecast_without_plan=[p.model_dump() for p in forecast_response.projections],
-            late_scenario={
-                "outcome": "If second-stage client payment delays past installment 2 date, another shortfall occurs on installment 2.",
-                "shortfall": plan_c_inst2
-            },
-            remaining_risk=f"Plausibly protects Friday's contractor payout. {plan_c_risk}"
-        )
-        self.db.add(plan_c_db)
-        self.db.flush()
+            plan_c_db = RescuePlan(
+                owner_id=obligation_obj.owner_id,
+                run_id=run_id,
+                plan_type="C",
+                details={
+                    "installment_1": plan_c_inst1,
+                    "installment_2": plan_c_inst2,
+                    "installment_2_date": inst2_date_str,
+                    "installment_2_status": "proposed_manual_disbursement",
+                    "scheduling_available": False,
+                    "split_allowed": obligation_obj.split_allowed,
+                    "split_consent_recorded": getattr(obligation_obj, "split_consent_recorded", False),
+                    "split_consent_source": getattr(obligation_obj, "split_consent_source", None)
+                },
+                cost=0.0,
+                incoming_needed=0.0,
+                selected_clients=scored_targets[:1],
+                rationale=plan_c_rationale,
+                forecast_with_plan=plan_c_with_proj,
+                forecast_without_plan=[p.model_dump() for p in forecast_response.projections],
+                late_scenario={
+                    "outcome": "If second-stage client payment delays past installment 2 date, another shortfall occurs on installment 2.",
+                    "shortfall": plan_c_inst2
+                },
+                remaining_risk=f"Plausibly protects Friday's contractor payout. {plan_c_risk}"
+            )
+            self.db.add(plan_c_db)
+            self.db.flush()
 
-        action_c_db = Action(
-            owner_id=obligation_obj.owner_id,
-            plan_id=plan_c_db.id,
-            action_type="SCHEDULE_PAYOUT_SPLIT",
-            recipient=obligation_obj.payee_name,
-            amount=plan_c_inst1,
-            currency="USD",
-            state="proposed",
-            idempotency_key=plan_c_idempotency,
-            approval_hash=plan_c_hash,
-            paypal_ref=f"SPLIT-OBL-{obligation_obj.id}"
-        )
-        self.db.add(action_c_db)
-        self.db.flush()
+            action_c_db = Action(
+                owner_id=obligation_obj.owner_id,
+                plan_id=plan_c_db.id,
+                action_type="SCHEDULE_PAYOUT_SPLIT",
+                recipient=obligation_obj.payee_name,
+                amount=plan_c_inst1,
+                currency="USD",
+                state="proposed",
+                idempotency_key=plan_c_idempotency,
+                approval_hash=plan_c_hash,
+                paypal_ref=f"SPLIT-OBL-{obligation_obj.id}"
+            )
+            self.db.add(action_c_db)
+            self.db.flush()
 
-        msg_c = Message(
-            action_id=action_c_db.id,
-            client_id=top_target["client_id"] if top_target else 1,
-            body=plan_c_msg_draft,
-            approval_status="draft"
-        )
-        self.db.add(msg_c)
+            msg_c = Message(
+                action_id=action_c_db.id,
+                client_id=top_target["client_id"] if top_target else 1,
+                body=plan_c_msg_draft,
+                approval_status="draft"
+            )
+            self.db.add(msg_c)
+            self.db.flush()
 
-        plans_out.append(RescuePlanOut(
-            id=plan_c_db.id,
-            run_id=run_id,
-            plan_type="C",
-            name="Plan C: Collect Plus Agreed Contractor Split",
-            description=f"Send reminder to client and split {obligation_obj.payee_name}'s payout into two installments.",
-            cost=0.0,
-            cost_description="$0.00 cash cost (possible contractor goodwill impact).",
-            incoming_needed=0.0,
-            selected_clients=scored_targets[:1],
-            rationale=plan_c_rationale,
-            forecast_with_plan=[DailyProjection(**p) for p in plan_c_with_proj],
-            forecast_without_plan=forecast_response.projections,
-            late_scenario={
-                "outcome": "If subsequent invoices lag, second installment will be exposed to cashflow pressure.",
-                "shortfall": plan_c_inst2
-            },
-            remaining_risk="Plausibly protects Friday payout; requires mutual contractor agreement in writing.",
-            primary_action=ActionOut.model_validate(action_c_db)
-        ))
+            # Compute complete canonical payload signature
+            canonical_c = compute_action_payload(action_c_db)
+            p_hash_c = generate_payload_hash(canonical_c)
+            sig_c = generate_canonical_approval_signature(p_hash_c)
+            action_c_db.approval_hash = sig_c
+            action_c_db.approved_payload_hash = p_hash_c
+            self.db.flush()
+
+            plans_out.append(RescuePlanOut(
+                id=plan_c_db.id,
+                run_id=run_id,
+                plan_type="C",
+                name="Plan C: Collect Plus Agreed Contractor Split",
+                description=f"Send reminder to client and split {obligation_obj.payee_name}'s payout into two installments (inst 2 proposed for manual disbursement).",
+                cost=0.0,
+                cost_description="$0.00 cash cost (possible contractor goodwill impact).",
+                incoming_needed=0.0,
+                selected_clients=scored_targets[:1],
+                rationale=plan_c_rationale,
+                forecast_with_plan=[DailyProjection(**p) for p in plan_c_with_proj],
+                forecast_without_plan=forecast_response.projections,
+                late_scenario={
+                    "outcome": "If subsequent invoices lag, second installment will be exposed to cashflow pressure.",
+                    "shortfall": plan_c_inst2
+                },
+                remaining_risk="Plausibly protects Friday payout; requires mutual contractor agreement in writing.",
+                primary_action=ActionOut.model_validate(action_c_db)
+            ))
 
         self.db.commit()
 
@@ -448,5 +487,8 @@ class RescuePlanEngine:
             shortfall_amount=shortfall,
             first_shortfall_date=first_shortfall_date,
             tradeoff_summary=tradeoff_summary,
-            plans=plans_out
+            plans=plans_out,
+            starting_balance=starting_balance,
+            driver_rankings=forecast_response.driver_ranking,
+            p_shortfall=forecast_response.p_shortfall
         )

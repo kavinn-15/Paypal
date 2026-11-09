@@ -7,7 +7,7 @@ from backend.app.models import Owner, FinancialEntry
 from backend.app.schemas import (
     FinancialEntryCreate, FinancialEntryOut, FinancialSummaryResponse, LedgerIntegrityReport
 )
-from backend.app.auth.deps import get_current_user
+from backend.app.auth.deps import get_verified_current_user
 from backend.app.services.financial_service import FinancialService
 from backend.app.guardrail.audit import append_audit_log
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/finance", tags=["Financial Management & Timeline"])
 @router.get("/summary", response_model=FinancialSummaryResponse)
 def get_financial_summary(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Get authoritative cash summary: confirmed balance, 30d expected inflows/outflows,
@@ -29,7 +29,7 @@ def get_financial_summary(
 @router.get("/integrity-check", response_model=LedgerIntegrityReport)
 def check_ledger_integrity(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Verifies mathematical integrity of the financial ledger.
@@ -40,7 +40,7 @@ def check_ledger_integrity(
 @router.get("/timeline")
 def get_financial_timeline(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Get chronological cash flow timeline distinguishing:
@@ -56,7 +56,7 @@ def get_financial_timeline(
 def create_financial_entry(
     req: FinancialEntryCreate,
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Create a new financial record (rent, salary, subscription, tax, loan, reserve fund, income).
@@ -68,7 +68,7 @@ def create_financial_entry(
 @router.get("/entries", response_model=List[FinancialEntryOut])
 def list_financial_entries(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     List all financial records for the authenticated user.
@@ -82,7 +82,7 @@ def list_financial_entries(
 def delete_financial_entry(
     entry_id: int,
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Delete a user's financial record with audit logging.

@@ -466,6 +466,9 @@ class PlansComparisonResponse(BaseModel):
     first_shortfall_date: Optional[str] = None
     tradeoff_summary: str
     plans: List[RescuePlanOut]
+    starting_balance: float = 1800.0
+    driver_rankings: List[DriverContribution] = Field(default_factory=list)
+    p_shortfall: float = 0.0
 
 
 class ApprovalRequest(BaseModel):

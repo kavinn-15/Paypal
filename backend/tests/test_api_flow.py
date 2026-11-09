@@ -91,12 +91,13 @@ async def test_end_to_end_api_lifecycle(monkeypatch):
         assert wh_data["simulated"] is True
         assert wh_data["result"]["action_confirmed"] == action_a["id"]
 
-        # 8. Check that action is now CONFIRMED
+        # 8. Check that action is in SIMULATED status (never genuine confirmed from simulation)
         res_action_check = await client.get(f"/actions/{action_a['id']}", headers=headers)
         assert res_action_check.status_code == 200
-        confirmed_action = res_action_check.json()
-        assert confirmed_action["state"] == "confirmed"
-        assert confirmed_action["confirmed_at"] is not None
+        simulated_action = res_action_check.json()
+        assert simulated_action["state"] == "simulated"
+        assert simulated_action["is_simulated"] is True
+        assert simulated_action["confirmed_at"] is None
 
         # 9. Verify Audit Hash Chain
         res_audit = await client.get("/audit/verify", headers=headers)

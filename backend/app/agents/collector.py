@@ -30,8 +30,9 @@ class CollectorAgent:
             coverage_ratio = min(amount / max(shortfall_amount, 1.0), 1.5)
             score = coverage_ratio * p_on_time * rel_weight
 
+            coverage_pct = min(amount / max(shortfall_amount, 1.0) * 100, 100) if shortfall_amount > 0 else 100
             why_selected = (
-                f"Invoice of ${amount:,.2f} covers {min(amount/shortfall_amount*100, 100):.0f}% of the shortfall. "
+                f"Invoice of ${amount:,.2f} covers {coverage_pct:.0f}% of the shortfall. "
                 f"Client has an estimated {p_on_time*100:.0f}% probability of timely settlement with relationship weight {rel_weight:.2f}."
             )
 
@@ -70,6 +71,7 @@ class CollectorAgent:
             # Best discount candidate has high amount, high delay, and net proceeds cover the shortfall
             incentive_fit = (amount / max(shortfall_amount, 1.0)) * (0.5 + p_late)
 
+            disc_coverage_pct = min(net_proceeds / max(shortfall_amount, 1.0) * 100, 100) if shortfall_amount > 0 else 100
             candidates.append({
                 "invoice_id": inv["invoice_id"],
                 "paypal_invoice_id": inv["paypal_invoice_id"],
@@ -82,7 +84,7 @@ class CollectorAgent:
                 "score": incentive_fit,
                 "why_selected": (
                     f"Selected {inv['client_name']}'s ${amount:,.2f} invoice because early cash acceleration "
-                    f"yields ${net_proceeds:,.2f} net (covering {min(net_proceeds/shortfall_amount*100, 100):.0f}% "
+                    f"yields ${net_proceeds:,.2f} net (covering {disc_coverage_pct:.0f}% "
                     f"of shortfall) at an affordable {discount_pct:.1f}% discount cost of ${discount_amount:,.2f}."
                 ),
                 "pay_link": inv.get("pay_link")

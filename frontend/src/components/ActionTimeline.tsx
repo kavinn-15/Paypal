@@ -20,6 +20,7 @@ export const ActionTimeline: React.FC<ActionTimelineProps> = ({ action }) => {
     proposed: 0,
     approved: 1,
     executed: 2,
+    simulated: 2,
     confirmed: 3,
     failed: 2,
   };
@@ -34,11 +35,19 @@ export const ActionTimeline: React.FC<ActionTimelineProps> = ({ action }) => {
             <h2 className="font-extrabold text-sm sm:text-base text-ink tracking-tight">
               Deterministic State Progression
             </h2>
-            {action.is_simulated && (
+            {action.state === 'simulated' ? (
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-50 text-purple-800 border border-purple-300 px-2 py-0.5 rounded-full">
+                Simulated Payment (Demo Forecast)
+              </span>
+            ) : action.state === 'confirmed' ? (
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full">
+                Verified PayPal Confirmed
+              </span>
+            ) : action.is_simulated ? (
               <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full">
                 Simulated Event
               </span>
-            )}
+            ) : null}
           </div>
           <p className="text-xs text-sardine-slate mt-0.5">
             Enforced 4-state sequence: proposed &rarr; approved &rarr; executed &rarr; confirmed

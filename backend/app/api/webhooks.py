@@ -84,6 +84,12 @@ async def receive_paypal_webhook(
     )
 
     if not is_verified:
+        append_audit_log(
+            db=db,
+            actor="paypal_webhook",
+            event="WEBHOOK_SIGNATURE_VERIFICATION_FAILED",
+            payload={"event_id": event_id, "event_type": event_type, "reason": "invalid_or_missing_signature"}
+        )
         return {"status": "unverified_signature_stored", "verified": False, "event_id": event_id}
 
     # 3. Enqueue verified event for processing
@@ -138,27 +144,28 @@ def simulate_webhook_event(
     }
 
     # Record in WebhookEvent table visibly marked as simulated and bound to user
+    # Simulated events must NEVER be represented as signature-verified PayPal events
     evt_record = WebhookEvent(
         owner_id=current_user.id,
         paypal_event_id=sim_event_id,
         event_type="INVOICING.INVOICE.PAID",
-        verified=True,
+        verified=False,
         payload=simulated_payload,
         processed=True,
-        processing_state="processed",
-        reconciliation_status="reconciled",
+        processing_state="processed_simulation",
+        reconciliation_status="simulated",
         is_simulated=True
     )
     db.add(evt_record)
     db.commit()
 
-    # Process immediately
+    # Process immediately with simulation flag preserved
     result = process_webhook_event(db, simulated_payload, is_simulated=True, webhook_event_id=evt_record.id)
 
     return {
         "success": True,
         "simulated": True,
-        "message": "Simulated payment processed. Forecast recalculated.",
+        "message": "Simulated payment processed successfully. Demo forecast recalculated. This is not a verified PayPal payment.",
         "result": result
     }
 

@@ -5,7 +5,7 @@ from backend.app.db import get_db
 from backend.app.models import Forecast, RescuePlan, Action, Obligation, Owner
 from backend.app.agents.forecaster import ForecasterAgent
 from backend.app.agents.planner import RescuePlanEngine
-from backend.app.auth.deps import get_current_user
+from backend.app.auth.deps import get_verified_current_user
 from backend.app.services.financial_service import FinancialService
 from backend.app.schemas import PlansComparisonResponse, RescuePlanOut, ActionOut, DailyProjection, ObligationOut
 
@@ -18,7 +18,7 @@ def run_forecast_and_plans(
     starting_balance: Optional[float] = Query(None, description="Starting cash balance (defaults to authoritative reconciled ledger)"),
     discount_pct: float = Query(3.0, description="Discount percentage for Plan B"),
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Executes end-to-end forecasting pipeline scoped strictly to the authenticated user:
@@ -54,7 +54,7 @@ def run_forecast_and_plans(
 @router.get("/latest", response_model=PlansComparisonResponse)
 def get_latest_forecast(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """Retrieves the most recent forecast run and rescue plans for the authenticated user."""
     forecast = db.query(Forecast).filter(
@@ -128,14 +128,16 @@ def get_latest_forecast(
         shortfall_amount=float(forecast.shortfall_amount),
         first_shortfall_date=forecast.first_shortfall_date.strftime("%Y-%m-%d") if forecast.first_shortfall_date else None,
         tradeoff_summary=forecast.driver_explanation or "Optimal recovery strategy based on client payment probability.",
-        plans=plans_out
+        plans=plans_out,
+        starting_balance=float(forecast.starting_balance),
+        p_shortfall=float(forecast.p_shortfall)
     )
 
 
 @router.get("/horizons")
 def get_multi_horizon_forecast(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ) -> Dict[str, Any]:
     """
     Returns 7-day, 30-day, 60-day, and 90-day trajectory forecasts for the authenticated user.

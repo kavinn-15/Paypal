@@ -1,23 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { Action } from '../types';
-import { ShieldCheck, Lock, RefreshCw, Key } from 'lucide-react';
+import { ShieldCheck, Lock, RefreshCw, Key, AlertCircle } from 'lucide-react';
 
 export const ApprovalInboxPage: React.FC = () => {
   const [actions, setActions] = useState<Action[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notification, setNotification] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchActions = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch('/api/actions');
-      if (res.ok) {
-        const data = await res.json();
-        setActions(data);
-      }
-    } catch {
-      // ignore
+      setError(null);
+      const data = await api.getActions();
+      setActions(data);
+    } catch (err: any) {
+      const msg = err.message || 'Failed to load actions from server.';
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
@@ -60,6 +60,13 @@ export const ApprovalInboxPage: React.FC = () => {
         </button>
       </div>
 
+      {error && (
+        <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center space-x-2">
+          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
       {notification && (
         <div className="p-3.5 rounded-xl bg-electric-50 border border-electric-200 text-electric-600 text-xs font-semibold">
           {notification}
@@ -82,6 +89,8 @@ export const ApprovalInboxPage: React.FC = () => {
                     className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
                       act.state === 'confirmed'
                         ? 'bg-emerald-100 text-emerald-800'
+                        : act.state === 'simulated'
+                        ? 'bg-purple-100 text-purple-800 border border-purple-300'
                         : act.state === 'executed'
                         ? 'bg-ink text-white'
                         : act.state === 'approved'
@@ -89,7 +98,7 @@ export const ApprovalInboxPage: React.FC = () => {
                         : 'bg-amber-100 text-amber-800'
                     }`}
                   >
-                    {act.state}
+                    {act.state === 'simulated' ? 'Simulated Payment' : act.state}
                   </span>
                   <span className="font-mono text-xs font-bold text-ink">{act.action_type}</span>
                   {act.is_simulated && (

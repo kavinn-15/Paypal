@@ -125,6 +125,8 @@ export const api = {
   getMultiHorizonForecast: (startingBalance = 1800.0) =>
     request<Record<string, any>>(`/forecast/horizons?starting_balance=${startingBalance}`),
 
+  getActions: () => request<Action[]>('/actions'),
+
   approveAction: (actionId: number, approvalHash: string) =>
     request<Action>(`/actions/${actionId}/approve`, {
       method: 'POST',

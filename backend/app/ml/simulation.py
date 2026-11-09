@@ -82,16 +82,29 @@ def run_monte_carlo_simulation(
     obligation_amount: float,
     obligation_due_date: datetime,
     start_date: datetime,
+    scheduled_expenses: Optional[List[Dict[str, Any]]] = None,
     num_simulations: int = 1000
 ) -> Tuple[float, List[float], List[float]]:
     """
     Runs Monte Carlo simulation sampling payment arrival dates across client distributions.
+    Accurately accounts for scheduled expenses deducted on their actual dates.
     Returns:
         (p_shortfall, ci_low_band, ci_high_band)
     """
     days_to_sim = max((obligation_due_date.date() - start_date.date()).days + 7, 7)
     date_strs = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days_to_sim + 1)]
     target_idx = (obligation_due_date.date() - start_date.date()).days
+
+    # Calculate deterministic daily scheduled expense outflows across timeline
+    daily_scheduled_outflows = np.zeros(len(date_strs))
+    if scheduled_expenses:
+        for exp in scheduled_expenses:
+            diff = (exp["due_date"].date() - start_date.date()).days
+            amt = float(exp["amount"])
+            if 0 <= diff < len(date_strs):
+                daily_scheduled_outflows[diff] += amt
+            elif diff < 0:
+                daily_scheduled_outflows[0] += amt
 
     shortfall_count = 0
     trajectories = np.zeros((num_simulations, len(date_strs)))
@@ -123,6 +136,7 @@ def run_monte_carlo_simulation(
         # Run day-by-day balance for this simulation path
         for t in range(len(date_strs)):
             bal += sim_inflows[t]
+            bal -= daily_scheduled_outflows[t]
             if t == target_idx:
                 bal -= obligation_amount
             trajectories[sim, t] = bal
@@ -142,12 +156,23 @@ def compute_driver_ranking(
     open_invoices_with_preds: List[Dict[str, Any]],
     obligation_amount: float,
     obligation_due_date: datetime,
-    start_date: datetime
+    start_date: datetime,
+    scheduled_expenses: Optional[List[Dict[str, Any]]] = None
 ) -> List[Dict[str, Any]]:
     """
     Ranks clients by their marginal contribution to the projected shortfall.
     For each client: computes shortfall difference between client paying late vs client paying on-time.
+    Considers scheduled expenses.
     """
+    outflows = [{"amount": obligation_amount, "due_date": obligation_due_date, "payee_name": "Contractor"}]
+    if scheduled_expenses:
+        for exp in scheduled_expenses:
+            outflows.append({
+                "amount": float(exp["amount"]),
+                "due_date": exp["due_date"],
+                "payee_name": exp.get("title", "Expense")
+            })
+
     # 1. Baseline shortfall calculation
     baseline_inflows = [
         {"amount": inv["amount"], "expected_pay_date": inv["expected_pay_date"]}
@@ -156,7 +181,7 @@ def compute_driver_ranking(
     _, _, baseline_shortfall = project_cashflow_timeline(
         starting_balance,
         baseline_inflows,
-        [{"amount": obligation_amount, "due_date": obligation_due_date, "payee_name": "Contractor"}],
+        outflows,
         start_date,
         obligation_due_date + timedelta(days=3)
     )
@@ -180,7 +205,7 @@ def compute_driver_ranking(
         _, _, cf_shortfall = project_cashflow_timeline(
             starting_balance,
             counterfactual_inflows,
-            [{"amount": obligation_amount, "due_date": obligation_due_date, "payee_name": "Contractor"}],
+            outflows,
             start_date,
             obligation_due_date + timedelta(days=3)
         )

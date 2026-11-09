@@ -144,7 +144,7 @@ export interface Action {
   recipient: string;
   amount: number;
   currency: string;
-  state: "proposed" | "approved" | "executed" | "confirmed" | "failed";
+  state: "proposed" | "approved" | "executed" | "simulated" | "confirmed" | "failed";
   idempotency_key: string;
   approval_hash: string;
   approved_at?: string;
@@ -184,6 +184,9 @@ export interface PlansComparisonResponse {
   first_shortfall_date?: string;
   tradeoff_summary: string;
   plans: RescuePlan[];
+  starting_balance?: number;
+  driver_rankings?: DriverContribution[];
+  p_shortfall?: number;
 }
 
 export interface ClientData {

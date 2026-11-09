@@ -40,13 +40,31 @@ class ActionExecutionService:
             )
         db.refresh(action)
 
-        # 3. Safety Policy check
+        # 3. Safety Policy & Exact Canonical Payload Integrity Verification
         try:
+            from backend.app.guardrail.approval import compute_action_payload, generate_payload_hash
+            current_payload = compute_action_payload(action)
+            current_hash = generate_payload_hash(current_payload)
+            if not action.approved_payload_hash or current_hash != action.approved_payload_hash:
+                action.state = ActionState.PROPOSED  # Require fresh owner approval
+                action.approved_payload_hash = None
+                db.commit()
+                append_audit_log(
+                    db=db,
+                    actor="guardrail",
+                    event="EXECUTION_REJECTED_PAYLOAD_TAMPERED",
+                    payload={"action_id": action.id, "expected_hash": action.approved_payload_hash, "current_hash": current_hash},
+                    owner_id=action.owner_id
+                )
+                raise PolicyViolationError(
+                    "TAMPERING DETECTED: Action execution parameters were modified after approval! Fresh owner approval is required."
+                )
             validate_action_against_policy(action, db)
         except Exception:
-            # Revert back to APPROVED on pre-execution policy failure
-            action.state = ActionState.APPROVED
-            db.commit()
+            # Revert back to APPROVED on pre-execution policy failure (if not already reverted to proposed)
+            if action.state == ActionState.EXECUTING:
+                action.state = ActionState.APPROVED
+                db.commit()
             raise
 
         # 4. Execution routing
@@ -118,6 +136,42 @@ class ActionExecutionService:
                 # Determine and validate recipient contractor email
                 recipient_email = None
                 recip_clean = action.recipient.strip()
+
+                # Enforce contractor split permission and consent check immediately before execution (FAIL CLOSED)
+                if action.action_type == "SCHEDULE_PAYOUT_SPLIT":
+                    obl_query = db.query(Obligation).filter(
+                        (Obligation.payee_name.ilike(recip_clean)) | (Obligation.payee_email.ilike(recip_clean))
+                    )
+                    if action.owner_id is not None:
+                        obl_query = obl_query.filter(Obligation.owner_id == action.owner_id)
+                    matching_obls = obl_query.all()
+
+                    if len(matching_obls) == 0:
+                        raise PolicyViolationError(
+                            f"FAIL-CLOSED: No matching obligation found for contractor '{action.recipient}'. Execution blocked."
+                        )
+                    if len(matching_obls) > 1:
+                        raise PolicyViolationError(
+                            f"FAIL-CLOSED: Ambiguous contractor obligation: multiple matching obligations found for '{action.recipient}'. Execution blocked."
+                        )
+
+                    obl = matching_obls[0]
+
+                    if obl.split_allowed is not True:
+                        raise PolicyViolationError(
+                            f"FAIL-CLOSED: Split permission is not granted for contractor '{obl.payee_name}'. Execution blocked."
+                        )
+
+                    if getattr(obl, "split_consent_recorded", False) is not True:
+                        raise PolicyViolationError(
+                            f"FAIL-CLOSED: Verified contractor split consent is not recorded for '{obl.payee_name}'. Execution blocked."
+                        )
+
+                    if (obl.payee_name.strip().lower() != action.recipient.strip().lower() and
+                        obl.payee_email.strip().lower() != action.recipient.strip().lower()):
+                        raise PolicyViolationError(
+                            f"FAIL-CLOSED: Consent contractor '{obl.payee_name}' does not match action recipient '{action.recipient}'. Execution blocked."
+                        )
                 if "@" in recip_clean:
                     recipient_email = recip_clean
                 else:

@@ -2,7 +2,7 @@ import os
 import logging
 from pathlib import Path
 from typing import List, Optional
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 
@@ -92,6 +92,58 @@ class Settings(BaseSettings):
     @property
     def allowed_origins_list(self) -> List[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> 'Settings':
+        if not self.DEV_MODE:
+            # 1. Enforce that demo/simulation endpoints are strictly disabled in production
+            object.__setattr__(self, "ALLOW_DEMO_ENDPOINTS", False)
+
+            # 2. Reject known default secrets in production
+            known_insecure = {
+                "cashflow-lifeline-sandbox-hmac-secret-key-32bytes",
+                "cashflow-lifeline-jwt-super-secure-token-secret-2026",
+                "change-this-to-a-secure-random-32-byte-secret-key-1234",
+                "change-this-to-a-secure-jwt-signing-secret-key-5678",
+                "cashflow-lifeline-otp-pepper-secret-key-32b",
+                "change-this-to-a-cryptographically-secure-otp-pepper-9012"
+            }
+            if self.APPROVAL_SECRET in known_insecure or len(self.APPROVAL_SECRET) < 32:
+                raise ValueError("CRITICAL SECURITY VIOLATION: Production mode requires a unique, high-entropy APPROVAL_SECRET (>= 32 chars). Default secrets rejected.")
+            if self.JWT_SECRET in known_insecure or len(self.JWT_SECRET) < 32:
+                raise ValueError("CRITICAL SECURITY VIOLATION: Production mode requires a unique, high-entropy JWT_SECRET (>= 32 chars). Default secrets rejected.")
+            if self.OTP_PEPPER in known_insecure or len(self.OTP_PEPPER) < 32:
+                raise ValueError("CRITICAL SECURITY VIOLATION: Production mode requires a unique, high-entropy OTP_PEPPER (>= 32 chars). Default secrets rejected.")
+
+            # 3. Require valid registered PayPal webhook ID in production
+            if not self.PAYPAL_WEBHOOK_ID or "placeholder" in self.PAYPAL_WEBHOOK_ID.lower():
+                raise ValueError("CRITICAL: Production mode requires a valid registered PAYPAL_WEBHOOK_ID.")
+
+            # 4. Require valid PayPal Sandbox API credentials in production (reject placeholders)
+            insecure_paypal_ids = {
+                "sandbox_client_id_placeholder",
+                "your_paypal_sandbox_client_id",
+                "placeholder",
+                ""
+            }
+            if not self.PAYPAL_CLIENT_ID or self.PAYPAL_CLIENT_ID.lower() in insecure_paypal_ids or "placeholder" in self.PAYPAL_CLIENT_ID.lower():
+                raise ValueError("CRITICAL SECURITY VIOLATION: Production mode requires valid PayPal credentials. Placeholder PAYPAL_CLIENT_ID is rejected.")
+            if not self.PAYPAL_CLIENT_SECRET or "placeholder" in self.PAYPAL_CLIENT_SECRET.lower() or len(self.PAYPAL_CLIENT_SECRET) < 8:
+                raise ValueError("CRITICAL SECURITY VIOLATION: Production mode requires valid PayPal credentials. Placeholder PAYPAL_CLIENT_SECRET is rejected.")
+        return self
+
+    def get_safe_log_summary(self) -> dict:
+        """Returns non-sensitive configuration parameters with all keys and secrets redacted."""
+        return {
+            "DEV_MODE": self.DEV_MODE,
+            "ALLOW_DEMO_ENDPOINTS": self.ALLOW_DEMO_ENDPOINTS,
+            "PAYPAL_BASE_URL": self.PAYPAL_BASE_URL,
+            "PAYPAL_CLIENT_ID_PREVIEW": (self.PAYPAL_CLIENT_ID[:6] + "...") if self.PAYPAL_CLIENT_ID else None,
+            "LLM_PROVIDER": self.LLM_PROVIDER,
+            "EMAIL_PROVIDER": self.EMAIL_PROVIDER,
+            "SMS_PROVIDER": self.SMS_PROVIDER,
+            "PORT": self.PORT
+        }
 
     @field_validator("PAYPAL_BASE_URL")
     @classmethod

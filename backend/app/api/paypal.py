@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from backend.app.db import get_db
 from backend.app.config import settings
 from backend.app.models import PayPalConnection, Owner
-from backend.app.auth.deps import get_current_user
+from backend.app.auth.deps import get_verified_current_user
 from backend.app.paypal.client import paypal_client, PayPalError
 from backend.app.schemas import PayPalConnectionStatus, SandboxTestResponse
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/paypal", tags=["PayPal Connection"])
 @router.get("/connection", response_model=PayPalConnectionStatus)
 def get_connection_status(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """Retrieves PayPal sandbox connection health for the authenticated user."""
     conn = db.query(PayPalConnection).filter(PayPalConnection.owner_id == current_user.id).first()
@@ -40,7 +40,7 @@ def get_connection_status(
 @router.post("/test-connection", response_model=SandboxTestResponse)
 async def test_connection(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """Hits the real PayPal Sandbox OAuth2 token endpoint to verify client credentials for user."""
     try:
@@ -82,7 +82,7 @@ async def test_connection(
 @router.post("/webhook/register")
 async def register_webhook(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """Registers application webhook URL with PayPal Sandbox API."""
     webhook_url = f"{settings.PUBLIC_BASE_URL.rstrip('/')}/webhooks/paypal"

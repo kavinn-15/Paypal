@@ -150,22 +150,21 @@ async def test_webhook_replay_safety():
         assert res_bal_before.status_code == 200
         bal_before = res_bal_before.json()["current_confirmed_balance"]
 
-        # First webhook delivery for invoice INV2-DEMO-APEX-001
+        # First simulated webhook delivery for invoice INV2-DEMO-APEX-001
         res1 = await client.post("/dev/simulate-webhook", json={"paypal_invoice_id": "INV2-DEMO-APEX-001"}, headers=headers)
         assert res1.status_code == 200
+        assert res1.json()["simulated"] is True
 
-        # Check balance after first delivery
+        # Check balance after simulation: simulated payments NEVER mutate confirmed balance!
         res_bal_after1 = await client.get("/finance/summary", headers=headers)
         bal_after1 = res_bal_after1.json()["current_confirmed_balance"]
-        assert bal_after1 == bal_before + 2000.0
+        assert bal_after1 == bal_before
 
-        # Replay the EXACT SAME invoice payment webhook
+        # Replay the simulated webhook
         res2 = await client.post("/dev/simulate-webhook", json={"paypal_invoice_id": "INV2-DEMO-APEX-001"}, headers=headers)
         assert res2.status_code == 200
-        assert res2.json()["result"]["status"] == "already_processed"
-        assert res2.json()["result"]["reason"] == "duplicate_payment_event_ignored"
 
-        # Balance MUST NOT be credited a second time
+        # Balance MUST NOT be credited by simulation
         res_bal_after2 = await client.get("/finance/summary", headers=headers)
         bal_after2 = res_bal_after2.json()["current_confirmed_balance"]
-        assert bal_after2 == bal_after1
+        assert bal_after2 == bal_before

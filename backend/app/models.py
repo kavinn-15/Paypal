@@ -95,6 +95,7 @@ class Invoice(Base):
     status = Column(String(50), nullable=False, default="SENT")  # DRAFT | SENT | PAID | CANCELLED
     discount_applied = Column(Numeric(5, 2), default=Decimal("0.00"), nullable=False)  # e.g. 3.00 for 3%
     pay_link = Column(String(1024), nullable=True)
+    is_simulated_paid = Column(Boolean, default=False, nullable=False)
 
     client = relationship("Client", back_populates="invoices")
     history_records = relationship("PaymentHistory", back_populates="invoice")
@@ -111,6 +112,7 @@ class PaymentHistory(Base):
     paid_date = Column(DateTime, nullable=False)
     days_late = Column(Integer, nullable=False)
     source = Column(String(50), nullable=False, default="paypal")  # "paypal" | "seeded"
+    transaction_reference = Column(String(255), nullable=True, index=True)
 
     client = relationship("Client", back_populates="payment_history")
     invoice = relationship("Invoice", back_populates="history_records")
@@ -127,6 +129,10 @@ class Obligation(Base):
     currency = Column(String(10), nullable=False, default="USD")
     due_date = Column(DateTime, nullable=False, index=True)
     split_allowed = Column(Boolean, default=False, nullable=False)
+    split_consent_recorded = Column(Boolean, default=False, nullable=False)
+    split_consent_source = Column(String(100), nullable=True)  # written_agreement | contractor_email | demo_consent
+    split_consent_timestamp = Column(DateTime, nullable=True)
+    split_consent_is_simulated = Column(Boolean, default=False, nullable=False)
     status = Column(String(50), default="pending", nullable=False)  # pending | split_agreed | paid
 
     owner = relationship("Owner", back_populates="obligations")
@@ -239,6 +245,7 @@ class Action(Base):
     state = Column(String(50), nullable=False, default="proposed")  # proposed | approved | executed | confirmed | failed
     idempotency_key = Column(String(255), unique=True, nullable=False, index=True)
     approval_hash = Column(String(255), nullable=False)
+    approved_payload_hash = Column(String(64), nullable=True)  # SHA-256 of exact canonical payload
     approved_at = Column(DateTime, nullable=True)
     executed_at = Column(DateTime, nullable=True)
     confirmed_at = Column(DateTime, nullable=True)

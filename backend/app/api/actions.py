@@ -4,7 +4,7 @@ from typing import List
 from backend.app.db import get_db
 from backend.app.models import Action, Owner
 from backend.app.schemas import ActionOut, ApprovalRequest, ExecuteRequest
-from backend.app.auth.deps import get_current_user
+from backend.app.auth.deps import get_verified_current_user
 from backend.app.guardrail.state_machine import GuardrailStateMachine, ActionState, InvalidStateTransitionError
 from backend.app.guardrail.policy import PolicyViolationError
 from backend.app.services.execution import ActionExecutionService
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/actions", tags=["Guardrail Actions & Approvals"])
 @router.get("", response_model=List[ActionOut])
 def list_actions(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """Lists actions scoped strictly to the authenticated owner."""
     return db.query(Action).filter(Action.owner_id == current_user.id).order_by(Action.id.desc()).all()
@@ -25,7 +25,7 @@ def list_actions(
 def get_action(
     action_id: int,
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """Retrieves an action strictly owned by the authenticated user."""
     action = db.query(Action).filter(
@@ -42,7 +42,7 @@ def approve_action(
     action_id: int,
     payload: ApprovalRequest,
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Owner UI Approval endpoint:
@@ -75,7 +75,7 @@ async def execute_action(
     action_id: int,
     payload: ExecuteRequest,
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Executes an approved action through the PayPal Sandbox.
