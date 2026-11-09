@@ -13,7 +13,7 @@ from backend.app.guardrail.state_machine import GuardrailStateMachine, ActionSta
 from backend.app.guardrail.policy import PolicyViolationError
 from backend.app.guardrail.approval import (
     generate_approval_hash, verify_approval_hash, compute_action_payload,
-    generate_payload_hash, build_canonical_payload
+    generate_payload_hash, build_canonical_payload, generate_canonical_approval_signature
 )
 from backend.app.agents.planner import RescuePlanEngine
 from backend.app.agents.forecaster import ForecasterAgent
@@ -113,6 +113,7 @@ def test_simulated_payment_cannot_confirm_real_action(setup_db):
             "event_type": "INVOICING.INVOICE.PAID",
             "resource": {
                 "id": inv_ref,
+                "transaction_id": "TX-REAL-001",
                 "amount": {"value": "2000.00"}
             }
         }
@@ -241,7 +242,6 @@ def test_plan_c_consent_enforcement_at_approval_and_execution():
         db.commit()
 
         idemp = f"act_split_noconsent_{datetime.now().timestamp()}"
-        h = generate_approval_hash(obl.payee_name, 1000.0, "USD", "SCHEDULE_PAYOUT_SPLIT", idemp)
 
         action = Action(
             owner_id=owner.id,
@@ -251,9 +251,17 @@ def test_plan_c_consent_enforcement_at_approval_and_execution():
             currency="USD",
             state=ActionState.PROPOSED,
             idempotency_key=idemp,
-            approval_hash=h
+            obligation_id=obl.id,
+            payout_recipient_email=obl.payee_email,
+            approval_version=2,
+            approval_hash=""
         )
         db.add(action)
+        db.commit()
+
+        cp = compute_action_payload(action)
+        sig = generate_canonical_approval_signature(generate_payload_hash(cp))
+        action.approval_hash = sig
         db.commit()
 
         # Attempt to approve without contractor consent -> MUST FAIL
@@ -263,13 +271,14 @@ def test_plan_c_consent_enforcement_at_approval_and_execution():
                 action=action,
                 target_state=ActionState.APPROVED,
                 actor="owner",
-                approval_hash=h
+                approval_hash=sig
             )
 
         # Now record consent explicitly
         obl.split_consent_recorded = True
         obl.split_consent_source = "written_email_agreement"
         obl.split_consent_timestamp = datetime.now(timezone.utc)
+        obl.split_consent_is_simulated = False
         db.commit()
 
         # Now approval succeeds
@@ -278,7 +287,7 @@ def test_plan_c_consent_enforcement_at_approval_and_execution():
             action=action,
             target_state=ActionState.APPROVED,
             actor="owner",
-            approval_hash=h
+            approval_hash=sig
         )
         assert action.state == ActionState.APPROVED
 
@@ -852,6 +861,7 @@ def test_overpayment_flagged_and_partial_payment():
             "event_type": "INVOICING.INVOICE.PAID",
             "resource": {
                 "id": inv_over.paypal_invoice_id,
+                "transaction_id": f"TX-OVER-{datetime.now().timestamp()}",
                 "amount": {"value": "1500.00"}
             }
         }, is_simulated=False)
@@ -859,7 +869,8 @@ def test_overpayment_flagged_and_partial_payment():
         db.refresh(inv_over)
         assert res_over["status"] == "flagged_manual_review"
         assert res_over["reason"] == "overpayment_detected"
-        assert inv_over.status == "SENT"  # NOT marked PAID!
+        assert inv_over.status == "OVERPAID"  # Flagged OVERPAID, NOT marked PAID!
+        assert inv_over.status != "PAID"
 
         # 2. Partial payment: webhook with $400 on $1000 invoice
         res_part = process_webhook_event(db, {
@@ -867,6 +878,7 @@ def test_overpayment_flagged_and_partial_payment():
             "event_type": "INVOICING.INVOICE.PAID",
             "resource": {
                 "id": inv_partial.paypal_invoice_id,
+                "transaction_id": f"TX-PART-{datetime.now().timestamp()}",
                 "amount": {"value": "400.00"}
             }
         }, is_simulated=False)
@@ -909,3 +921,1691 @@ def test_production_config_rejects_placeholders():
             JWT_SECRET="super-secure-production-jwt-signing-secret-32b-length",
             OTP_PEPPER="super-secure-production-otp-pepper-secret-32b-length"
         )
+
+
+# =========================================================================
+# COMPREHENSIVE TESTS FOR FIXES 1 - 5
+# =========================================================================
+
+# --- FIX 1: Prevent simulated consent from authorizing real payouts ---
+
+def test_genuine_consent_approves_real_payout():
+    """Fix 1: Genuine contractor consent (is_simulated=False) approves a real payout action."""
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        obl = Obligation(
+            owner_id=owner.id,
+            payee_name=f"Genuine Contractor {datetime.now().timestamp()}",
+            payee_email="genuine@contractor.example.com",
+            amount=1500.0,
+            currency="USD",
+            due_date=datetime.now(timezone.utc) + timedelta(days=4),
+            split_allowed=True,
+            split_consent_recorded=True,
+            split_consent_source="signed_pda_form",
+            split_consent_timestamp=datetime.now(timezone.utc),
+            split_consent_is_simulated=False,
+            status="pending"
+        )
+        db.add(obl)
+        db.commit()
+
+        action = Action(
+            owner_id=owner.id,
+            action_type="SCHEDULE_PAYOUT_SPLIT",
+            recipient=obl.payee_name,
+            amount=750.0,
+            currency="USD",
+            state=ActionState.PROPOSED,
+            idempotency_key=f"act_genuine_{datetime.now().timestamp()}",
+            obligation_id=obl.id,
+            payout_recipient_email=obl.payee_email,
+            approval_version=2,
+            is_simulated=False,
+            approval_hash=""
+        )
+        db.add(action)
+        db.commit()
+
+        cp = compute_action_payload(action)
+        sig = generate_canonical_approval_signature(generate_payload_hash(cp))
+
+        approved_act = GuardrailStateMachine.transition(
+            db=db,
+            action=action,
+            target_state=ActionState.APPROVED,
+            actor="owner",
+            approval_hash=sig
+        )
+        assert approved_act.state == ActionState.APPROVED
+        assert approved_act.obligation_id == obl.id
+        assert approved_act.payout_recipient_email == "genuine@contractor.example.com"
+    finally:
+        db.close()
+
+
+def test_simulated_consent_rejects_real_payout_approval():
+    """Fix 1: Simulated contractor consent (is_simulated=True) strictly rejects real payout approval."""
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        obl = Obligation(
+            owner_id=owner.id,
+            payee_name=f"Simulated Contractor {datetime.now().timestamp()}",
+            payee_email="simulated@contractor.example.com",
+            amount=1500.0,
+            currency="USD",
+            due_date=datetime.now(timezone.utc) + timedelta(days=4),
+            split_allowed=True,
+            split_consent_recorded=True,
+            split_consent_source="written_email_agreement",
+            split_consent_timestamp=datetime.now(timezone.utc),
+            split_consent_is_simulated=True,  # SIMULATED!
+            status="pending"
+        )
+        db.add(obl)
+        db.commit()
+
+        action = Action(
+            owner_id=owner.id,
+            action_type="SCHEDULE_PAYOUT_SPLIT",
+            recipient=obl.payee_name,
+            amount=750.0,
+            currency="USD",
+            state=ActionState.PROPOSED,
+            idempotency_key=f"act_sim_reject_{datetime.now().timestamp()}",
+            obligation_id=obl.id,
+            payout_recipient_email=obl.payee_email,
+            approval_version=2,
+            is_simulated=False,  # Real action!
+            approval_hash=""
+        )
+        db.add(action)
+        db.commit()
+
+        cp = compute_action_payload(action)
+        sig = generate_canonical_approval_signature(generate_payload_hash(cp))
+
+        with pytest.raises(InvalidStateTransitionError, match="SIMULATED CONSENT REJECTED"):
+            GuardrailStateMachine.transition(
+                db=db,
+                action=action,
+                target_state=ActionState.APPROVED,
+                actor="owner",
+                approval_hash=sig
+            )
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_simulated_consent_rejects_real_payout_execution():
+    """Fix 1: Execution fails-closed if contractor consent is simulated."""
+    from backend.app.services.execution import ActionExecutionService
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        obl = Obligation(
+            owner_id=owner.id,
+            payee_name=f"Simulated Exec Contractor {datetime.now().timestamp()}",
+            payee_email="simexec@contractor.example.com",
+            amount=1200.0,
+            currency="USD",
+            due_date=datetime.now(timezone.utc) + timedelta(days=4),
+            split_allowed=True,
+            split_consent_recorded=True,
+            split_consent_source="written_email_agreement",
+            split_consent_timestamp=datetime.now(timezone.utc),
+            split_consent_is_simulated=True,
+            status="pending"
+        )
+        db.add(obl)
+        db.commit()
+
+        action = Action(
+            owner_id=owner.id,
+            action_type="SCHEDULE_PAYOUT_SPLIT",
+            recipient=obl.payee_name,
+            amount=600.0,
+            currency="USD",
+            state=ActionState.APPROVED,
+            idempotency_key=f"act_sim_exec_{datetime.now().timestamp()}",
+            obligation_id=obl.id,
+            payout_recipient_email=obl.payee_email,
+            approval_version=2,
+            is_simulated=False,
+            approval_hash=""
+        )
+        db.add(action)
+        db.commit()
+
+        cp = compute_action_payload(action)
+        p_hash = generate_payload_hash(cp)
+        action.approved_payload_hash = p_hash
+        action.approval_hash = generate_canonical_approval_signature(p_hash)
+        db.commit()
+
+        with pytest.raises(PolicyViolationError, match="SIMULATED CONSENT REJECTED"):
+            await ActionExecutionService.execute_action(db, action, actor="owner")
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_permission_revoked_after_approval_fails_execution():
+    """Fix 1: Execution fails-closed if split permission is revoked after approval."""
+    from backend.app.services.execution import ActionExecutionService
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        obl = Obligation(
+            owner_id=owner.id,
+            payee_name=f"Revoke Perm Contractor {datetime.now().timestamp()}",
+            payee_email="revokeperm@contractor.example.com",
+            amount=1000.0,
+            currency="USD",
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            split_allowed=True,
+            split_consent_recorded=True,
+            split_consent_is_simulated=False,
+            status="pending"
+        )
+        db.add(obl)
+        db.commit()
+
+        action = Action(
+            owner_id=owner.id,
+            action_type="SCHEDULE_PAYOUT_SPLIT",
+            recipient=obl.payee_name,
+            amount=500.0,
+            currency="USD",
+            state=ActionState.PROPOSED,
+            idempotency_key=f"act_rev_perm_{datetime.now().timestamp()}",
+            obligation_id=obl.id,
+            payout_recipient_email=obl.payee_email,
+            approval_version=2,
+            approval_hash=""
+        )
+        db.add(action)
+        db.commit()
+
+        cp = compute_action_payload(action)
+        sig = generate_canonical_approval_signature(generate_payload_hash(cp))
+        approved = GuardrailStateMachine.transition(
+            db=db, action=action, target_state=ActionState.APPROVED, actor="owner", approval_hash=sig
+        )
+        assert approved.state == ActionState.APPROVED
+
+        # Revoke permission before execution
+        obl.split_allowed = False
+        db.commit()
+
+        with pytest.raises(PolicyViolationError, match="Split permission is not granted"):
+            await ActionExecutionService.execute_action(db, approved, actor="owner")
+    finally:
+        db.close()
+
+
+def test_demo_simulation_remains_available():
+    """Fix 1: Demo Plan C is marked SIMULATED CONSENT — DEMO ONLY and produces simulated action."""
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        # Seeded Marcus Sterling has split_consent_is_simulated=True
+        marcus = db.query(Obligation).filter(
+            Obligation.payee_name == "Marcus Sterling",
+            Obligation.owner_id == owner.id
+        ).first()
+        assert marcus is not None
+        assert marcus.split_consent_is_simulated is True
+
+        forecaster = ForecasterAgent(db)
+        fc = forecaster.run_forecast(obligation_id=marcus.id, owner_id=owner.id)
+
+        planner = RescuePlanEngine(db)
+        comparison = planner.generate_plans_for_forecast(fc)
+        plan_c = next((p for p in comparison.plans if p.plan_type == "C"), None)
+        assert plan_c is not None
+
+        # Verify explicit simulated consent warning label
+        assert "SIMULATED CONSENT — DEMO ONLY" in plan_c.remaining_risk or "SIMULATED CONSENT — DEMO ONLY" in plan_c.rationale
+
+        payout_act = plan_c.primary_action
+        assert payout_act is not None
+        assert payout_act.is_simulated is True
+        assert payout_act.approval_version == 2
+        assert payout_act.obligation_id == marcus.id
+        assert payout_act.payout_recipient_email == marcus.payee_email.strip().lower()
+    finally:
+        db.close()
+
+
+# --- FIX 2: Bind actual PayPal payout destination to owner approval ---
+
+def test_payout_destination_bound_to_approval():
+    """Fix 2: Payout destination email and obligation ID are cryptographically bound."""
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        obl = Obligation(
+            owner_id=owner.id,
+            payee_name=f"Bound Dest Contractor {datetime.now().timestamp()}",
+            payee_email="bound.destination@contractor.example.com",
+            amount=800.0,
+            currency="USD",
+            due_date=datetime.now(timezone.utc) + timedelta(days=3),
+            split_allowed=True,
+            split_consent_recorded=True,
+            split_consent_is_simulated=False,
+            status="pending"
+        )
+        db.add(obl)
+        db.commit()
+
+        action = Action(
+            owner_id=owner.id,
+            action_type="SCHEDULE_PAYOUT_SPLIT",
+            recipient=obl.payee_name,
+            amount=400.0,
+            currency="USD",
+            state=ActionState.PROPOSED,
+            idempotency_key=f"act_bound_{datetime.now().timestamp()}",
+            obligation_id=obl.id,
+            payout_recipient_email=obl.payee_email,
+            approval_version=2,
+            approval_hash=""
+        )
+        db.add(action)
+        db.commit()
+
+        cp = compute_action_payload(action)
+        assert cp["payout_recipient_email"] == "bound.destination@contractor.example.com"
+        assert cp["obligation_id"] == obl.id
+        assert cp["contractor_name"] == obl.payee_name
+
+        sig = generate_canonical_approval_signature(generate_payload_hash(cp))
+        approved = GuardrailStateMachine.transition(
+            db=db, action=action, target_state=ActionState.APPROVED, actor="owner", approval_hash=sig
+        )
+        assert approved.payout_recipient_email == "bound.destination@contractor.example.com"
+        assert approved.obligation_id == obl.id
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_change_paypal_email_after_approval_rejects_execution():
+    """Fix 2: Tampering with contractor payee_email after approval rejects execution."""
+    from backend.app.services.execution import ActionExecutionService
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        obl = Obligation(
+            owner_id=owner.id,
+            payee_name=f"Email Tamper Contractor {datetime.now().timestamp()}",
+            payee_email="legit.payee@example.com",
+            amount=1000.0,
+            currency="USD",
+            due_date=datetime.now(timezone.utc) + timedelta(days=3),
+            split_allowed=True,
+            split_consent_recorded=True,
+            split_consent_is_simulated=False,
+            status="pending"
+        )
+        db.add(obl)
+        db.commit()
+
+        action = Action(
+            owner_id=owner.id,
+            action_type="SCHEDULE_PAYOUT_SPLIT",
+            recipient=obl.payee_name,
+            amount=500.0,
+            currency="USD",
+            state=ActionState.PROPOSED,
+            idempotency_key=f"act_email_tamper_{datetime.now().timestamp()}",
+            obligation_id=obl.id,
+            payout_recipient_email=obl.payee_email,
+            approval_version=2,
+            approval_hash=""
+        )
+        db.add(action)
+        db.commit()
+
+        cp = compute_action_payload(action)
+        sig = generate_canonical_approval_signature(generate_payload_hash(cp))
+        approved = GuardrailStateMachine.transition(
+            db=db, action=action, target_state=ActionState.APPROVED, actor="owner", approval_hash=sig
+        )
+        assert approved.state == ActionState.APPROVED
+
+        # Attacker changes payee_email in obligations table after approval
+        obl.payee_email = "attacker.destination@fraud.com"
+        db.commit()
+
+        with pytest.raises(PolicyViolationError, match="DESTINATION TAMPERED"):
+            await ActionExecutionService.execute_action(db, approved, actor="owner")
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_change_obligation_id_after_approval_rejects_execution():
+    """Fix 2: Tampering with action.obligation_id after approval rejects execution."""
+    from backend.app.services.execution import ActionExecutionService
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        obl = Obligation(
+            owner_id=owner.id,
+            payee_name=f"Obl ID Tamper Contractor {datetime.now().timestamp()}",
+            payee_email="obl.id.tamper@example.com",
+            amount=1000.0,
+            currency="USD",
+            due_date=datetime.now(timezone.utc) + timedelta(days=3),
+            split_allowed=True,
+            split_consent_recorded=True,
+            split_consent_is_simulated=False,
+            status="pending"
+        )
+        db.add(obl)
+        db.commit()
+
+        action = Action(
+            owner_id=owner.id,
+            action_type="SCHEDULE_PAYOUT_SPLIT",
+            recipient=obl.payee_name,
+            amount=500.0,
+            currency="USD",
+            state=ActionState.PROPOSED,
+            idempotency_key=f"act_obl_tamper_{datetime.now().timestamp()}",
+            obligation_id=obl.id,
+            payout_recipient_email=obl.payee_email,
+            approval_version=2,
+            approval_hash=""
+        )
+        db.add(action)
+        db.commit()
+
+        cp = compute_action_payload(action)
+        sig = generate_canonical_approval_signature(generate_payload_hash(cp))
+        approved = GuardrailStateMachine.transition(
+            db=db, action=action, target_state=ActionState.APPROVED, actor="owner", approval_hash=sig
+        )
+        assert approved.state == ActionState.APPROVED
+
+        # Create second obligation to tamper with
+        obl2 = Obligation(
+            owner_id=owner.id,
+            payee_name=f"Second Contractor {datetime.now().timestamp()}",
+            payee_email="second@contractor.example.com",
+            amount=1000.0,
+            currency="USD",
+            due_date=datetime.now(timezone.utc) + timedelta(days=3),
+            split_allowed=True,
+            split_consent_recorded=True,
+            split_consent_is_simulated=False,
+            status="pending"
+        )
+        db.add(obl2)
+        db.commit()
+
+        # Tamper with obligation_id
+        approved.obligation_id = obl2.id
+        db.commit()
+
+        with pytest.raises(PolicyViolationError, match="TAMPERING DETECTED"):
+            await ActionExecutionService.execute_action(db, approved, actor="owner")
+    finally:
+        db.close()
+
+
+def test_missing_or_invalid_payout_email_blocks_approval():
+    """Fix 2: Missing or invalid PayPal destination email blocks transition to APPROVED."""
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        obl = Obligation(
+            owner_id=owner.id,
+            payee_name=f"Invalid Email Contractor {datetime.now().timestamp()}",
+            payee_email="invalid-email-address-no-at-sign",  # Invalid email format!
+            amount=1000.0,
+            currency="USD",
+            due_date=datetime.now(timezone.utc) + timedelta(days=3),
+            split_allowed=True,
+            split_consent_recorded=True,
+            split_consent_is_simulated=False,
+            status="pending"
+        )
+        db.add(obl)
+        db.commit()
+
+        action = Action(
+            owner_id=owner.id,
+            action_type="SCHEDULE_PAYOUT_SPLIT",
+            recipient=obl.payee_name,
+            amount=500.0,
+            currency="USD",
+            state=ActionState.PROPOSED,
+            idempotency_key=f"act_invemail_{datetime.now().timestamp()}",
+            obligation_id=obl.id,
+            payout_recipient_email=obl.payee_email,
+            approval_version=2,
+            approval_hash=""
+        )
+        db.add(action)
+        db.commit()
+
+        cp = compute_action_payload(action)
+        sig = generate_canonical_approval_signature(generate_payload_hash(cp))
+
+        with pytest.raises(InvalidStateTransitionError, match="INVALID PAYOUT DESTINATION"):
+            GuardrailStateMachine.transition(
+                db=db, action=action, target_state=ActionState.APPROVED, actor="owner", approval_hash=sig
+            )
+    finally:
+        db.close()
+
+
+# --- FIX 3: Remove legacy approval bypass for new actions ---
+
+def test_new_action_receives_approval_version_2():
+    """Fix 3: All newly created actions default to approval_version = 2."""
+    action = Action(
+        owner_id=1,
+        action_type="SEND_REMINDER",
+        recipient="Test Recipient",
+        amount=500.0,
+        currency="USD",
+        state=ActionState.PROPOSED,
+        idempotency_key=f"act_ver2_{datetime.now().timestamp()}"
+    )
+    assert action.approval_version == 2
+
+
+def test_new_action_without_plan_or_message_requires_canonical_approval():
+    """Fix 3: A standalone v2 action without plan or message strictly rejects compact signature."""
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        idemp = f"act_raw_v2_{datetime.now().timestamp()}"
+        action = Action(
+            owner_id=owner.id,
+            action_type="SEND_REMINDER",
+            recipient="Test Client Co",
+            amount=1000.0,
+            currency="USD",
+            state=ActionState.PROPOSED,
+            idempotency_key=idemp,
+            approval_version=2,
+            approval_hash=""
+        )
+        db.add(action)
+        db.commit()
+
+        # Generate legacy 5-argument compact signature
+        compact_hash = generate_approval_hash("Test Client Co", 1000.0, "USD", "SEND_REMINDER", idemp)
+
+        # Attempt to approve v2 action with legacy signature -> MUST FAIL!
+        with pytest.raises(InvalidStateTransitionError, match="TAMPERING DETECTED"):
+            GuardrailStateMachine.transition(
+                db=db, action=action, target_state=ActionState.APPROVED, actor="owner", approval_hash=compact_hash
+            )
+    finally:
+        db.close()
+
+
+def test_missing_approval_version_blocks_approval():
+    """Fix 3: Action with approval_version=None is rejected during approval."""
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        idemp = f"act_no_ver_{datetime.now().timestamp()}"
+        action = Action(
+            owner_id=owner.id,
+            action_type="SEND_REMINDER",
+            recipient="Test Client Co",
+            amount=500.0,
+            currency="USD",
+            state=ActionState.PROPOSED,
+            idempotency_key=idemp,
+            approval_version=None,  # Missing!
+            approval_hash=""
+        )
+        db.add(action)
+        db.commit()
+
+        # Explicitly set approval_version to None on instance before transition check
+        action.approval_version = None
+
+        with pytest.raises(InvalidStateTransitionError, match="MISSING APPROVAL VERSION"):
+            GuardrailStateMachine.transition(
+                db=db, action=action, target_state=ActionState.APPROVED, actor="owner", approval_hash="any_hash"
+            )
+    finally:
+        db.close()
+
+
+def test_historical_v1_action_isolated():
+    """Fix 3: Historical v1 actions can use legacy compact signatures, but reject invalid ones."""
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        idemp = f"act_hist_v1_{datetime.now().timestamp()}"
+        action = Action(
+            owner_id=owner.id,
+            action_type="SEND_REMINDER",
+            recipient="Historical Client",
+            amount=800.0,
+            currency="USD",
+            state=ActionState.PROPOSED,
+            idempotency_key=idemp,
+            approval_version=1,  # Historical v1!
+            approval_hash=""
+        )
+        db.add(action)
+        db.commit()
+
+        valid_compact_hash = generate_approval_hash("Historical Client", 800.0, "USD", "SEND_REMINDER", idemp)
+        invalid_compact_hash = "invalid_hash_value"
+
+        # Invalid legacy hash fails
+        with pytest.raises(InvalidStateTransitionError, match="TAMPERING DETECTED"):
+            GuardrailStateMachine.transition(
+                db=db, action=action, target_state=ActionState.APPROVED, actor="owner", approval_hash=invalid_compact_hash
+            )
+
+        # Valid legacy hash succeeds for v1
+        approved = GuardrailStateMachine.transition(
+            db=db, action=action, target_state=ActionState.APPROVED, actor="owner", approval_hash=valid_compact_hash
+        )
+        assert approved.state == ActionState.APPROVED
+    finally:
+        db.close()
+
+
+# --- FIX 4: Correct cumulative partial-payment reconciliation ---
+
+def test_cumulative_partial_payments_reconciliation():
+    """Fix 4: $400 + $300 + $300 on $1,000 invoice transitions PARTIALLY_PAID -> PARTIALLY_PAID -> PAID."""
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-CUMULATIVE-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        # Step 1: $400 payment (Tx A)
+        tx_a = f"TX-A-{datetime.now().timestamp()}"
+        res1 = process_webhook_event(db, {
+            "id": f"WH-CUM-1-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "transaction_id": tx_a,
+                "amount": {"value": "400.00", "currency_code": "USD"}
+            }
+        }, is_simulated=False)
+        db.refresh(invoice)
+        assert res1["status"] == "success"
+        assert invoice.status == "PARTIALLY_PAID"
+        assert invoice.paid_date is None
+
+        # Step 2: $300 payment (Tx B)
+        tx_b = f"TX-B-{datetime.now().timestamp()}"
+        res2 = process_webhook_event(db, {
+            "id": f"WH-CUM-2-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "transaction_id": tx_b,
+                "amount": {"value": "300.00", "currency_code": "USD"}
+            }
+        }, is_simulated=False)
+        db.refresh(invoice)
+        assert res2["status"] == "success"
+        assert invoice.status == "PARTIALLY_PAID"
+        assert invoice.paid_date is None
+
+        # Step 3: $300 payment (Tx C) -> Reaches total $1,000
+        tx_c = f"TX-C-{datetime.now().timestamp()}"
+        res3 = process_webhook_event(db, {
+            "id": f"WH-CUM-3-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "transaction_id": tx_c,
+                "amount": {"value": "300.00", "currency_code": "USD"}
+            }
+        }, is_simulated=False)
+        db.refresh(invoice)
+        assert res3["status"] == "success"
+        assert invoice.status == "PAID"
+        assert invoice.paid_date is not None
+
+        # Step 4: Replay Tx A (duplicate delivery)
+        res_replay = process_webhook_event(db, {
+            "id": f"WH-REPLAY-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "transaction_id": tx_a,
+                "amount": {"value": "400.00", "currency_code": "USD"}
+            }
+        }, is_simulated=False)
+        db.refresh(invoice)
+        assert res_replay["status"] == "already_processed"
+        assert invoice.status == "PAID"
+
+        # Verify exactly 3 PaymentHistory records for this invoice
+        count = db.query(PaymentHistory).filter(PaymentHistory.invoice_id == invoice.id).count()
+        assert count == 3
+    finally:
+        db.close()
+
+
+def test_cumulative_overpayment_flagged_for_manual_review():
+    """Fix 4: Cumulative overpayment ($700 + $500 = $1,200 on $1,000) flags OVERPAID, not marked PAID."""
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-OVERPAY-CUM-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        # Payment 1: $700
+        process_webhook_event(db, {
+            "id": f"WH-OP-1-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "transaction_id": f"TX-OP-1-{datetime.now().timestamp()}",
+                "amount": {"value": "700.00", "currency_code": "USD"}
+            }
+        }, is_simulated=False)
+        db.refresh(invoice)
+        assert invoice.status == "PARTIALLY_PAID"
+
+        # Payment 2: $500 (Cumulative: $1,200)
+        res_over = process_webhook_event(db, {
+            "id": f"WH-OP-2-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "transaction_id": f"TX-OP-2-{datetime.now().timestamp()}",
+                "amount": {"value": "500.00", "currency_code": "USD"}
+            }
+        }, is_simulated=False)
+        db.refresh(invoice)
+        assert res_over["status"] == "flagged_manual_review"
+        assert res_over["reason"] == "overpayment_detected"
+        assert res_over["excess_amount"] == 200.0
+        assert invoice.status == "OVERPAID"
+        assert invoice.status != "PAID"
+
+        # Verify audit log recorded the excess amount
+        audit = db.query(AuditLog).filter(
+            AuditLog.event == "OVERPAYMENT_FLAGGED_FOR_MANUAL_REVIEW"
+        ).order_by(AuditLog.id.desc()).first()
+        assert audit is not None
+        assert audit.payload["excess_amount"] == 200.0
+        assert audit.payload["cumulative_received"] == 1200.0
+    finally:
+        db.close()
+
+
+def test_simulated_payment_does_not_contribute_to_cumulative_verified_total():
+    """Fix 4: Simulated payment does not add to authoritative PaymentHistory or cumulative verified total."""
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-SIM-ISOLATE-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        # Simulated payment of $400
+        process_webhook_event(db, {
+            "id": "WH-SIM-ISOLATE-001",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "400.00", "currency_code": "USD"}
+            }
+        }, is_simulated=True)
+        db.refresh(invoice)
+        assert invoice.is_simulated_paid is True
+        assert invoice.status == "SENT"
+
+        # Genuine payment of $400
+        res_real = process_webhook_event(db, {
+            "id": f"WH-REAL-ISOLATE-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "transaction_id": f"TX-REAL-{datetime.now().timestamp()}",
+                "amount": {"value": "400.00", "currency_code": "USD"}
+            }
+        }, is_simulated=False)
+        db.refresh(invoice)
+        assert res_real["status"] == "success"
+        # Since cumulative verified is $400 (not $800), invoice is PARTIALLY_PAID, NOT PAID!
+        assert invoice.status == "PARTIALLY_PAID"
+    finally:
+        db.close()
+
+
+# --- FIX 5: Database migration script & schema upgrade safety ---
+
+def test_database_migration_schema_upgrade_safe(tmp_path):
+    """Fix 5: Alembic migration upgrades existing schema cleanly without data loss."""
+    import sqlite3
+    from alembic.config import Config
+    from alembic import command
+
+    db_file = tmp_path / "test_migration.db"
+    db_uri = f"sqlite:///{db_file.as_posix()}"
+
+    # 1. Initialize previous schema (revision 4d5e6f7a8b9c)
+    conn = sqlite3.connect(db_file.as_posix())
+    cur = conn.cursor()
+    cur.execute("""
+    CREATE TABLE owners (
+        id INTEGER PRIMARY KEY,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        hashed_password VARCHAR(255) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        is_verified BOOLEAN DEFAULT 1,
+        country VARCHAR(50) DEFAULT 'US',
+        business_type VARCHAR(50) DEFAULT 'Freelancer',
+        preferred_currency VARCHAR(10) DEFAULT 'USD',
+        email_verified BOOLEAN DEFAULT 1,
+        account_status VARCHAR(20) DEFAULT 'active',
+        phone_country_code VARCHAR(8) DEFAULT '+91',
+        phone_verified BOOLEAN DEFAULT 0
+    );
+    """)
+    cur.execute("""
+    CREATE TABLE obligations (
+        id INTEGER PRIMARY KEY,
+        owner_id INTEGER REFERENCES owners(id),
+        payee_name VARCHAR(255) NOT NULL,
+        payee_email VARCHAR(255) NOT NULL,
+        amount NUMERIC(12, 2) NOT NULL,
+        currency VARCHAR(10) NOT NULL,
+        due_date DATETIME NOT NULL,
+        status VARCHAR(50) NOT NULL,
+        split_allowed BOOLEAN DEFAULT 0
+    );
+    """)
+    cur.execute("""
+    CREATE TABLE actions (
+        id INTEGER PRIMARY KEY,
+        owner_id INTEGER REFERENCES owners(id),
+        action_type VARCHAR(100) NOT NULL,
+        recipient VARCHAR(255) NOT NULL,
+        amount NUMERIC(12, 2) NOT NULL,
+        currency VARCHAR(10) NOT NULL,
+        state VARCHAR(50) NOT NULL,
+        idempotency_key VARCHAR(255) NOT NULL UNIQUE,
+        approval_hash VARCHAR(255) NOT NULL
+    );
+    """)
+    cur.execute("""
+    CREATE TABLE invoices (
+        id INTEGER PRIMARY KEY,
+        paypal_invoice_id VARCHAR(255) NOT NULL UNIQUE,
+        amount NUMERIC(12, 2) NOT NULL,
+        currency VARCHAR(10) NOT NULL,
+        status VARCHAR(50) NOT NULL
+    );
+    """)
+    cur.execute("""
+    CREATE TABLE payment_history (
+        id INTEGER PRIMARY KEY,
+        amount NUMERIC(12, 2) NOT NULL,
+        source VARCHAR(50) NOT NULL
+    );
+    """)
+    # Insert existing data
+    cur.execute("INSERT INTO owners (id, email, hashed_password, name) VALUES (1, 'mig_test@example.com', 'hash', 'Mig Test');")
+    cur.execute("INSERT INTO obligations (id, owner_id, payee_name, payee_email, amount, currency, due_date, status, split_allowed) VALUES (1, 1, 'Contractor Mig', 'mig@example.com', 500.0, 'USD', '2026-11-20 00:00:00', 'pending', 1);")
+    cur.execute("INSERT INTO actions (id, owner_id, action_type, recipient, amount, currency, state, idempotency_key, approval_hash) VALUES (1, 1, 'SEND_REMINDER', 'Client Mig', 300.0, 'USD', 'proposed', 'idemp_mig_1', 'hash123');")
+    conn.commit()
+    conn.close()
+
+    # 2. Stamp database at revision 4d5e6f7a8b9c
+    alembic_cfg = Config("alembic.ini")
+    alembic_cfg.set_main_option("sqlalchemy.url", db_uri)
+    command.stamp(alembic_cfg, "4d5e6f7a8b9c")
+
+    # 3. Upgrade to head (revision 5e6f7a8b9c0d)
+    command.upgrade(alembic_cfg, "head")
+
+    # 4. Verify new columns exist and existing data is preserved
+    conn = sqlite3.connect(db_file.as_posix())
+    cur = conn.cursor()
+
+    # Verify actions table has approval_version, obligation_id, payout_recipient_email
+    act_cols = {row[1] for row in cur.execute("PRAGMA table_info(actions);").fetchall()}
+    assert "approval_version" in act_cols
+    assert "obligation_id" in act_cols
+    assert "payout_recipient_email" in act_cols
+    assert "approved_payload_hash" in act_cols
+    assert "is_simulated" in act_cols
+
+    # Verify invoices table has is_simulated_paid
+    inv_cols = {row[1] for row in cur.execute("PRAGMA table_info(invoices);").fetchall()}
+    assert "is_simulated_paid" in inv_cols
+
+    # Verify obligations table has split_consent_*
+    obl_cols = {row[1] for row in cur.execute("PRAGMA table_info(obligations);").fetchall()}
+    assert "split_consent_recorded" in obl_cols
+    assert "split_consent_is_simulated" in obl_cols
+
+    # Verify payment_history has transaction_reference
+    ph_cols = {row[1] for row in cur.execute("PRAGMA table_info(payment_history);").fetchall()}
+    assert "transaction_reference" in ph_cols
+
+    # Verify existing records preserved intact
+    owner_rows = cur.execute("SELECT id, email, name FROM owners WHERE id=1;").fetchall()
+    assert len(owner_rows) == 1
+    assert owner_rows[0][1] == "mig_test@example.com"
+
+    obl_rows = cur.execute("SELECT id, payee_name, split_consent_is_simulated FROM obligations WHERE id=1;").fetchall()
+    assert len(obl_rows) == 1
+    assert obl_rows[0][1] == "Contractor Mig"
+    assert obl_rows[0][2] == 0  # Default value populated without error
+
+    act_rows = cur.execute("SELECT id, recipient, approval_version FROM actions WHERE id=1;").fetchall()
+    assert len(act_rows) == 1
+    assert act_rows[0][1] == "Client Mig"
+    assert act_rows[0][2] == 1  # Default value 1 applied
+
+    conn.close()
+
+
+# =========================================================================
+# REGRESSION TESTS: SIMULATED PAYOUT EXECUTION VULNERABILITY PREVENTION
+# =========================================================================
+
+@pytest.mark.asyncio
+async def test_simulated_plan_c_execution_never_calls_paypal_payout_api(monkeypatch):
+    """
+    REGRESSION TEST:
+    1. Create an actual simulated Plan C action using the existing planner.
+    2. Attempt to execute it.
+    3. Assert that paypal_client.create_payout() is NEVER called.
+    4. Verify that the demo simulation still works locally.
+    """
+    from backend.app.services.execution import ActionExecutionService
+    from backend.app.paypal.client import paypal_client
+
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        marcus = db.query(Obligation).filter(
+            Obligation.payee_name == "Marcus Sterling",
+            Obligation.owner_id == owner.id
+        ).first()
+        assert marcus is not None
+        assert marcus.split_consent_is_simulated is True
+
+        # Generate actual Plan C via RescuePlanEngine
+        forecaster = ForecasterAgent(db)
+        fc = forecaster.run_forecast(obligation_id=marcus.id, owner_id=owner.id)
+
+        planner = RescuePlanEngine(db)
+        comparison = planner.generate_plans_for_forecast(fc)
+        plan_c = next((p for p in comparison.plans if p.plan_type == "C"), None)
+        assert plan_c is not None
+
+        # Primary action is the simulated payout split
+        action = db.query(Action).filter(Action.id == plan_c.primary_action.id).first()
+        assert action is not None
+        assert action.is_simulated is True
+        assert action.state == ActionState.PROPOSED
+
+        # Owner approves canonical signature for demo action
+        cp = compute_action_payload(action)
+        sig = generate_canonical_approval_signature(generate_payload_hash(cp))
+        approved = GuardrailStateMachine.transition(
+            db=db, action=action, target_state=ActionState.APPROVED, actor="owner", approval_hash=sig
+        )
+        assert approved.state == ActionState.APPROVED
+
+        # Track any invocation of paypal_client.create_payout
+        payout_api_called = False
+
+        async def mock_create_payout(*args, **kwargs):
+            nonlocal payout_api_called
+            payout_api_called = True
+            raise RuntimeError("CRITICAL VULNERABILITY: paypal_client.create_payout() was invoked for a simulated action!")
+
+        monkeypatch.setattr(paypal_client, "create_payout", mock_create_payout)
+
+        # Execute the approved simulated action
+        executed = await ActionExecutionService.execute_action(db, approved, actor="owner")
+
+        # ASSERTION 1: Real PayPal API was NEVER invoked
+        assert payout_api_called is False, "CRITICAL VULNERABILITY: paypal_client.create_payout() must NEVER be called for simulated actions!"
+
+        # ASSERTION 2: Demo simulation works locally
+        assert executed.state == ActionState.EXECUTED
+        assert executed.is_simulated is True
+        assert executed.paypal_ref.startswith("SIM-PAYOUT-")
+
+        # ASSERTION 3: Explicit audit log recorded for local simulation
+        sim_audit = db.query(AuditLog).filter(
+            AuditLog.event == "ACTION_SIMULATED_PAYOUT_EXECUTED_LOCALLY",
+            AuditLog.owner_id == owner.id
+        ).order_by(AuditLog.id.desc()).first()
+        assert sim_audit is not None
+        assert sim_audit.payload["action_id"] == executed.id
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_genuine_action_follows_real_execution_path(monkeypatch):
+    """
+    REGRESSION TEST:
+    Verify that a genuinely approved, non-simulated action with real consent follows
+    the existing real execution path and dispatches through PayPal client.
+    """
+    from backend.app.services.execution import ActionExecutionService
+    from backend.app.paypal.client import paypal_client
+
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+
+        # Genuine contractor with authentic, non-simulated consent
+        genuine_obl = Obligation(
+            owner_id=owner.id,
+            payee_name=f"Genuine Exec Contractor {datetime.now().timestamp()}",
+            payee_email="genuine.payout@contractor.example.com",
+            amount=1000.0,
+            currency="USD",
+            due_date=datetime.now(timezone.utc) + timedelta(days=3),
+            split_allowed=True,
+            split_consent_recorded=True,
+            split_consent_source="signed_written_agreement",
+            split_consent_timestamp=datetime.now(timezone.utc),
+            split_consent_is_simulated=False,  # GENUINE!
+            status="pending"
+        )
+        db.add(genuine_obl)
+        db.commit()
+
+        # Non-simulated action
+        real_action = Action(
+            owner_id=owner.id,
+            action_type="SCHEDULE_PAYOUT_SPLIT",
+            recipient=genuine_obl.payee_name,
+            amount=500.0,
+            currency="USD",
+            state=ActionState.PROPOSED,
+            idempotency_key=f"act_real_payout_{datetime.now().timestamp()}",
+            obligation_id=genuine_obl.id,
+            payout_recipient_email=genuine_obl.payee_email,
+            approval_version=2,
+            is_simulated=False,
+            approval_hash=""
+        )
+        db.add(real_action)
+        db.commit()
+
+        cp = compute_action_payload(real_action)
+        sig = generate_canonical_approval_signature(generate_payload_hash(cp))
+        approved = GuardrailStateMachine.transition(
+            db=db, action=real_action, target_state=ActionState.APPROVED, actor="owner", approval_hash=sig
+        )
+        assert approved.state == ActionState.APPROVED
+
+        # Track call to paypal_client.create_payout
+        payout_called_with = None
+
+        async def mock_real_create_payout(recipient_email, amount, currency, sender_batch_id, note):
+            nonlocal payout_called_with
+            payout_called_with = {
+                "recipient_email": recipient_email,
+                "amount": amount,
+                "currency": currency,
+                "sender_batch_id": sender_batch_id
+            }
+            return {
+                "batch_header": {
+                    "payout_batch_id": "REAL-PAYPAL-BATCH-88888",
+                    "batch_status": "PENDING"
+                }
+            }
+
+        monkeypatch.setattr(paypal_client, "create_payout", mock_real_create_payout)
+
+        # Execute genuine action
+        executed = await ActionExecutionService.execute_action(db, approved, actor="owner")
+
+        # Verify real PayPal API was called with exact parameters
+        assert payout_called_with is not None
+        assert payout_called_with["recipient_email"] == "genuine.payout@contractor.example.com"
+        assert payout_called_with["amount"] == 500.0
+        assert executed.state == ActionState.EXECUTED
+        assert executed.paypal_ref == "REAL-PAYPAL-BATCH-88888"
+        assert executed.is_simulated is False
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_simulated_consent_strictly_cannot_authorize_real_payout(monkeypatch):
+    """
+    REGRESSION TEST:
+    Verify that simulated contractor consent cannot authorize a real payout under any condition:
+    - Attempting to approve a real action with simulated consent fails at state machine.
+    - Attempting to execute a real action with simulated consent fails-closed at execution service.
+    - paypal_client.create_payout() is NEVER called.
+    """
+    from backend.app.services.execution import ActionExecutionService
+    from backend.app.paypal.client import paypal_client
+
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+
+        # Contractor with simulated consent
+        sim_obl = Obligation(
+            owner_id=owner.id,
+            payee_name=f"Sim Consent Contractor {datetime.now().timestamp()}",
+            payee_email="sim.consent@contractor.example.com",
+            amount=1000.0,
+            currency="USD",
+            due_date=datetime.now(timezone.utc) + timedelta(days=3),
+            split_allowed=True,
+            split_consent_recorded=True,
+            split_consent_source="written_email_agreement",
+            split_consent_timestamp=datetime.now(timezone.utc),
+            split_consent_is_simulated=True,  # SIMULATED CONSENT!
+            status="pending"
+        )
+        db.add(sim_obl)
+        db.commit()
+
+        # Real action (not simulated)
+        real_action = Action(
+            owner_id=owner.id,
+            action_type="SCHEDULE_PAYOUT_SPLIT",
+            recipient=sim_obl.payee_name,
+            amount=500.0,
+            currency="USD",
+            state=ActionState.PROPOSED,
+            idempotency_key=f"act_real_with_sim_consent_{datetime.now().timestamp()}",
+            obligation_id=sim_obl.id,
+            payout_recipient_email=sim_obl.payee_email,
+            approval_version=2,
+            is_simulated=False,  # REAL ACTION!
+            approval_hash=""
+        )
+        db.add(real_action)
+        db.commit()
+
+        cp = compute_action_payload(real_action)
+        sig = generate_canonical_approval_signature(generate_payload_hash(cp))
+
+        # 1. Approval MUST be rejected by state machine
+        with pytest.raises(InvalidStateTransitionError, match="SIMULATED CONSENT REJECTED"):
+            GuardrailStateMachine.transition(
+                db=db, action=real_action, target_state=ActionState.APPROVED, actor="owner", approval_hash=sig
+            )
+
+        # 2. Even if action was forcefully marked APPROVED, execution service MUST fail-closed
+        real_action.state = ActionState.APPROVED
+        real_action.approved_payload_hash = generate_payload_hash(cp)
+        real_action.approval_hash = sig
+        db.commit()
+
+        payout_called = False
+
+        async def mock_fail_create_payout(*args, **kwargs):
+            nonlocal payout_called
+            payout_called = True
+            raise RuntimeError("CRITICAL VULNERABILITY: Payout API called with simulated consent!")
+
+        monkeypatch.setattr(paypal_client, "create_payout", mock_fail_create_payout)
+
+        with pytest.raises(PolicyViolationError, match="SIMULATED CONSENT REJECTED"):
+            await ActionExecutionService.execute_action(db, real_action, actor="owner")
+
+        assert payout_called is False
+    finally:
+        db.close()
+
+
+# =========================================================================
+# Payment Reconciliation & Database Hardening Tests
+# =========================================================================
+
+def test_cumulative_payment_reconciliation_400_300_300(setup_db):
+    """
+    Test 1: $400 + $300 + $300 on a $1,000 invoice accumulates to $1,000 and transitions to PAID.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-CUMULATIVE-1000-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        # Step 1: $400
+        p1 = {
+            "id": f"WH-CUM-1-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "400.00", "currency_code": "USD"},
+                "transaction_id": f"TX-CUM-P1-{datetime.now().timestamp()}"
+            }
+        }
+        res1 = process_webhook_event(db, p1, is_simulated=False)
+        db.refresh(invoice)
+        assert invoice.status == "PARTIALLY_PAID"
+
+        # Step 2: $300
+        p2 = {
+            "id": f"WH-CUM-2-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "300.00", "currency_code": "USD"},
+                "transaction_id": f"TX-CUM-P2-{datetime.now().timestamp()}"
+            }
+        }
+        res2 = process_webhook_event(db, p2, is_simulated=False)
+        db.refresh(invoice)
+        assert invoice.status == "PARTIALLY_PAID"
+
+        # Step 3: $300 (total = $1000.00)
+        p3 = {
+            "id": f"WH-CUM-3-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "300.00", "currency_code": "USD"},
+                "transaction_id": f"TX-CUM-P3-{datetime.now().timestamp()}"
+            }
+        }
+        res3 = process_webhook_event(db, p3, is_simulated=False)
+        db.refresh(invoice)
+        assert invoice.status == "PAID"
+        assert invoice.paid_date is not None
+
+        # Verify exactly 3 PaymentHistory records
+        history_count = db.query(PaymentHistory).filter(PaymentHistory.invoice_id == invoice.id).count()
+        assert history_count == 3
+    finally:
+        db.close()
+
+
+def test_cumulative_overpayment_700_500(setup_db):
+    """
+    Test 2: $700 + $500 on a $1,000 invoice totals $1,200.
+    Must mark invoice OVERPAID, flag for manual review, and quarantine webhook event.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-OVERPAY-700-500-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        # Step 1: $700
+        p1 = {
+            "id": f"WH-OVP-1-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "700.00", "currency_code": "USD"},
+                "transaction_id": f"TX-OVP-P1-{datetime.now().timestamp()}"
+            }
+        }
+        process_webhook_event(db, p1, is_simulated=False)
+        db.refresh(invoice)
+        assert invoice.status == "PARTIALLY_PAID"
+
+        # Step 2: $500 (total = $1,200 > $1,000)
+        p2 = {
+            "id": f"WH-OVP-2-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "500.00", "currency_code": "USD"},
+                "transaction_id": f"TX-OVP-P2-{datetime.now().timestamp()}"
+            }
+        }
+        evt_rec = WebhookEvent(
+            owner_id=owner.id,
+            paypal_event_id=p2["id"],
+            event_type="INVOICING.INVOICE.PAID",
+            verified=True,
+            payload=p2
+        )
+        db.add(evt_rec)
+        db.commit()
+
+        res2 = process_webhook_event(db, p2, is_simulated=False, webhook_event_id=evt_rec.id)
+        db.refresh(invoice)
+        db.refresh(evt_rec)
+
+        assert invoice.status == "OVERPAID"
+        assert res2["status"] == "flagged_manual_review"
+        assert res2["excess_amount"] == 200.0
+
+        # Verify webhook event record was quarantined with manual_review_required
+        assert evt_rec.reconciliation_status == "manual_review_required"
+        assert evt_rec.processing_state == "quarantined"
+    finally:
+        db.close()
+
+
+def test_invoice_already_paid_receiving_additional_200_payment(setup_db):
+    """
+    Test 3: $1,000 invoice marked PAID receives an additional genuine $200 transaction.
+    Transitions PAID -> OVERPAID, records excess in AuditLog, flags manual review.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-PAID-THEN-ADDITIONAL-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        # Step 1: Genuine payment of $1,000 -> Marks PAID
+        p1 = {
+            "id": f"WH-FULL-1000-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "1000.00", "currency_code": "USD"},
+                "transaction_id": f"TX-FULL-1000-{datetime.now().timestamp()}"
+            }
+        }
+        res1 = process_webhook_event(db, p1, is_simulated=False)
+        db.refresh(invoice)
+        assert invoice.status == "PAID"
+
+        # Step 2: Customer mistakenly pays an extra $200 with new transaction reference
+        extra_tx = f"TX-EXTRA-200-{datetime.now().timestamp()}"
+        p2 = {
+            "id": f"WH-EXTRA-200-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "200.00", "currency_code": "USD"},
+                "transaction_id": extra_tx
+            }
+        }
+        res2 = process_webhook_event(db, p2, is_simulated=False)
+        db.refresh(invoice)
+
+        # Invoice MUST transition to OVERPAID and flag manual review
+        assert invoice.status == "OVERPAID"
+        assert res2["status"] == "flagged_manual_review"
+        assert res2["excess_amount"] == 200.0
+
+        # Check AuditLog for overpayment record
+        log = db.query(AuditLog).filter(
+            AuditLog.event == "OVERPAYMENT_FLAGGED_FOR_MANUAL_REVIEW"
+        ).order_by(AuditLog.id.desc()).first()
+        assert log is not None
+        assert log.payload.get("excess_amount") == 200.0
+        assert log.payload.get("transaction_reference") == extra_tx
+    finally:
+        db.close()
+
+
+def test_same_transaction_different_webhook_ids(setup_db):
+    """
+    Test 4: Same transaction delivered through two different webhook event IDs.
+    Second event returns already_processed, and exactly 1 PaymentHistory record is created.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-DUP-WEBHOOK-{datetime.now().timestamp()}"
+        shared_tx = f"TX-SHARED-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=500.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        # Webhook delivery 1
+        wh1 = {
+            "id": f"WH-DELIVERY-1-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "500.00", "currency_code": "USD"},
+                "transaction_id": shared_tx
+            }
+        }
+        res1 = process_webhook_event(db, wh1, is_simulated=False)
+        assert res1["status"] in ("success", "reconciled", "already_processed")
+
+        # Webhook delivery 2 with different webhook ID but identical transaction_id
+        wh2 = {
+            "id": f"WH-DELIVERY-2-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "500.00", "currency_code": "USD"},
+                "transaction_id": shared_tx
+            }
+        }
+        res2 = process_webhook_event(db, wh2, is_simulated=False)
+        assert res2["status"] == "already_processed"
+        assert res2["reason"] == "duplicate_transaction_reference"
+
+        # Assert exactly 1 PaymentHistory and 1 FinancialEntry created for this tx
+        ph_count = db.query(PaymentHistory).filter(PaymentHistory.transaction_reference == shared_tx).count()
+        assert ph_count == 1
+
+        fe_count = db.query(FinancialEntry).filter(FinancialEntry.reference_id == shared_tx).count()
+        assert fe_count == 1
+    finally:
+        db.close()
+
+
+def test_missing_genuine_transaction_reference_quarantined(setup_db):
+    """
+    Test 5: Webhook with no transaction_id, capture_id, or payment_id is quarantined for manual review.
+    Does NOT manufacture a transaction reference like 'tx_{event_id}'.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-MISSING-TX-{datetime.now().timestamp()}"
+        ev_id = f"WH-NO-TX-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=500.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        # Webhook with no payments array and no transaction/capture IDs
+        payload = {
+            "id": ev_id,
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "500.00", "currency_code": "USD"}
+            }
+        }
+        res = process_webhook_event(db, payload, is_simulated=False)
+
+        assert res["status"] == "quarantined"
+        assert res["reason"] == "missing_transaction_reference"
+
+        # Assert no PaymentHistory was created with manufactured ID
+        fake_ph = db.query(PaymentHistory).filter(
+            PaymentHistory.transaction_reference == f"tx_{ev_id}"
+        ).first()
+        assert fake_ph is None
+
+        # Verify audit log
+        log = db.query(AuditLog).filter(
+            AuditLog.event == "WEBHOOK_MISSING_TRANSACTION_REF_QUARANTINED"
+        ).order_by(AuditLog.id.desc()).first()
+        assert log is not None
+        assert log.payload.get("event_id") == ev_id
+    finally:
+        db.close()
+
+
+def test_concurrent_duplicate_transaction_processing(setup_db):
+    """
+    Test 6: Concurrent duplicate transaction processing is safely caught by database-level
+    uniqueness constraint and returns already_processed without crashing.
+    """
+    db1 = SessionLocal()
+    db2 = SessionLocal()
+    try:
+        owner = db1.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db1.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-RACE-{datetime.now().timestamp()}"
+        shared_tx = f"TX-RACE-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=500.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db1.add(invoice)
+        db1.commit()
+
+        # Insert directly in db1 to simulate first concurrent worker completing flush
+        ph1 = PaymentHistory(
+            client_id=client.id,
+            invoice_id=invoice.id,
+            amount=500.0,
+            due_date=invoice.due_date,
+            paid_date=datetime.now(timezone.utc),
+            days_late=0,
+            source="paypal",
+            transaction_reference=shared_tx
+        )
+        db1.add(ph1)
+        db1.commit()
+
+        # Now simulate a second concurrent webhook attempting to process the same tx_ref
+        wh = {
+            "id": f"WH-RACE-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "500.00", "currency_code": "USD"},
+                "transaction_id": shared_tx
+            }
+        }
+        res2 = process_webhook_event(db2, wh, is_simulated=False)
+        assert res2["status"] == "already_processed"
+        assert res2["reason"] == "duplicate_transaction_reference"
+    finally:
+        db1.close()
+        db2.close()
+
+
+@pytest.mark.asyncio
+async def test_cross_owner_obligation_id_rejected_before_dispatch(setup_db, monkeypatch):
+    """
+    Test 7: Action owned by Owner 1 referencing Obligation owned by Owner 2.
+    Must be rejected with PolicyViolationError before any PayPal payout API dispatch.
+    """
+    from backend.app.services.execution import ActionExecutionService
+    from backend.app.paypal.client import paypal_client
+
+    db = SessionLocal()
+    try:
+        # Create Owner 1 and Owner 2
+        owner1 = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        owner2 = Owner(
+            email=f"owner2_{datetime.now().timestamp()}@example.com",
+            hashed_password="hashed_pass_test",
+            name="Second Owner",
+            email_verified=True
+        )
+        db.add(owner2)
+        db.commit()
+
+        # Obligation belongs to Owner 2
+        obl2 = Obligation(
+            owner_id=owner2.id,
+            payee_name="Marcus Sterling",
+            payee_email="marcus.sterling.dev@example.com",
+            amount=1000.0,
+            currency="USD",
+            due_date=datetime.now(timezone.utc) + timedelta(days=2),
+            split_allowed=True,
+            split_consent_recorded=True,
+            split_consent_source="written_agreement",
+            split_consent_timestamp=datetime.now(timezone.utc),
+            split_consent_is_simulated=False
+        )
+        db.add(obl2)
+        db.commit()
+
+        # Action is created by Owner 1 pointing to Owner 2's obligation
+        action_malicious = Action(
+            owner_id=owner1.id,
+            action_type="SCHEDULE_PAYOUT_SPLIT",
+            recipient="Marcus Sterling",
+            amount=500.0,
+            currency="USD",
+            state=ActionState.APPROVED,
+            idempotency_key=f"idemp_malicious_{datetime.now().timestamp()}",
+            obligation_id=obl2.id,
+            payout_recipient_email="marcus.sterling.dev@example.com",
+            approval_version=2,
+            is_simulated=False,
+            approval_hash=""
+        )
+        db.add(action_malicious)
+        db.commit()
+        db.refresh(action_malicious)
+
+        cp = compute_action_payload(action_malicious)
+        ph = generate_payload_hash(cp)
+        sig = generate_canonical_approval_signature(ph)
+        action_malicious.approved_payload_hash = ph
+        action_malicious.approval_hash = sig
+        db.commit()
+
+        payout_api_called = False
+
+        async def mock_fail_create_payout(*args, **kwargs):
+            nonlocal payout_api_called
+            payout_api_called = True
+            raise RuntimeError("CRITICAL FLAW: PayPal Payout API was called for cross-tenant obligation!")
+
+        monkeypatch.setattr(paypal_client, "create_payout", mock_fail_create_payout)
+
+        # Execution MUST fail-closed with PolicyViolationError
+        with pytest.raises(PolicyViolationError, match="OWNERSHIP MISMATCH"):
+            await ActionExecutionService.execute_action(db, action_malicious, actor="owner")
+
+        assert payout_api_called is False
+    finally:
+        db.close()
+
+
+def test_migration_upgrade_preserves_financial_records(setup_db):
+    """
+    Test 8: Database migration sets approval_version=1 for historical records
+    and establishes a unique index on payment_history.transaction_reference.
+    """
+    from backend.app.db import engine
+    from sqlalchemy import text, inspect
+
+    inspector = inspect(engine)
+    indices = inspector.get_indexes("payment_history")
+    tx_indices = [idx for idx in indices if "transaction_reference" in idx.get("column_names", [])]
+
+    assert len(tx_indices) > 0
+    assert tx_indices[0].get("unique") in (1, True)
+
+    # Check columns and default on actions table
+    with engine.connect() as conn:
+        res = conn.execute(text("PRAGMA table_info(actions);")).fetchall()
+        cols = {row[1]: row for row in res}
+        assert "approval_version" in cols
+        assert "obligation_id" in cols
+        assert "is_simulated" in cols
+        assert "approved_payload_hash" in cols
+
+
+

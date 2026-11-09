@@ -4,7 +4,9 @@ from backend.app.main import app
 from backend.app.db import SessionLocal
 from backend.app.models import Action, WebhookEvent
 from backend.app.guardrail.state_machine import GuardrailStateMachine, ActionState
-from backend.app.guardrail.approval import generate_approval_hash
+from backend.app.guardrail.approval import (
+    generate_approval_hash, compute_action_payload, generate_payload_hash, generate_canonical_approval_signature
+)
 from backend.scripts.seed import seed_database
 
 
@@ -88,7 +90,6 @@ async def test_payout_failure_and_retry_flow():
     db = SessionLocal()
     try:
         idemp = "act_payout_fail_test_1"
-        h = generate_approval_hash("Marcus Sterling", 1600.0, "USD", "SCHEDULE_PAYOUT_SPLIT", idemp)
 
         action = Action(
             action_type="SCHEDULE_PAYOUT_SPLIT",
@@ -97,9 +98,16 @@ async def test_payout_failure_and_retry_flow():
             currency="USD",
             state=ActionState.PROPOSED,
             idempotency_key=idemp,
-            approval_hash=h
+            is_simulated=True,
+            approval_version=2,
+            approval_hash=""
         )
         db.add(action)
+        db.commit()
+
+        cp = compute_action_payload(action)
+        h = generate_canonical_approval_signature(generate_payload_hash(cp))
+        action.approval_hash = h
         db.commit()
 
         # Approve action

@@ -47,10 +47,33 @@ def get_db():
         db.close()
 
 
+def run_migrations():
+    """
+    Run Alembic migrations programmatically against the current configured database.
+    Falls back gracefully if alembic is not configured or in transient environments.
+    """
+    import os
+    try:
+        from alembic.config import Config
+        from alembic import command
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        ini_path = os.path.join(base_dir, "alembic.ini")
+        if os.path.exists(ini_path):
+            alembic_cfg = Config(ini_path)
+            alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
+            command.upgrade(alembic_cfg, "head")
+            logger.info("Database schema upgrade successfully verified via Alembic.")
+            return True
+    except Exception as e:
+        logger.warning(f"Alembic auto-upgrade notice: {e}. Falling back to create_all and schema sync.")
+        return False
+
+
 def init_db():
     # Import models so all tables are registered before creating
     import backend.app.models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+    run_migrations()
 
     # Seamless SQLite column migration if table already existed
     if DATABASE_URL.startswith("sqlite"):
@@ -92,6 +115,12 @@ def init_db():
                     conn.execute(text("ALTER TABLE actions ADD COLUMN approved_payload_hash VARCHAR(64);"))
                 if "is_simulated" not in act_cols:
                     conn.execute(text("ALTER TABLE actions ADD COLUMN is_simulated BOOLEAN DEFAULT 0;"))
+                if "approval_version" not in act_cols:
+                    conn.execute(text("ALTER TABLE actions ADD COLUMN approval_version INTEGER DEFAULT 1 NOT NULL;"))
+                if "obligation_id" not in act_cols:
+                    conn.execute(text("ALTER TABLE actions ADD COLUMN obligation_id INTEGER REFERENCES obligations(id) ON DELETE SET NULL;"))
+                if "payout_recipient_email" not in act_cols:
+                    conn.execute(text("ALTER TABLE actions ADD COLUMN payout_recipient_email VARCHAR(255);"))
 
                 # Obligations migration
                 res_obl = conn.execute(text("PRAGMA table_info(obligations);")).fetchall()
@@ -110,6 +139,7 @@ def init_db():
                 ph_cols = {row[1] for row in res_ph}
                 if "transaction_reference" not in ph_cols:
                     conn.execute(text("ALTER TABLE payment_history ADD COLUMN transaction_reference VARCHAR(255);"))
+                conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_payment_history_transaction_reference ON payment_history(transaction_reference);"))
 
                 conn.commit()
         except Exception as e:

@@ -2,7 +2,9 @@ import pytest
 from backend.app.db import SessionLocal
 from backend.app.models import Action
 from backend.app.guardrail.state_machine import GuardrailStateMachine, InvalidStateTransitionError, ActionState
-from backend.app.guardrail.approval import generate_approval_hash
+from backend.app.guardrail.approval import (
+    generate_approval_hash, compute_action_payload, generate_payload_hash, generate_canonical_approval_signature
+)
 from backend.scripts.seed import seed_database
 
 
@@ -14,15 +16,8 @@ def setup_db():
 def test_guardrail_state_machine_happy_path(setup_db):
     db = SessionLocal()
     try:
-        # Create a proposed action
+        # Create a proposed simulated action for demo contractor Marcus Sterling
         idemp = "act_test_state_123"
-        valid_hash = generate_approval_hash(
-            recipient="Marcus Sterling",
-            amount=1600.0,
-            currency="USD",
-            action_type="SCHEDULE_PAYOUT_SPLIT",
-            idempotency_key=idemp
-        )
 
         action = Action(
             action_type="SCHEDULE_PAYOUT_SPLIT",
@@ -31,11 +26,17 @@ def test_guardrail_state_machine_happy_path(setup_db):
             currency="USD",
             state=ActionState.PROPOSED,
             idempotency_key=idemp,
-            approval_hash=valid_hash
+            is_simulated=True,
+            approval_version=2,
+            approval_hash=""
         )
         db.add(action)
         db.commit()
-        db.refresh(action)
+
+        cp = compute_action_payload(action)
+        valid_hash = generate_canonical_approval_signature(generate_payload_hash(cp))
+        action.approval_hash = valid_hash
+        db.commit()
 
         # 1. Transition proposed -> approved
         action = GuardrailStateMachine.transition(
@@ -125,13 +126,6 @@ def test_guardrail_rejects_tampered_approval_hash(setup_db):
     db = SessionLocal()
     try:
         idemp = "act_test_tamper_789"
-        valid_hash = generate_approval_hash(
-            recipient="Marcus Sterling",
-            amount=1600.0,
-            currency="USD",
-            action_type="SCHEDULE_PAYOUT_SPLIT",
-            idempotency_key=idemp
-        )
         action = Action(
             action_type="SCHEDULE_PAYOUT_SPLIT",
             recipient="Marcus Sterling",
@@ -139,11 +133,17 @@ def test_guardrail_rejects_tampered_approval_hash(setup_db):
             currency="USD",
             state=ActionState.PROPOSED,
             idempotency_key=idemp,
-            approval_hash=valid_hash
+            is_simulated=True,
+            approval_version=2,
+            approval_hash=""
         )
         db.add(action)
         db.commit()
-        db.refresh(action)
+
+        cp = compute_action_payload(action)
+        valid_hash = generate_canonical_approval_signature(generate_payload_hash(cp))
+        action.approval_hash = valid_hash
+        db.commit()
 
         # Tampered hash (someone changed amount or random signature)
         tampered_hash = "deadbeef" * 8

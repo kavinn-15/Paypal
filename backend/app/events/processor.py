@@ -74,57 +74,84 @@ def process_webhook_event(
         if evt_record and owner:
             evt_record.owner_id = owner.id
 
-        # Replay / Idempotency Check: if invoice is already marked PAID, prevent balance double-crediting
-        if not is_simulated and invoice.status == "PAID":
-            logger.info(f"Invoice {paypal_inv_id} is already marked PAID. Ignoring duplicate payment event.")
-            if evt_record:
-                evt_record.processing_state = "processed"
-                evt_record.processed = True
-                evt_record.reconciliation_status = "reconciled"
-                evt_record.processed_at = now
-                db.commit()
-            return {
-                "status": "already_processed",
-                "invoice_id": invoice.id,
-                "paypal_invoice_id": paypal_inv_id,
-                "reason": "duplicate_payment_event_ignored"
-            }
-
         # Parse payment amount and handle partial/over payments
         raw_amt = inv_data.get("amount", {}).get("value") or resource.get("amount", {}).get("value")
         paid_amount = Decimal(str(raw_amt)) if raw_amt else Decimal(str(invoice.amount))
 
-        # Check for overpayment -> flag for manual review, do NOT automatically mark PAID
-        if paid_amount > Decimal(str(invoice.amount)):
+        # Currency validation
+        raw_currency = (
+            inv_data.get("amount", {}).get("currency_code")
+            or resource.get("amount", {}).get("currency_code")
+            or invoice.currency
+        )
+        if raw_currency.upper() != invoice.currency.upper():
             logger.warning(
-                f"Overpayment detected for invoice {invoice.paypal_invoice_id}: paid {paid_amount} > total {invoice.amount}. Flagging for manual review."
+                f"Currency mismatch on invoice {invoice.paypal_invoice_id}: expected {invoice.currency}, got {raw_currency}"
             )
             if evt_record:
                 evt_record.processing_state = "quarantined"
                 evt_record.reconciliation_status = "manual_review_required"
-                evt_record.error_details = f"Overpayment detected: paid {paid_amount} exceeds invoice total {invoice.amount}"
+                evt_record.error_details = f"Currency mismatch: expected {invoice.currency}, received {raw_currency}"
                 db.commit()
             append_audit_log(
                 db=db,
                 actor="paypal_webhook" if not is_simulated else "dev_simulator",
-                event="OVERPAYMENT_FLAGGED_FOR_MANUAL_REVIEW",
-                payload={"paypal_invoice_id": invoice.paypal_invoice_id, "invoice_amount": float(invoice.amount), "paid_amount": float(paid_amount)},
+                event="CURRENCY_MISMATCH_QUARANTINED",
+                payload={"paypal_invoice_id": invoice.paypal_invoice_id, "expected_currency": invoice.currency, "received_currency": raw_currency},
                 owner_id=owner.id if owner else None
             )
             return {
-                "status": "flagged_manual_review",
-                "reason": "overpayment_detected",
-                "invoice_id": invoice.id,
-                "paypal_invoice_id": invoice.paypal_invoice_id,
-                "invoice_amount": float(invoice.amount),
-                "paid_amount": float(paid_amount)
+                "status": "quarantined",
+                "reason": "currency_mismatch",
+                "expected_currency": invoice.currency,
+                "received_currency": raw_currency
             }
+
+        # Extract unique PayPal transaction / capture reference
+        payments = inv_data.get("payments") or resource.get("payments") or []
+        tx_ref = None
+        if payments and isinstance(payments, list) and len(payments) > 0 and isinstance(payments[0], dict):
+            tx_ref = payments[0].get("payment_id") or payments[0].get("transaction_id")
+        if not tx_ref:
+            tx_ref = resource.get("transaction_id") or resource.get("capture_id") or resource.get("payment_id")
+        if not tx_ref:
+            res_id = resource.get("id")
+            if res_id and res_id != paypal_inv_id:
+                tx_ref = res_id
+
+        if not tx_ref:
+            if is_simulated:
+                tx_ref = resource.get("transaction_id") or f"sim_tx_{event_id}"
+            else:
+                logger.warning(
+                    f"Webhook event {event_id} for invoice {paypal_inv_id} lacks genuine transaction reference. Quarantining for manual review."
+                )
+                if evt_record:
+                    evt_record.processing_state = "quarantined"
+                    evt_record.processed = False
+                    evt_record.reconciliation_status = "manual_review_required"
+                    evt_record.error_details = "Missing genuine PayPal transaction reference (no payment_id, transaction_id, or capture_id found)"
+                    evt_record.processed_at = now
+                    db.commit()
+                append_audit_log(
+                    db=db,
+                    actor="paypal_webhook",
+                    event="WEBHOOK_MISSING_TRANSACTION_REF_QUARANTINED",
+                    payload={"paypal_invoice_id": paypal_inv_id, "event_id": event_id},
+                    owner_id=owner.id if owner else None
+                )
+                return {
+                    "status": "quarantined",
+                    "reason": "missing_transaction_reference",
+                    "paypal_invoice_id": paypal_inv_id,
+                    "event_id": event_id
+                }
 
         due_d = invoice.due_date if invoice.due_date.tzinfo else invoice.due_date.replace(tzinfo=timezone.utc)
         days_late = max((now.date() - due_d.date()).days, 0)
 
         if is_simulated:
-            # SIMULATED PAYMENTS: NEVER mutate authoritative invoice payment state to PAID
+            # SIMULATED PAYMENTS: NEVER mutate authoritative invoice payment state to PAID or create authoritative PaymentHistory
             invoice.is_simulated_paid = True
             # Keep invoice.status as SENT or PARTIALLY_PAID (authoritative state untouched)
 
@@ -156,20 +183,32 @@ def process_webhook_event(
                     )
                     db.add(sim_entry)
         else:
-            # GENUINE PAYPAL WEBHOOK: Reconcile authoritative invoice payment state
-            if paid_amount < Decimal(str(invoice.amount)):
-                invoice.status = "PARTIALLY_PAID"
-            else:
-                invoice.status = "PAID"
-                invoice.paid_date = now
-                invoice.is_simulated_paid = False
+            # GENUINE PAYPAL WEBHOOK:
+            from sqlalchemy.exc import IntegrityError
 
-            # Authoritative PaymentHistory record
-            existing_hist = db.query(PaymentHistory).filter(
-                PaymentHistory.invoice_id == invoice.id,
-                PaymentHistory.source == "paypal"
+            # 1. Unique transaction reference deduplication / replay check
+            existing_tx = db.query(PaymentHistory).filter(
+                PaymentHistory.transaction_reference == tx_ref
             ).first()
-            if not existing_hist:
+            if existing_tx:
+                logger.info(f"Transaction reference {tx_ref} already recorded for invoice {invoice.paypal_invoice_id}. Ignoring duplicate delivery.")
+                if evt_record:
+                    evt_record.processing_state = "processed"
+                    evt_record.processed = True
+                    if evt_record.reconciliation_status != "manual_review_required":
+                        evt_record.reconciliation_status = "reconciled"
+                    evt_record.processed_at = now
+                    db.commit()
+                return {
+                    "status": "already_processed",
+                    "reason": "duplicate_transaction_reference",
+                    "transaction_reference": tx_ref,
+                    "invoice_id": invoice.id,
+                    "paypal_invoice_id": invoice.paypal_invoice_id
+                }
+
+            # 2. Record genuine PaymentHistory safely with constraint catching
+            try:
                 history_entry = PaymentHistory(
                     client_id=invoice.client_id,
                     invoice_id=invoice.id,
@@ -178,33 +217,94 @@ def process_webhook_event(
                     paid_date=now,
                     days_late=days_late,
                     source="paypal",
-                    transaction_reference=event_id
+                    transaction_reference=tx_ref
                 )
                 db.add(history_entry)
+                db.flush()
+            except IntegrityError:
+                db.rollback()
+                logger.info(f"Concurrent duplicate insertion caught for tx_ref {tx_ref}. Treating as already processed.")
+                if evt_record:
+                    evt_record.processing_state = "processed"
+                    evt_record.processed = True
+                    if evt_record.reconciliation_status != "manual_review_required":
+                        evt_record.reconciliation_status = "reconciled"
+                    evt_record.processed_at = now
+                    db.commit()
+                return {
+                    "status": "already_processed",
+                    "reason": "duplicate_transaction_reference",
+                    "transaction_reference": tx_ref,
+                    "invoice_id": invoice.id,
+                    "paypal_invoice_id": invoice.paypal_invoice_id
+                }
 
-            # Authoritative confirmed income entry in financial ledger (deduplicated)
+            # 3. Calculate cumulative verified receipts for this invoice
+            from sqlalchemy import func
+            total_cumulative = db.query(func.coalesce(func.sum(PaymentHistory.amount), Decimal("0.00"))).filter(
+                PaymentHistory.invoice_id == invoice.id,
+                PaymentHistory.source == "paypal"
+            ).scalar()
+            inv_total = Decimal(str(invoice.amount))
+
+            # 4. Authoritative status update based on cumulative verified total
+            if total_cumulative > inv_total:
+                excess = total_cumulative - inv_total
+                logger.warning(
+                    f"Overpayment detected for invoice {invoice.paypal_invoice_id}: cumulative {total_cumulative} > total {inv_total} (excess {excess}). Flagging for manual review."
+                )
+                invoice.status = "OVERPAID"
+                if evt_record:
+                    evt_record.processing_state = "quarantined"
+                    evt_record.reconciliation_status = "manual_review_required"
+                    evt_record.error_details = f"Overpayment detected: cumulative verified {total_cumulative} exceeds invoice total {inv_total} by {excess}"
+                append_audit_log(
+                    db=db,
+                    actor="paypal_webhook",
+                    event="OVERPAYMENT_FLAGGED_FOR_MANUAL_REVIEW",
+                    payload={
+                        "paypal_invoice_id": invoice.paypal_invoice_id,
+                        "invoice_amount": float(inv_total),
+                        "cumulative_received": float(total_cumulative),
+                        "excess_amount": float(excess),
+                        "transaction_reference": tx_ref
+                    },
+                    owner_id=owner.id if owner else None
+                )
+            elif total_cumulative < inv_total:
+                invoice.status = "PARTIALLY_PAID"
+            else:
+                invoice.status = "PAID"
+                invoice.paid_date = now
+                invoice.is_simulated_paid = False
+
+            # 5. Authoritative confirmed income entry in financial ledger (deduplicated by tx_ref)
             if owner:
                 existing_ledger = db.query(FinancialEntry).filter(
                     FinancialEntry.owner_id == owner.id,
-                    FinancialEntry.reference_id == invoice.paypal_invoice_id,
-                    FinancialEntry.status == "confirmed"
+                    (FinancialEntry.canonical_id == f"pay_{tx_ref}") | (FinancialEntry.reference_id == tx_ref)
                 ).first()
                 if not existing_ledger:
-                    ledger_entry = FinancialEntry(
-                        owner_id=owner.id,
-                        canonical_id=f"pay_{invoice.paypal_invoice_id}_{event_id}",
-                        title=f"PayPal Invoice Payment #{invoice.paypal_invoice_id} ({invoice.client.name})",
-                        amount=paid_amount,
-                        currency=invoice.currency,
-                        entry_type="confirmed_income",
-                        category="client_invoice",
-                        transaction_date=now,
-                        status="confirmed",
-                        data_source="paypal_webhook",
-                        reference_id=invoice.paypal_invoice_id,
-                        is_demo=False
-                    )
-                    db.add(ledger_entry)
+                    try:
+                        ledger_entry = FinancialEntry(
+                            owner_id=owner.id,
+                            canonical_id=f"pay_{tx_ref}",
+                            title=f"PayPal Invoice Payment #{invoice.paypal_invoice_id} ({invoice.client.name}) - Ref {tx_ref[:10]}",
+                            amount=paid_amount,
+                            currency=invoice.currency,
+                            entry_type="confirmed_income",
+                            category="client_invoice",
+                            transaction_date=now,
+                            status="confirmed",
+                            data_source="paypal_webhook",
+                            reference_id=tx_ref,
+                            is_demo=False
+                        )
+                        db.add(ledger_entry)
+                        db.flush()
+                    except IntegrityError:
+                        db.rollback()
+                        logger.info(f"Concurrent duplicate ledger entry caught for tx_ref {tx_ref}.")
 
         db.commit()
 
@@ -250,10 +350,31 @@ def process_webhook_event(
             owner_id=owner.id if owner else None
         )
 
+        if not is_simulated and total_cumulative > inv_total:
+            excess = total_cumulative - inv_total
+            if evt_record:
+                evt_record.processing_state = "quarantined"
+                evt_record.processed = False
+                evt_record.reconciliation_status = "manual_review_required"
+                evt_record.processed_at = now
+                db.commit()
+            return {
+                "status": "flagged_manual_review",
+                "reason": "overpayment_detected",
+                "invoice_id": invoice.id,
+                "paypal_invoice_id": invoice.paypal_invoice_id,
+                "invoice_amount": float(inv_total),
+                "cumulative_received": float(total_cumulative),
+                "excess_amount": float(excess),
+                "reconciled_balance": reconciled_balance,
+                "is_simulated": is_simulated
+            }
+
         if evt_record:
-            evt_record.processing_state = "processed"
-            evt_record.processed = True
-            evt_record.reconciliation_status = "reconciled"
+            if evt_record.reconciliation_status != "manual_review_required":
+                evt_record.reconciliation_status = "reconciled"
+                evt_record.processing_state = "processed"
+                evt_record.processed = True
             evt_record.processed_at = now
             db.commit()
 
@@ -363,9 +484,10 @@ def process_webhook_event(
                         db.commit()
 
         if evt_record:
-            evt_record.processing_state = "processed"
-            evt_record.processed = True
-            evt_record.reconciliation_status = "reconciled"
+            if evt_record.reconciliation_status != "manual_review_required":
+                evt_record.reconciliation_status = "reconciled"
+                evt_record.processing_state = "processed"
+                evt_record.processed = True
             evt_record.processed_at = now
             db.commit()
 

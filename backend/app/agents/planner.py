@@ -161,6 +161,7 @@ class RescuePlanEngine:
             state="proposed",
             idempotency_key=plan_a_idempotency,
             approval_hash=plan_a_hash,
+            approval_version=2,
             paypal_ref=top_target["paypal_invoice_id"] if top_target else None
         )
         self.db.add(action_a_db)
@@ -286,6 +287,7 @@ class RescuePlanEngine:
             state="proposed",
             idempotency_key=plan_b_idempotency,
             approval_hash=plan_b_hash,
+            approval_version=2,
             paypal_ref=discount_cand["paypal_invoice_id"] if discount_cand else None
         )
         self.db.add(action_b_db)
@@ -348,14 +350,19 @@ class RescuePlanEngine:
             plan_c_inst2 = split_proposal["installment_2"]["amount"]
             inst2_date_str = split_proposal["installment_2"]["date_str"]
 
+            consent_is_sim = bool(getattr(obligation_obj, "split_consent_is_simulated", False))
             plan_c_risk = (
                 "Requires explicit contractor consent in writing; second installment is proposed (not automated scheduled) "
                 "and must be manually disbursed once subsequent client payments settle."
             )
+            if consent_is_sim:
+                plan_c_risk += " [SIMULATED CONSENT — DEMO ONLY: Genuine payout execution disabled]"
             plan_c_rationale = (
                 f"Pays contractor {obligation_obj.payee_name} ${plan_c_inst1:,.2f} on Friday (fully covered by current "
                 f"balance) and proposes deferring ${plan_c_inst2:,.2f} to {inst2_date_str} when client funds arrive."
             )
+            if consent_is_sim:
+                plan_c_rationale += " (SIMULATED CONSENT — DEMO ONLY)"
 
             # Forecast with Plan C: Friday outflow is reduced to installment 1
             plan_c_with_proj, _, _ = project_cashflow_timeline(
@@ -375,7 +382,10 @@ class RescuePlanEngine:
                 amount=plan_c_inst1,
                 currency="USD",
                 action_type="SCHEDULE_PAYOUT_SPLIT",
-                idempotency_key=plan_c_idempotency
+                idempotency_key=plan_c_idempotency,
+                obligation_id=obligation_obj.id,
+                contractor_name=obligation_obj.payee_name,
+                payout_recipient_email=obligation_obj.payee_email.strip().lower()
             )
 
             plan_c_msg_draft = llm_service.draft_contractor_split_message(
@@ -399,7 +409,10 @@ class RescuePlanEngine:
                     "scheduling_available": False,
                     "split_allowed": obligation_obj.split_allowed,
                     "split_consent_recorded": getattr(obligation_obj, "split_consent_recorded", False),
-                    "split_consent_source": getattr(obligation_obj, "split_consent_source", None)
+                    "split_consent_source": getattr(obligation_obj, "split_consent_source", None),
+                    "split_consent_is_simulated": consent_is_sim,
+                    "obligation_id": obligation_obj.id,
+                    "payout_recipient_email": obligation_obj.payee_email.strip().lower()
                 },
                 cost=0.0,
                 incoming_needed=0.0,
@@ -426,7 +439,11 @@ class RescuePlanEngine:
                 state="proposed",
                 idempotency_key=plan_c_idempotency,
                 approval_hash=plan_c_hash,
-                paypal_ref=f"SPLIT-OBL-{obligation_obj.id}"
+                approval_version=2,
+                obligation_id=obligation_obj.id,
+                payout_recipient_email=obligation_obj.payee_email.strip().lower(),
+                paypal_ref=f"SPLIT-OBL-{obligation_obj.id}",
+                is_simulated=consent_is_sim
             )
             self.db.add(action_c_db)
             self.db.flush()

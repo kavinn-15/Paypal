@@ -436,6 +436,9 @@ class ActionOut(BaseModel):
     paypal_ref: Optional[str] = None
     error_message: Optional[str] = None
     is_simulated: bool = False
+    approval_version: int = 2
+    obligation_id: Optional[int] = None
+    payout_recipient_email: Optional[str] = None
     message_draft: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 

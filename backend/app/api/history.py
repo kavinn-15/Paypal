@@ -155,18 +155,22 @@ async def sync_history(
                 )
                 continue
 
-            # 5. Payment Status Validation: Prevent double-marking already paid invoices
-            if invoice.status == "PAID":
-                logger.info(f"Invoice #{invoice.paypal_invoice_id} is already fully marked PAID. Transaction {tx_id} ignored for status update.")
+            # 5. Deduplication check: ignore already processed transactions
+            existing_hist = db.query(PaymentHistory).filter(PaymentHistory.transaction_reference == tx_id).first()
+            if existing_hist:
+                logger.info(f"Transaction {tx_id} already recorded in PaymentHistory. Skipping.")
                 continue
 
-            # 6. Reconcile invoice & compute payment status
+            # 6. Reconcile invoice & compute cumulative payment status
             inv_total = Decimal(str(invoice.amount))
-            existing_paid = sum(Decimal(str(h.amount)) for h in invoice.history_records)
+            existing_paid = sum(Decimal(str(h.amount)) for h in invoice.history_records if h.source == "paypal")
             total_after_this_payment = existing_paid + amount
 
+            is_overpaid = False
             if total_after_this_payment > inv_total:
                 unmatched_count += 1
+                is_overpaid = True
+                invoice.status = "OVERPAID"
                 append_audit_log(
                     db=db,
                     actor="paypal_reconciliation",
@@ -181,14 +185,14 @@ async def sync_history(
                     },
                     owner_id=current_user.id
                 )
-                continue
             elif total_after_this_payment < inv_total:
                 invoice.status = "PARTIALLY_PAID"
             else:
                 invoice.status = "PAID"
                 invoice.paid_date = now
 
-            # 7. Record in PaymentHistory
+            # 7. Record in PaymentHistory safely with constraint catching
+            from sqlalchemy.exc import IntegrityError
             due_d = invoice.due_date if invoice.due_date.tzinfo else invoice.due_date.replace(tzinfo=timezone.utc)
             days_late = max((now.date() - due_d.date()).days, 0)
             hist = PaymentHistory(
@@ -201,39 +205,51 @@ async def sync_history(
                 source="paypal",
                 transaction_reference=tx_id
             )
-            db.add(hist)
+            try:
+                db.add(hist)
+                db.flush()
+            except IntegrityError:
+                db.rollback()
+                logger.info(f"Concurrent duplicate insertion caught for tx {tx_id}. Skipping.")
+                continue
 
             # 8. Record in authoritative financial ledger
-            ledger_entry = FinancialEntry(
-                owner_id=current_user.id,
-                canonical_id=f"tx_{tx_id}",
-                title=f"PayPal Transaction #{tx_id} - Invoice #{invoice.paypal_invoice_id}",
-                amount=amount,
-                currency=tx_currency,
-                entry_type="confirmed_income",
-                category="client_invoice",
-                transaction_date=now,
-                status="confirmed",
-                data_source="paypal_transaction_search",
-                reference_id=tx_id,
-                is_demo=current_user.is_demo
-            )
-            db.add(ledger_entry)
-            reconciled_count += 1
+            try:
+                ledger_entry = FinancialEntry(
+                    owner_id=current_user.id,
+                    canonical_id=f"tx_{tx_id}",
+                    title=f"PayPal Transaction #{tx_id} - Invoice #{invoice.paypal_invoice_id}",
+                    amount=amount,
+                    currency=tx_currency,
+                    entry_type="confirmed_income",
+                    category="client_invoice",
+                    transaction_date=now,
+                    status="confirmed",
+                    data_source="paypal_transaction_search",
+                    reference_id=tx_id,
+                    is_demo=current_user.is_demo
+                )
+                db.add(ledger_entry)
+                db.flush()
+            except IntegrityError:
+                db.rollback()
+                logger.info(f"Concurrent duplicate ledger entry caught for tx {tx_id}.")
 
-            append_audit_log(
-                db=db,
-                actor="paypal_reconciliation",
-                event="TRANSACTION_RECONCILED_SUCCESS",
-                payload={
-                    "transaction_id": tx_id,
-                    "invoice_id": invoice.id,
-                    "paypal_invoice_id": invoice.paypal_invoice_id,
-                    "amount": float(amount),
-                    "new_status": invoice.status
-                },
-                owner_id=current_user.id
-            )
+            if not is_overpaid:
+                reconciled_count += 1
+                append_audit_log(
+                    db=db,
+                    actor="paypal_reconciliation",
+                    event="TRANSACTION_RECONCILED_SUCCESS",
+                    payload={
+                        "transaction_id": tx_id,
+                        "invoice_id": invoice.id,
+                        "paypal_invoice_id": invoice.paypal_invoice_id,
+                        "amount": float(amount),
+                        "new_status": invoice.status
+                    },
+                    owner_id=current_user.id
+                )
 
         db.commit()
 

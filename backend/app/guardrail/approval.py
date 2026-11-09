@@ -13,6 +13,9 @@ def build_canonical_payload(
     currency: str,
     idempotency_key: str,
     action_id: Optional[int] = None,
+    obligation_id: Optional[int] = None,
+    contractor_name: Optional[str] = None,
+    payout_recipient_email: Optional[str] = None,
     paypal_recipient: Optional[str] = None,
     invoice_id: Optional[str] = None,
     message_body: Optional[str] = None,
@@ -38,6 +41,12 @@ def build_canonical_payload(
 
     if action_id is not None:
         payload["action_id"] = action_id
+    if obligation_id is not None:
+        payload["obligation_id"] = obligation_id
+    if contractor_name is not None:
+        payload["contractor_name"] = contractor_name.strip()
+    if payout_recipient_email is not None:
+        payload["payout_recipient_email"] = payout_recipient_email.strip().lower()
     if paypal_recipient is not None:
         payload["paypal_recipient"] = paypal_recipient.strip()
     if invoice_id is not None:
@@ -90,6 +99,10 @@ def compute_action_payload(action: Any, override_message: Optional[str] = None) 
         details = action.plan.details
 
     # Correctly distinguish invoice identifier from payout recipient identifier
+    obligation_id = getattr(action, "obligation_id", None)
+    contractor_name = None
+    payout_recipient_email = getattr(action, "payout_recipient_email", None)
+
     if action.action_type in ("SEND_REMINDER", "APPLY_DISCOUNT"):
         inv_id = str(action.paypal_ref) if action.paypal_ref else None
         p_recip = action.recipient
@@ -102,6 +115,7 @@ def compute_action_payload(action: Any, override_message: Optional[str] = None) 
     elif action.action_type in ("SCHEDULE_PAYOUT_SPLIT", "PAYOUT"):
         inv_id = None
         p_recip = action.recipient
+        contractor_name = action.recipient
         discount_pct = None
         updated_inv = None
         due_date = details.get("installment_2_date")
@@ -112,6 +126,36 @@ def compute_action_payload(action: Any, override_message: Optional[str] = None) 
         inst_dates = None
         if "installment_2_date" in details:
             inst_dates = [str(details["installment_2_date"])]
+
+        # Resolve payout recipient email and obligation_id if not yet assigned
+        if not payout_recipient_email or not obligation_id:
+            try:
+                from backend.app.db import SessionLocal
+                from backend.app.models import Obligation
+                db_s = SessionLocal()
+                try:
+                    obl = None
+                    if obligation_id:
+                        obl = db_s.query(Obligation).filter(Obligation.id == obligation_id).first()
+                    if not obl:
+                        r_clean = action.recipient.strip()
+                        q_obl = db_s.query(Obligation).filter(
+                            (Obligation.payee_name.ilike(r_clean)) | (Obligation.payee_email.ilike(r_clean))
+                        )
+                        if action.owner_id is not None:
+                            q_obl = q_obl.filter(Obligation.owner_id == action.owner_id)
+                        obl = q_obl.first()
+                    if obl:
+                        if not obligation_id:
+                            obligation_id = obl.id
+                        if not payout_recipient_email and obl.payee_email:
+                            payout_recipient_email = obl.payee_email.strip().lower()
+                finally:
+                    db_s.close()
+            except Exception:
+                pass
+        if not payout_recipient_email and "@" in action.recipient:
+            payout_recipient_email = action.recipient.strip().lower()
     else:
         inv_id = str(action.paypal_ref) if action.paypal_ref else None
         p_recip = action.recipient
@@ -131,6 +175,9 @@ def compute_action_payload(action: Any, override_message: Optional[str] = None) 
         currency=action.currency,
         idempotency_key=action.idempotency_key,
         action_id=action.id,
+        obligation_id=obligation_id,
+        contractor_name=contractor_name,
+        payout_recipient_email=payout_recipient_email,
         paypal_recipient=p_recip,
         invoice_id=inv_id,
         message_body=msg_body,
@@ -151,6 +198,9 @@ def generate_approval_hash(
     idempotency_key: str,
     secret: Optional[str] = None,
     action_id: Optional[int] = None,
+    obligation_id: Optional[int] = None,
+    contractor_name: Optional[str] = None,
+    payout_recipient_email: Optional[str] = None,
     paypal_recipient: Optional[str] = None,
     invoice_id: Optional[str] = None,
     message_body: Optional[str] = None,
@@ -169,6 +219,7 @@ def generate_approval_hash(
     """
     has_extended = any(
         x is not None for x in [
+            obligation_id, contractor_name, payout_recipient_email,
             message_body, discount_pct, updated_invoice_amount, due_date,
             payment_schedule, installment_amounts, installment_dates,
             extra_params
@@ -183,6 +234,9 @@ def generate_approval_hash(
             currency=currency,
             idempotency_key=idempotency_key,
             action_id=action_id,
+            obligation_id=obligation_id,
+            contractor_name=contractor_name,
+            payout_recipient_email=payout_recipient_email,
             paypal_recipient=paypal_recipient,
             invoice_id=invoice_id,
             message_body=message_body,

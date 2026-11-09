@@ -112,7 +112,7 @@ class PaymentHistory(Base):
     paid_date = Column(DateTime, nullable=False)
     days_late = Column(Integer, nullable=False)
     source = Column(String(50), nullable=False, default="paypal")  # "paypal" | "seeded"
-    transaction_reference = Column(String(255), nullable=True, index=True)
+    transaction_reference = Column(String(255), unique=True, nullable=True, index=True)
 
     client = relationship("Client", back_populates="payment_history")
     invoice = relationship("Invoice", back_populates="history_records")
@@ -252,10 +252,18 @@ class Action(Base):
     paypal_ref = Column(String(255), nullable=True)
     error_message = Column(Text, nullable=True)
     is_simulated = Column(Boolean, default=False, nullable=False)
+    approval_version = Column(Integer, default=2, nullable=False)
+    obligation_id = Column(Integer, ForeignKey("obligations.id", ondelete="SET NULL"), nullable=True)
+    payout_recipient_email = Column(String(255), nullable=True)
 
     owner = relationship("Owner", back_populates="actions")
     plan = relationship("RescuePlan", back_populates="actions")
     messages = relationship("Message", back_populates="action", cascade="all, delete-orphan")
+
+    def __init__(self, **kwargs):
+        if "approval_version" not in kwargs:
+            kwargs["approval_version"] = 2
+        super().__init__(**kwargs)
 
 
 class Message(Base):
