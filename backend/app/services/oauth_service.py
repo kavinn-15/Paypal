@@ -3,6 +3,7 @@ import hashlib
 import base64
 import secrets
 import logging
+import urllib.parse
 from typing import Dict, Any, Optional, Tuple
 import httpx
 from fastapi import HTTPException, status
@@ -28,20 +29,20 @@ def get_google_auth_url(state: str, code_challenge: Optional[str] = None) -> str
     redirect_uri = settings.GOOGLE_REDIRECT_URI
 
     base = "https://accounts.google.com/o/oauth2/v2/auth"
-    params = [
-        f"client_id={client_id}",
-        f"redirect_uri={redirect_uri}",
-        "response_type=code",
-        "scope=openid%20email%20profile",
-        f"state={state}",
-        "access_type=offline",
-        "prompt=select_account",
-    ]
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "access_type": "offline",
+        "prompt": "select_account",
+    }
     if code_challenge:
-        params.append(f"code_challenge={code_challenge}")
-        params.append("code_challenge_method=S256")
+        params["code_challenge"] = code_challenge
+        params["code_challenge_method"] = "S256"
 
-    return f"{base}?{'&'.join(params)}"
+    return f"{base}?{urllib.parse.urlencode(params, quote_via=urllib.parse.quote)}"
 
 
 async def verify_google_id_token(id_token_str: str) -> Dict[str, Any]:
@@ -93,9 +94,14 @@ async def verify_google_id_token(id_token_str: str) -> Dict[str, Any]:
                     detail="Untrusted Google token issuer."
                 )
 
-            # Verify audience if client_id is set
-            if settings.GOOGLE_CLIENT_ID and payload.get("aud") != settings.GOOGLE_CLIENT_ID:
-                logger.warning(f"Google aud mismatch: expected {settings.GOOGLE_CLIENT_ID}, got {payload.get('aud')}")
+            # Verify audience if client_id is set and not a placeholder
+            if settings.GOOGLE_CLIENT_ID and "placeholder" not in settings.GOOGLE_CLIENT_ID:
+                if payload.get("aud") != settings.GOOGLE_CLIENT_ID:
+                    logger.error(f"Google aud mismatch: expected {settings.GOOGLE_CLIENT_ID}, got {payload.get('aud')}")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Invalid Google identity token: audience does not match configured Client ID."
+                    )
 
             # Verify email verification status
             if str(payload.get("email_verified", "")).lower() != "true":
@@ -141,9 +147,17 @@ async def exchange_google_code(code: str, code_verifier: Optional[str] = None) -
             res = await client.post(token_url, data=data)
             if res.status_code != 200:
                 logger.error(f"Google token exchange failed: {res.text}")
+                detail_msg = "Google authorization code exchange failed."
+                try:
+                    err_payload = res.json()
+                    err_desc = err_payload.get("error_description") or err_payload.get("error")
+                    if err_desc:
+                        detail_msg = f"Google token exchange failed: {err_desc}."
+                except Exception:
+                    pass
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Google authorization code exchange failed."
+                    detail=f"{detail_msg} Please verify GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI in .env."
                 )
             return res.json()
     except httpx.RequestError as e:

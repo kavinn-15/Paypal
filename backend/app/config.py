@@ -2,7 +2,7 @@ import os
 import logging
 from pathlib import Path
 from typing import List, Optional
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator, AliasChoices
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 
@@ -67,9 +67,28 @@ class Settings(BaseSettings):
     DEFAULT_COUNTRY_REGION: str = Field(default="IN")
 
     # Google OAuth 2.0 / OpenID Connect
-    GOOGLE_CLIENT_ID: Optional[str] = Field(default=None)
+    GOOGLE_CLIENT_ID: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("GOOGLE_CLIENT_ID", "VITE_GOOGLE_CLIENT_ID")
+    )
     GOOGLE_CLIENT_SECRET: Optional[str] = Field(default=None)
     GOOGLE_REDIRECT_URI: str = Field(default="http://localhost:5173/auth/callback/google")
+
+    @field_validator("GOOGLE_CLIENT_ID", mode="before")
+    @classmethod
+    def clean_google_client_id(cls, v: Optional[str]) -> Optional[str]:
+        if isinstance(v, str):
+            v = v.strip()
+            return v if v else None
+        return v
+
+    @field_validator("GOOGLE_CLIENT_SECRET", mode="before")
+    @classmethod
+    def clean_google_client_secret(cls, v: Optional[str]) -> Optional[str]:
+        if isinstance(v, str):
+            v = v.strip()
+            return v if v else None
+        return v
 
     # Policy Limits
     MAX_DISCOUNT_PCT: float = Field(default=5.0)  # maximum 5% early payment discount

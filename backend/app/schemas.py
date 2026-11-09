@@ -95,6 +95,7 @@ class VerifyEmailRequest(BaseModel):
 class GoogleAuthUrlResponse(BaseModel):
     auth_url: str
     state: str
+    client_id: Optional[str] = None
 
 
 class GoogleTokenRequest(BaseModel):

@@ -446,3 +446,33 @@ async def test_google_oauth_safe_account_linking():
             assert links[0].provider == "google"
         finally:
             db.close()
+
+
+@pytest.mark.asyncio
+async def test_google_oauth_start_returns_client_id_and_valid_url():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/auth/google/start")
+        assert res.status_code == 200
+        data = res.json()
+        assert "auth_url" in data
+        assert "state" in data
+        assert "client_id" in data
+        assert "accounts.google.com" in data["auth_url"]
+        assert "redirect_uri" in data["auth_url"]
+        assert "response_type=code" in data["auth_url"]
+
+
+@pytest.mark.asyncio
+async def test_google_oauth_callback_flow_creates_session():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Simulate Google redirect back to /auth/google/callback with dev code
+        res = await client.get("/auth/google/callback?code=mock_google_auth_code_123&state=test_state")
+        assert res.status_code == 200, res.text
+        data = res.json()
+        assert "access_token" in data
+        assert "refresh_token" in data
+        assert data["email"] == "google.dev.user@example.com"
+        assert data["email_verified"] is True
+

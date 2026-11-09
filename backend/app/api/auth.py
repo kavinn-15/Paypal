@@ -530,11 +530,11 @@ def legacy_reset_password(req: ResetPasswordRequest, db: Session = Depends(get_d
 def google_auth_start():
     """
     Initiates Google OAuth 2.0 flow.
-    Returns authorization URL with state.
+    Returns authorization URL with state and configured client_id.
     """
     state = secrets.token_urlsafe(32)
     auth_url = get_google_auth_url(state=state)
-    return GoogleAuthUrlResponse(auth_url=auth_url, state=state)
+    return GoogleAuthUrlResponse(auth_url=auth_url, state=state, client_id=settings.GOOGLE_CLIENT_ID)
 
 
 @router.get("/google/callback", response_model=TokenResponse)

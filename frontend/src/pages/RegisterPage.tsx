@@ -67,6 +67,13 @@ export const RegisterPage: React.FC = () => {
     try {
       const res = await api.getGoogleAuthUrl();
       if (res.auth_url) {
+        // If placeholder credentials are used in local dev mode, simulate callback directly
+        const clientId = res.client_id || import.meta.env.VITE_GOOGLE_CLIENT_ID;
+        const isPlaceholder = !clientId || clientId.includes('placeholder_google_client_id') || res.auth_url.includes('placeholder_google_client_id');
+        if (isPlaceholder) {
+          navigate(`/auth/callback/google?code=mock_google_dev_user&state=${encodeURIComponent(res.state || 'dev_state')}`);
+          return;
+        }
         window.location.href = res.auth_url;
       }
     } catch (err: any) {

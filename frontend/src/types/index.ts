@@ -88,6 +88,7 @@ export interface PasswordResetVerifyOtpResponse {
 export interface GoogleAuthUrlResponse {
   auth_url: string;
   state: string;
+  client_id?: string;
 }
 
 export interface Obligation {

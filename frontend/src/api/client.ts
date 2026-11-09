@@ -15,7 +15,8 @@ import {
   FinancialSummaryResponse,
   TimelineEntry,
   TokenResponse,
-  PhoneAuthResponse
+  PhoneAuthResponse,
+  GoogleAuthUrlResponse
 } from '../types';
 
 const API_BASE = '/api';
@@ -394,7 +395,7 @@ export const api = {
   },
 
   getGoogleAuthUrl: async () => {
-    return request<{ auth_url: string; state: string }>('/auth/google/start');
+    return request<GoogleAuthUrlResponse>('/auth/google/start');
   },
 
   submitGoogleToken: async (credential: string) => {
