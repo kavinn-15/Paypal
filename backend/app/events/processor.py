@@ -74,50 +74,120 @@ def process_webhook_event(
         if evt_record and owner:
             evt_record.owner_id = owner.id
 
-        # Parse payment amount and handle partial/over payments
-        raw_amt = inv_data.get("amount", {}).get("value") or resource.get("amount", {}).get("value")
-        paid_amount = Decimal(str(raw_amt)) if raw_amt else Decimal(str(invoice.amount))
+        # Locate payment records in payload
+        # Support:
+        # 1. payments as an array of payment records: [{"payment_id": "...", "amount": ...}]
+        # 2. payments as an object containing a transactions array: {"transactions": [{"payment_id": "...", ...}]}
+        # 3. payments as an object containing a payments array
+        # 4. transactions array at resource or inv_data level
+        raw_payments = inv_data.get("payments")
+        if raw_payments is None:
+            raw_payments = resource.get("payments")
 
-        # Currency validation
-        raw_currency = (
-            inv_data.get("amount", {}).get("currency_code")
-            or resource.get("amount", {}).get("currency_code")
-            or invoice.currency
-        )
-        if raw_currency.upper() != invoice.currency.upper():
-            logger.warning(
-                f"Currency mismatch on invoice {invoice.paypal_invoice_id}: expected {invoice.currency}, got {raw_currency}"
-            )
-            if evt_record:
-                evt_record.processing_state = "quarantined"
-                evt_record.reconciliation_status = "manual_review_required"
-                evt_record.error_details = f"Currency mismatch: expected {invoice.currency}, received {raw_currency}"
-                db.commit()
-            append_audit_log(
-                db=db,
-                actor="paypal_webhook" if not is_simulated else "dev_simulator",
-                event="CURRENCY_MISMATCH_QUARANTINED",
-                payload={"paypal_invoice_id": invoice.paypal_invoice_id, "expected_currency": invoice.currency, "received_currency": raw_currency},
-                owner_id=owner.id if owner else None
-            )
-            return {
-                "status": "quarantined",
-                "reason": "currency_mismatch",
-                "expected_currency": invoice.currency,
-                "received_currency": raw_currency
-            }
+        payments_list = []
+        has_payments_structure = False
 
-        # Extract unique PayPal transaction / capture reference
-        payments = inv_data.get("payments") or resource.get("payments") or []
+        if isinstance(raw_payments, list):
+            payments_list = [p for p in raw_payments if isinstance(p, dict)]
+            has_payments_structure = True
+        elif isinstance(raw_payments, dict):
+            has_payments_structure = True
+            txs = raw_payments.get("transactions")
+            if txs is None:
+                txs = raw_payments.get("payments")
+            if isinstance(txs, list):
+                payments_list = [p for p in txs if isinstance(p, dict)]
+        elif isinstance(inv_data.get("transactions"), list):
+            payments_list = [p for p in inv_data.get("transactions") if isinstance(p, dict)]
+            has_payments_structure = True
+        elif isinstance(resource.get("transactions"), list):
+            payments_list = [p for p in resource.get("transactions") if isinstance(p, dict)]
+            has_payments_structure = True
+
+        def get_record_ref(item: dict) -> Optional[str]:
+            return (
+                item.get("payment_id")
+                or item.get("transaction_id")
+                or item.get("capture_id")
+            )
+
+        target_payment = None
         tx_ref = None
-        if payments and isinstance(payments, list) and len(payments) > 0 and isinstance(payments[0], dict):
-            tx_ref = payments[0].get("payment_id") or payments[0].get("transaction_id")
-        if not tx_ref:
-            tx_ref = resource.get("transaction_id") or resource.get("capture_id") or resource.get("payment_id")
-        if not tx_ref:
+
+        # Check if an explicit transaction / payment reference was specified at resource level
+        explicit_ref = (
+            resource.get("transaction_id")
+            or resource.get("capture_id")
+            or resource.get("payment_id")
+        )
+        if not explicit_ref:
             res_id = resource.get("id")
             if res_id and res_id != paypal_inv_id:
-                tx_ref = res_id
+                explicit_ref = res_id
+
+        if has_payments_structure:
+            if explicit_ref:
+                # Find matching payment record by explicit ref
+                matching = [
+                    p for p in payments_list
+                    if get_record_ref(p) == explicit_ref
+                ]
+                if len(matching) == 1:
+                    target_payment = matching[0]
+                    tx_ref = explicit_ref
+                elif len(matching) > 1:
+                    logger.warning(f"Ambiguous payments in invoice {paypal_inv_id}: multiple matches for reference {explicit_ref}")
+                    if evt_record:
+                        evt_record.processing_state = "quarantined"
+                        evt_record.reconciliation_status = "manual_review_required"
+                        evt_record.error_details = f"Ambiguous payments: multiple payment records match reference {explicit_ref}"
+                        db.commit()
+                    return {"status": "quarantined", "reason": "ambiguous_payment_records", "paypal_invoice_id": paypal_inv_id}
+                elif len(matching) == 0 and len(payments_list) > 1:
+                    logger.warning(f"Ambiguous payments in invoice {paypal_inv_id}: reference {explicit_ref} matched none of {len(payments_list)} payments")
+                    if evt_record:
+                        evt_record.processing_state = "quarantined"
+                        evt_record.reconciliation_status = "manual_review_required"
+                        evt_record.error_details = f"Ambiguous payments: explicit reference {explicit_ref} did not match any of {len(payments_list)} transactions"
+                        db.commit()
+                    return {"status": "quarantined", "reason": "ambiguous_payment_records", "paypal_invoice_id": paypal_inv_id}
+
+            if not target_payment:
+                if len(payments_list) == 1:
+                    target_payment = payments_list[0]
+                    tx_ref = get_record_ref(target_payment) or explicit_ref
+                elif len(payments_list) > 1:
+                    # Filter for unrecorded payments
+                    unrecorded = []
+                    for p in payments_list:
+                        p_id = get_record_ref(p)
+                        if p_id:
+                            exists = db.query(PaymentHistory).filter(PaymentHistory.transaction_reference == p_id).first()
+                            if not exists:
+                                unrecorded.append((p, p_id))
+                    if len(unrecorded) == 1:
+                        target_payment, tx_ref = unrecorded[0]
+                    elif len(unrecorded) > 1:
+                        # Ambiguous: multiple unrecorded payment records present in a single webhook without an identifiable target
+                        logger.warning(f"Ambiguous payments in invoice {paypal_inv_id}: {len(unrecorded)} unrecorded payment entries in payload")
+                        if evt_record:
+                            evt_record.processing_state = "quarantined"
+                            evt_record.reconciliation_status = "manual_review_required"
+                            evt_record.error_details = f"Ambiguous payments: payload contains {len(unrecorded)} unrecorded payment records without identifiable target"
+                            db.commit()
+                        return {"status": "quarantined", "reason": "ambiguous_payment_records", "paypal_invoice_id": paypal_inv_id}
+                    elif len(unrecorded) == 0 and len(payments_list) > 0:
+                        # All payments in the list were already processed
+                        tx_ref = get_record_ref(payments_list[-1]) or explicit_ref
+                        return {
+                            "status": "already_processed",
+                            "reason": "duplicate_transaction_reference",
+                            "transaction_reference": tx_ref,
+                            "paypal_invoice_id": paypal_inv_id
+                        }
+        else:
+            # No payments structure; use resource-level explicit reference
+            tx_ref = explicit_ref
 
         if not tx_ref:
             if is_simulated:
@@ -146,6 +216,200 @@ def process_webhook_event(
                     "paypal_invoice_id": paypal_inv_id,
                     "event_id": event_id
                 }
+
+        # Extract actual individual payment amount and currency
+        raw_amt = None
+        raw_currency = None
+
+        if target_payment:
+            # When an individual transaction has been identified:
+            # Amount and currency MUST come from target_payment.
+            # Never substitute invoice total or resource-level invoice amount!
+            p_amt = target_payment.get("amount")
+            if isinstance(p_amt, dict):
+                raw_amt = p_amt.get("value")
+                raw_currency = p_amt.get("currency_code")
+            elif p_amt is not None:
+                raw_amt = p_amt
+
+            if not raw_currency:
+                raw_currency = target_payment.get("currency_code") or target_payment.get("currency")
+
+            # CRITICAL: If an identified payment record is missing its amount,
+            # NEVER fall back to resource.amount or invoice total!
+            if raw_amt is None:
+                logger.warning(
+                    f"Identified payment transaction {tx_ref} in invoice {paypal_inv_id} lacks an individual payment amount. "
+                    "Refusing to substitute invoice total."
+                )
+                if evt_record:
+                    evt_record.processing_state = "quarantined"
+                    evt_record.reconciliation_status = "manual_review_required"
+                    evt_record.error_details = (
+                        f"Payment transaction {tx_ref} missing individual payment amount. "
+                        "Fallback to invoice total is strictly disallowed."
+                    )
+                    db.commit()
+                append_audit_log(
+                    db=db,
+                    actor="paypal_webhook" if not is_simulated else "dev_simulator",
+                    event="WEBHOOK_MISSING_PAYMENT_AMOUNT_QUARANTINED",
+                    payload={"paypal_invoice_id": paypal_inv_id, "event_id": event_id, "transaction_ref": tx_ref},
+                    owner_id=owner.id if owner else None
+                )
+                return {
+                    "status": "quarantined",
+                    "reason": "missing_payment_amount",
+                    "paypal_invoice_id": paypal_inv_id,
+                    "transaction_reference": tx_ref
+                }
+
+            # CRITICAL: When target_payment has been identified, obtain currency exclusively
+            # from that individual payment record.
+            # If its currency is missing, invalid, or ambiguous, quarantine the webhook for manual review.
+            # Do NOT substitute currency from inv_data.amount, resource.amount, or invoice.currency!
+            if not is_simulated:
+                if not raw_currency or not isinstance(raw_currency, str) or not raw_currency.strip():
+                    logger.warning(
+                        f"Identified payment transaction {tx_ref} in invoice {paypal_inv_id} lacks its own currency. "
+                        "Refusing to infer currency from invoice or resource."
+                    )
+                    if evt_record:
+                        evt_record.processing_state = "quarantined"
+                        evt_record.reconciliation_status = "manual_review_required"
+                        evt_record.error_details = (
+                            f"Payment transaction {tx_ref} missing individual currency. "
+                            "Fallback to invoice currency is strictly disallowed."
+                        )
+                        db.commit()
+                    append_audit_log(
+                        db=db,
+                        actor="paypal_webhook",
+                        event="WEBHOOK_MISSING_PAYMENT_CURRENCY_QUARANTINED",
+                        payload={"paypal_invoice_id": paypal_inv_id, "event_id": event_id, "transaction_ref": tx_ref},
+                        owner_id=owner.id if owner else None
+                    )
+                    return {
+                        "status": "quarantined",
+                        "reason": "missing_payment_currency",
+                        "paypal_invoice_id": paypal_inv_id,
+                        "transaction_reference": tx_ref
+                    }
+        else:
+            if has_payments_structure:
+                # Payments structure was present, but no target payment could be established
+                logger.warning(f"Payload has payments structure but no valid target payment could be determined.")
+                if evt_record:
+                    evt_record.processing_state = "quarantined"
+                    evt_record.reconciliation_status = "manual_review_required"
+                    evt_record.error_details = "Ambiguous payments structure without identifiable target payment"
+                    db.commit()
+                return {"status": "quarantined", "reason": "ambiguous_payment_records", "paypal_invoice_id": paypal_inv_id}
+
+            # Flat event structure without nested payments array (e.g. direct capture or simulated event)
+            res_amt = resource.get("amount")
+            if isinstance(res_amt, dict):
+                raw_amt = res_amt.get("value")
+                raw_currency = res_amt.get("currency_code")
+            elif res_amt is not None:
+                raw_amt = res_amt
+
+            if not raw_currency:
+                raw_currency = resource.get("currency_code") or resource.get("currency")
+
+        # Inferred / missing amounts MUST NOT be assumed from invoice.amount for genuine webhooks
+        if raw_amt is None:
+            if is_simulated:
+                raw_amt = invoice.amount
+            else:
+                logger.warning(f"Webhook event {event_id} for invoice {paypal_inv_id} lacks verified payment amount. Quarantining.")
+                if evt_record:
+                    evt_record.processing_state = "quarantined"
+                    evt_record.reconciliation_status = "manual_review_required"
+                    evt_record.error_details = "Missing verified payment amount. Inferred invoice total is strictly disallowed."
+                    db.commit()
+                append_audit_log(
+                    db=db,
+                    actor="paypal_webhook",
+                    event="WEBHOOK_MISSING_PAYMENT_AMOUNT_QUARANTINED",
+                    payload={"paypal_invoice_id": paypal_inv_id, "event_id": event_id},
+                    owner_id=owner.id if owner else None
+                )
+                return {"status": "quarantined", "reason": "missing_payment_amount", "paypal_invoice_id": paypal_inv_id}
+
+        try:
+            paid_amount = Decimal(str(raw_amt))
+            if paid_amount <= 0:
+                raise ValueError("Payment amount must be greater than zero")
+        except Exception as e:
+            if evt_record:
+                evt_record.processing_state = "quarantined"
+                evt_record.reconciliation_status = "manual_review_required"
+                evt_record.error_details = f"Invalid payment amount '{raw_amt}': {e}"
+                db.commit()
+            return {"status": "quarantined", "reason": "invalid_payment_amount", "paypal_invoice_id": paypal_inv_id}
+
+        # Currency validation
+        if is_simulated:
+            # Preserve simulated payment behavior
+            if not raw_currency or not isinstance(raw_currency, str) or not raw_currency.strip():
+                raw_currency = invoice.currency
+        else:
+            # Genuine payment events: BOTH individual payment records AND flat structures
+            # require an explicit, valid string currency.
+            # Never substitute invoice.currency or infer currency when missing.
+            # Quarantine missing, empty, malformed, or non-string currencies for manual review.
+            if not isinstance(raw_currency, str) or not raw_currency.strip() or not raw_currency.strip().isalpha():
+                logger.warning(
+                    f"Genuine payment event for invoice {invoice.paypal_invoice_id} lacks a valid string currency (got: {repr(raw_currency)}). "
+                    "Quarantining for manual review."
+                )
+                if evt_record:
+                    evt_record.processing_state = "quarantined"
+                    evt_record.reconciliation_status = "manual_review_required"
+                    evt_record.error_details = (
+                        f"Missing or malformed payment currency (got: {repr(raw_currency)}). "
+                        "Fallback to invoice currency is strictly disallowed."
+                    )
+                    db.commit()
+                append_audit_log(
+                    db=db,
+                    actor="paypal_webhook",
+                    event="WEBHOOK_MISSING_PAYMENT_CURRENCY_QUARANTINED",
+                    payload={"paypal_invoice_id": invoice.paypal_invoice_id, "event_id": event_id, "currency": str(raw_currency)},
+                    owner_id=owner.id if owner else None
+                )
+                return {
+                    "status": "quarantined",
+                    "reason": "missing_payment_currency",
+                    "paypal_invoice_id": invoice.paypal_invoice_id,
+                    "currency": raw_currency
+                }
+
+        # Safe type-checked currency comparison (guaranteed string here)
+        clean_currency = raw_currency.strip().upper()
+        if clean_currency != invoice.currency.upper():
+            logger.warning(
+                f"Currency mismatch on invoice {invoice.paypal_invoice_id}: expected {invoice.currency}, got {clean_currency}"
+            )
+            if evt_record:
+                evt_record.processing_state = "quarantined"
+                evt_record.reconciliation_status = "manual_review_required"
+                evt_record.error_details = f"Currency mismatch: expected {invoice.currency}, received {clean_currency}"
+                db.commit()
+            append_audit_log(
+                db=db,
+                actor="paypal_webhook" if not is_simulated else "dev_simulator",
+                event="CURRENCY_MISMATCH_QUARANTINED",
+                payload={"paypal_invoice_id": invoice.paypal_invoice_id, "expected_currency": invoice.currency, "received_currency": clean_currency},
+                owner_id=owner.id if owner else None
+            )
+            return {
+                "status": "quarantined",
+                "reason": "currency_mismatch",
+                "expected_currency": invoice.currency,
+                "received_currency": clean_currency
+            }
 
         due_d = invoice.due_date if invoice.due_date.tzinfo else invoice.due_date.replace(tzinfo=timezone.utc)
         days_late = max((now.date() - due_d.date()).days, 0)
@@ -343,12 +607,16 @@ def process_webhook_event(
 
         # Recalculate forecast using actual reconciled balance
         reconciled_balance = float(FinancialService.get_confirmed_balance(db, owner)) if owner else 1800.0 + float(paid_amount)
-        forecaster = ForecasterAgent(db)
-        updated_forecast = forecaster.run_forecast(
-            obligation_id=None,
-            starting_balance=reconciled_balance,
-            owner_id=owner.id if owner else None
-        )
+        try:
+            forecaster = ForecasterAgent(db)
+            updated_forecast = forecaster.run_forecast(
+                obligation_id=None,
+                starting_balance=reconciled_balance,
+                owner_id=owner.id if owner else None
+            )
+        except Exception as e:
+            logger.info(f"Forecast recalculation skipped after payment: {e}")
+            updated_forecast = None
 
         if not is_simulated and total_cumulative > inv_total:
             excess = total_cumulative - inv_total

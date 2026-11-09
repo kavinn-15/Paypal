@@ -76,18 +76,22 @@ CLIENT_PROFILES = [
 
 
 def seed_database(clean: bool = False, demo_mode: bool = True):
+    if clean:
+        print("Cleaning existing database data and refreshing tables...")
+        with engine.connect() as conn:
+            from sqlalchemy import text
+            try:
+                conn.execute(text("DROP TABLE IF EXISTS alembic_version;"))
+                conn.commit()
+            except Exception:
+                pass
+        Base.metadata.drop_all(bind=engine)
+
     print("Initializing database tables...")
     init_db()
     db = SessionLocal()
 
     try:
-        if clean:
-            print("Cleaning existing database data and refreshing tables...")
-            db.close()
-            Base.metadata.drop_all(bind=engine)
-            Base.metadata.create_all(bind=engine)
-            db = SessionLocal()
-
         # Select dedicated demo owner (Alex Morgan) rather than modifying the first registered user
         owner = db.query(Owner).filter(
             (Owner.email == "alex.morgan.freelance@example.com") | (Owner.is_demo == True)

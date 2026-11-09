@@ -49,6 +49,14 @@ htmlcov/
 .ruff_cache/
 
 # ==========================================
+# Build Artifacts & Submission Archives
+# ==========================================
+*.zip
+*.tar.gz
+*.tgz
+cashflow-lifeline-submission.zip
+
+# ==========================================
 # Databases & Local Runtime Storage
 # ==========================================
 *.db

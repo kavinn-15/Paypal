@@ -114,7 +114,7 @@ def test_simulated_payment_cannot_confirm_real_action(setup_db):
             "resource": {
                 "id": inv_ref,
                 "transaction_id": "TX-REAL-001",
-                "amount": {"value": "2000.00"}
+                "amount": {"value": "2000.00", "currency_code": "USD"}
             }
         }
 
@@ -862,7 +862,7 @@ def test_overpayment_flagged_and_partial_payment():
             "resource": {
                 "id": inv_over.paypal_invoice_id,
                 "transaction_id": f"TX-OVER-{datetime.now().timestamp()}",
-                "amount": {"value": "1500.00"}
+                "amount": {"value": "1500.00", "currency_code": "USD"}
             }
         }, is_simulated=False)
 
@@ -879,7 +879,7 @@ def test_overpayment_flagged_and_partial_payment():
             "resource": {
                 "id": inv_partial.paypal_invoice_id,
                 "transaction_id": f"TX-PART-{datetime.now().timestamp()}",
-                "amount": {"value": "400.00"}
+                "amount": {"value": "400.00", "currency_code": "USD"}
             }
         }, is_simulated=False)
 
@@ -2606,6 +2606,957 @@ def test_migration_upgrade_preserves_financial_records(setup_db):
         assert "obligation_id" in cols
         assert "is_simulated" in cols
         assert "approved_payload_hash" in cols
+
+
+# =========================================================================
+# Final Payment & Migration Validation Tests
+# =========================================================================
+
+def test_alembic_fresh_database_initialization_reaches_head(tmp_path):
+    """
+    Test 1A: Fresh database initialization from scratch via Alembic reaches head
+    without calling create_all(), creating all tables and matching final schema.
+    """
+    import sqlite3
+    from alembic.config import Config
+    from alembic import command
+    from sqlalchemy import create_engine, inspect, text
+
+    db_file = tmp_path / "fresh_alembic.db"
+    db_uri = f"sqlite:///{db_file.as_posix()}"
+
+    # Empty sqlite file
+    conn = sqlite3.connect(db_file.as_posix())
+    conn.close()
+
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", db_uri)
+    command.upgrade(cfg, "head")
+
+    eng = create_engine(db_uri)
+    insp = inspect(eng)
+    tables = insp.get_table_names()
+    assert "alembic_version" in tables
+    assert "owners" in tables
+    assert "invoices" in tables
+    assert "actions" in tables
+    assert "payment_history" in tables
+
+    with eng.connect() as c:
+        current_rev = c.execute(text("SELECT version_num FROM alembic_version;")).scalar()
+        assert current_rev == "5e6f7a8b9c0d"
+
+
+def test_paypal_webhook_extracts_individual_payment_amount_not_invoice_total(setup_db):
+    """
+    Test 2A: When an invoice has total amount $1000.00, but a webhook reports
+    an individual payment of $400.00 in payments array, the paid_amount recorded
+    in PaymentHistory and financial entry is exactly $400.00, NOT $1000.00.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-PAY-INDIVIDUAL-{datetime.now().timestamp()}"
+        tx_id = f"PAY-INDIV-400-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        # PayPal webhook where resource.amount is invoice total ($1000), but payments[0].amount is $400
+        webhook_payload = {
+            "id": f"WH-INDIV-400-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "1000.00", "currency_code": "USD"},
+                "payments": [
+                    {
+                        "payment_id": tx_id,
+                        "amount": {"value": "400.00", "currency_code": "USD"}
+                    }
+                ]
+            }
+        }
+
+        res = process_webhook_event(db, webhook_payload, is_simulated=False)
+        db.refresh(invoice)
+
+        # Invoice should be PARTIALLY_PAID because $400 < $1000
+        assert invoice.status == "PARTIALLY_PAID"
+
+        # PaymentHistory record must record $400.00, NOT $1000.00
+        ph = db.query(PaymentHistory).filter(PaymentHistory.transaction_reference == tx_id).first()
+        assert ph is not None
+        assert float(ph.amount) == 400.0
+
+        # Ledger entry must record $400.00
+        le = db.query(FinancialEntry).filter(FinancialEntry.reference_id == tx_id).first()
+        assert le is not None
+        assert float(le.amount) == 400.0
+    finally:
+        db.close()
+
+
+def test_paypal_webhook_quarantines_missing_payment_amount(setup_db):
+    """
+    Test 2B: Genuine PayPal webhook with no payment amount is quarantined
+    and NEVER defaults to invoice.amount.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-NO-AMT-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        webhook_payload = {
+            "id": f"WH-NO-AMT-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "transaction_id": f"TX-VALID-{datetime.now().timestamp()}"
+                # NO amount specified in resource or payments!
+            }
+        }
+
+        res = process_webhook_event(db, webhook_payload, is_simulated=False)
+        db.refresh(invoice)
+
+        assert res["status"] == "quarantined"
+        assert res["reason"] == "missing_payment_amount"
+        assert invoice.status == "SENT"  # Must remain untouched!
+    finally:
+        db.close()
+
+
+def test_paypal_webhook_quarantines_ambiguous_payment_records(setup_db):
+    """
+    Test 2C: Payload containing multiple unrecorded payment records without
+    an explicit transaction reference is quarantined as ambiguous.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-AMBIGUOUS-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        webhook_payload = {
+            "id": f"WH-AMBIGUOUS-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "payments": [
+                    {"payment_id": f"TX-1-{datetime.now().timestamp()}", "amount": {"value": "200.00", "currency_code": "USD"}},
+                    {"payment_id": f"TX-2-{datetime.now().timestamp()}", "amount": {"value": "300.00", "currency_code": "USD"}}
+                ]
+            }
+        }
+
+        res = process_webhook_event(db, webhook_payload, is_simulated=False)
+        assert res["status"] == "quarantined"
+        assert res["reason"] == "ambiguous_payment_records"
+    finally:
+        db.close()
+
+
+def test_concurrent_sessions_process_same_transaction(setup_db, tmp_path):
+    """
+    Test 3: Two independent database sessions simultaneously processing the exact same genuine
+    transaction reference. Verified via ThreadPoolExecutor. Exactly one PaymentHistory and
+    one FinancialEntry record are created, and unique constraint conflicts are handled cleanly.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    import sqlalchemy as sa
+
+    db_path = tmp_path / "concurrent_test.db"
+    test_db_url = f"sqlite:///{db_path.as_posix()}"
+
+    test_engine = sa.create_engine(
+        test_db_url,
+        connect_args={"check_same_thread": False, "timeout": 30.0}
+    )
+    with test_engine.connect() as conn:
+        conn.execute(sa.text("PRAGMA journal_mode=WAL;"))
+        conn.commit()
+
+    TestSession = sa.orm.sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+    # Migrate test database to head
+    from alembic.config import Config
+    from alembic import command
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", test_db_url)
+    command.upgrade(cfg, "head")
+
+    setup_session = TestSession()
+    owner = Owner(name="Concurrent Owner", email=f"conc_{datetime.now().timestamp()}@example.com", currency="USD")
+    setup_session.add(owner)
+    setup_session.commit()
+
+    client = Client(owner_id=owner.id, name="Conc Client", email="conc_client@example.com", typical_invoice_amount=500.0)
+    setup_session.add(client)
+    setup_session.commit()
+
+    obligation = Obligation(
+        owner_id=owner.id,
+        payee_name="Conc Contractor",
+        payee_email="contractor@example.com",
+        amount=300.0,
+        currency="USD",
+        due_date=datetime.now(timezone.utc) + timedelta(days=7),
+        status="pending"
+    )
+    setup_session.add(obligation)
+    setup_session.commit()
+
+    inv_ref = f"INV-CONC-RACE-{datetime.now().timestamp()}"
+    shared_tx = f"TX-CONC-SHARED-{datetime.now().timestamp()}"
+
+    invoice = Invoice(
+        client_id=client.id,
+        paypal_invoice_id=inv_ref,
+        amount=500.0,
+        currency="USD",
+        issue_date=datetime.now(timezone.utc),
+        due_date=datetime.now(timezone.utc) + timedelta(days=5),
+        status="SENT"
+    )
+    setup_session.add(invoice)
+    setup_session.commit()
+    setup_session.close()
+
+    def worker_process(worker_id):
+        worker_db = TestSession()
+        try:
+            wh_payload = {
+                "id": f"WH-WORKER-{worker_id}-{datetime.now().timestamp()}",
+                "event_type": "INVOICING.INVOICE.PAID",
+                "resource": {
+                    "id": inv_ref,
+                    "transaction_id": shared_tx,
+                    "amount": {"value": "500.00", "currency_code": "USD"}
+                }
+            }
+            return process_webhook_event(worker_db, wh_payload, is_simulated=False)
+        finally:
+            worker_db.close()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f1 = executor.submit(worker_process, 1)
+        f2 = executor.submit(worker_process, 2)
+        r1 = f1.result()
+        r2 = f2.result()
+
+    statuses = [r1.get("status"), r2.get("status")]
+    # One worker must succeed/reconcile, the other must safely return already_processed
+    assert "already_processed" in statuses or "success" in statuses
+
+    # Verify exactly one PaymentHistory and FinancialEntry
+    verify_session = TestSession()
+    try:
+        ph_count = verify_session.query(PaymentHistory).filter(PaymentHistory.transaction_reference == shared_tx).count()
+        assert ph_count == 1
+
+        fe_count = verify_session.query(FinancialEntry).filter(FinancialEntry.reference_id == shared_tx).count()
+        assert fe_count == 1
+    finally:
+        verify_session.close()
+
+
+def test_paypal_webhook_payments_as_object_containing_transactions(setup_db):
+    """
+    Test 4A: PayPal invoice webhook where 'payments' is an object containing
+    a 'transactions' array: {"payments": {"transactions": [...]}}
+    Extracts individual payment amount and genuine payment reference accurately.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-OBJ-TX-{datetime.now().timestamp()}"
+        tx_id = f"PAY-TX-OBJ-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        webhook_payload = {
+            "id": f"WH-OBJ-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "1000.00", "currency_code": "USD"},
+                "payments": {
+                    "transactions": [
+                        {
+                            "payment_id": tx_id,
+                            "type": "PAYPAL",
+                            "amount": {"value": "350.00", "currency_code": "USD"},
+                            "payment_date": "2026-11-09T10:00:00Z"
+                        }
+                    ]
+                }
+            }
+        }
+
+        res = process_webhook_event(db, webhook_payload, is_simulated=False)
+        db.refresh(invoice)
+
+        assert res["status"] in ["success", "reconciled", "processed"]
+        assert invoice.status == "PARTIALLY_PAID"
+
+        # Payment history must record $350.00, NEVER $1000.00 invoice total
+        ph = db.query(PaymentHistory).filter(PaymentHistory.transaction_reference == tx_id).first()
+        assert ph is not None
+        assert float(ph.amount) == 350.0
+
+        fe = db.query(FinancialEntry).filter(FinancialEntry.reference_id == tx_id).first()
+        assert fe is not None
+        assert float(fe.amount) == 350.0
+    finally:
+        db.close()
+
+
+def test_paypal_webhook_multiple_transactions_with_identifiable_target(setup_db):
+    """
+    Test 4B: Payload contains multiple transactions, but has an identifiable
+    target transaction matching resource.transaction_id.
+    Extracts that target's amount ($450.00), not the other transaction, not invoice total.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-MULTI-TARGET-{datetime.now().timestamp()}"
+        target_tx = f"PAY-TARGET-{datetime.now().timestamp()}"
+        other_tx = f"PAY-OTHER-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        webhook_payload = {
+            "id": f"WH-MULTI-TGT-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "transaction_id": target_tx,
+                "amount": {"value": "1000.00", "currency_code": "USD"},
+                "payments": {
+                    "transactions": [
+                        {
+                            "payment_id": other_tx,
+                            "amount": {"value": "100.00", "currency_code": "USD"}
+                        },
+                        {
+                            "payment_id": target_tx,
+                            "amount": {"value": "450.00", "currency_code": "USD"}
+                        }
+                    ]
+                }
+            }
+        }
+
+        res = process_webhook_event(db, webhook_payload, is_simulated=False)
+        db.refresh(invoice)
+
+        assert res["status"] in ["success", "reconciled", "processed"]
+        assert invoice.status == "PARTIALLY_PAID"
+
+        ph = db.query(PaymentHistory).filter(PaymentHistory.transaction_reference == target_tx).first()
+        assert ph is not None
+        assert float(ph.amount) == 450.0
+    finally:
+        db.close()
+
+
+def test_paypal_webhook_missing_individual_transaction_amount_with_invoice_total_present(setup_db):
+    """
+    Test 4C: Target transaction record is missing its amount key entirely, while
+    resource.amount (the invoice total: $1000.00) is present.
+    Must quarantine with missing_payment_amount and strictly refuse to substitute
+    the invoice total for the individual payment.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-MISS-INDIV-AMT-{datetime.now().timestamp()}"
+        tx_id = f"PAY-NO-AMT-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        webhook_payload = {
+            "id": f"WH-MISS-AMT-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "1000.00", "currency_code": "USD"},
+                "payments": [
+                    {
+                        "payment_id": tx_id
+                        # Amount field omitted
+                    }
+                ]
+            }
+        }
+
+        res = process_webhook_event(db, webhook_payload, is_simulated=False)
+        db.refresh(invoice)
+
+        assert res["status"] == "quarantined"
+        assert res["reason"] == "missing_payment_amount"
+
+        # Assert no PaymentHistory was created using the invoice total
+        assert db.query(PaymentHistory).filter(PaymentHistory.transaction_reference == tx_id).first() is None
+        assert invoice.status == "SENT"
+    finally:
+        db.close()
+
+
+def test_paypal_webhook_incorrect_currency_quarantined(setup_db):
+    """
+    Test 4D: Payment record specifies EUR when invoice is in USD.
+    Must be quarantined with currency_mismatch and no payment applied.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-WRONG-CURR-{datetime.now().timestamp()}"
+        tx_id = f"PAY-EUR-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=500.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        webhook_payload = {
+            "id": f"WH-EUR-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "payments": [
+                    {
+                        "payment_id": tx_id,
+                        "amount": {"value": "500.00", "currency_code": "EUR"}
+                    }
+                ]
+            }
+        }
+
+        res = process_webhook_event(db, webhook_payload, is_simulated=False)
+        db.refresh(invoice)
+
+        assert res["status"] == "quarantined"
+        assert res["reason"] == "currency_mismatch"
+        assert invoice.status == "SENT"
+        assert db.query(PaymentHistory).filter(PaymentHistory.transaction_reference == tx_id).first() is None
+    finally:
+        db.close()
+
+
+def test_migration_legacy_schema_non_unique_index_replaced_with_unique(tmp_path):
+    """
+    Test 4E: Migration safely inspects and replaces a legacy non-unique index with
+    a unique index on payment_history(transaction_reference), preserving all financial
+    records and historical NULL references.
+    """
+    import sqlalchemy as sa
+    from alembic.config import Config
+    from alembic import command
+
+    db_path = tmp_path / "legacy_migration.db"
+    test_db_url = f"sqlite:///{db_path.as_posix()}"
+
+    test_engine = sa.create_engine(test_db_url)
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", test_db_url)
+
+    # 1. Migrate up to 4d5e6f7a8b9c (before 5e6f7a8b9c0d)
+    command.upgrade(cfg, "4d5e6f7a8b9c")
+
+    # 2. Simulate legacy schema: add column and create a NON-UNIQUE index on transaction_reference
+    with test_engine.connect() as conn:
+        conn.execute(sa.text("ALTER TABLE payment_history ADD COLUMN transaction_reference VARCHAR(255);"))
+        conn.execute(sa.text("CREATE INDEX ix_payment_history_transaction_reference ON payment_history (transaction_reference);"))
+        
+        # Populate client for foreign key
+        conn.execute(sa.text("""
+            INSERT INTO owners (id, name, email, currency) VALUES (1, 'Legacy Owner', 'legacy@example.com', 'USD');
+        """))
+        conn.execute(sa.text("""
+            INSERT INTO clients (id, owner_id, name, email) VALUES (1, 1, 'Legacy Client', 'client@example.com');
+        """))
+
+        # Insert 2 rows with distinct non-null transaction references
+        conn.execute(sa.text("""
+            INSERT INTO payment_history (client_id, amount, due_date, paid_date, days_late, source, transaction_reference)
+            VALUES (1, 100.0, '2026-01-01', '2026-01-02', 1, 'paypal', 'TX-LEGACY-001'),
+                   (1, 200.0, '2026-01-01', '2026-01-02', 1, 'paypal', 'TX-LEGACY-002');
+        """))
+
+        # Insert 2 rows with NULL references (testing historical NULL preservation)
+        conn.execute(sa.text("""
+            INSERT INTO payment_history (client_id, amount, due_date, paid_date, days_late, source, transaction_reference)
+            VALUES (1, 300.0, '2026-01-01', '2026-01-02', 1, 'paypal', NULL),
+                   (1, 400.0, '2026-01-01', '2026-01-02', 1, 'paypal', NULL);
+        """))
+        conn.commit()
+
+    # Verify that the index is currently non-unique
+    insp_before = sa.inspect(test_engine)
+    before_indexes = [
+        idx for idx in insp_before.get_indexes("payment_history")
+        if idx.get("name") == "ix_payment_history_transaction_reference"
+    ]
+    assert len(before_indexes) == 1
+    assert before_indexes[0]["unique"] is False or before_indexes[0]["unique"] == 0
+
+    # 3. Upgrade to head (runs 5e6f7a8b9c0d)
+    command.upgrade(cfg, "head")
+
+    # 4. Verify index is now UNIQUE
+    insp_after = sa.inspect(test_engine)
+    after_indexes = [
+        idx for idx in insp_after.get_indexes("payment_history")
+        if idx.get("name") == "ix_payment_history_transaction_reference"
+    ]
+    assert len(after_indexes) == 1
+    assert after_indexes[0]["unique"] is True or after_indexes[0]["unique"] == 1
+
+    # 5. Verify all 4 financial records remain intact
+    with test_engine.connect() as conn:
+        count = conn.execute(sa.text("SELECT COUNT(*) FROM payment_history;")).scalar()
+        assert count == 4
+
+        null_count = conn.execute(sa.text("SELECT COUNT(*) FROM payment_history WHERE transaction_reference IS NULL;")).scalar()
+        assert null_count == 2
+
+
+def test_migration_stops_with_error_on_duplicate_transaction_references(tmp_path):
+    """
+    Test 4F: If legacy database contains duplicate non-null transaction references,
+    migration stops with a clear actionable ValueError and preserves all records.
+    """
+    import sqlalchemy as sa
+    from alembic.config import Config
+    from alembic import command
+
+    db_path = tmp_path / "dup_migration.db"
+    test_db_url = f"sqlite:///{db_path.as_posix()}"
+
+    test_engine = sa.create_engine(test_db_url)
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", test_db_url)
+
+    command.upgrade(cfg, "4d5e6f7a8b9c")
+
+    with test_engine.connect() as conn:
+        conn.execute(sa.text("ALTER TABLE payment_history ADD COLUMN transaction_reference VARCHAR(255);"))
+        conn.execute(sa.text("""
+            INSERT INTO owners (id, name, email, currency) VALUES (1, 'Legacy Owner', 'legacy@example.com', 'USD');
+        """))
+        conn.execute(sa.text("""
+            INSERT INTO clients (id, owner_id, name, email) VALUES (1, 1, 'Legacy Client', 'client@example.com');
+        """))
+
+        # Insert duplicate non-null transaction references
+        conn.execute(sa.text("""
+            INSERT INTO payment_history (client_id, amount, due_date, paid_date, days_late, source, transaction_reference)
+            VALUES (1, 100.0, '2026-01-01', '2026-01-02', 1, 'paypal', 'TX-DUPLICATE-999'),
+                   (1, 200.0, '2026-01-01', '2026-01-02', 1, 'paypal', 'TX-DUPLICATE-999');
+        """))
+        conn.commit()
+
+    # Attempt upgrade to head - must raise ValueError without modifying data
+    with pytest.raises(ValueError) as excinfo:
+        command.upgrade(cfg, "head")
+
+    assert "Cannot apply unique index" in str(excinfo.value)
+    assert "TX-DUPLICATE-999" in str(excinfo.value)
+
+    # Records must be strictly preserved
+    with test_engine.connect() as conn:
+        count = conn.execute(sa.text("SELECT COUNT(*) FROM payment_history WHERE transaction_reference = 'TX-DUPLICATE-999';")).scalar()
+        assert count == 2
+
+
+# =========================================================================
+# Targeted Regression Tests — Missing Payment Currency
+# =========================================================================
+
+def test_paypal_webhook_individual_payment_valid_amount_usd_processed(setup_db):
+    """
+    Individual payment with valid amount and USD currency against a USD invoice
+    must be processed successfully.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-VALID-USD-{datetime.now().timestamp()}"
+        tx_id = f"PAY-USD-VALID-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        webhook_payload = {
+            "id": f"WH-USD-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "amount": {"value": "1000.00", "currency_code": "USD"},
+                "payments": [
+                    {
+                        "payment_id": tx_id,
+                        "amount": {"value": "300.00", "currency_code": "USD"}
+                    }
+                ]
+            }
+        }
+
+        res = process_webhook_event(db, webhook_payload, is_simulated=False)
+        db.refresh(invoice)
+
+        assert res["status"] in ["success", "reconciled", "processed"]
+        assert invoice.status == "PARTIALLY_PAID"
+
+        ph = db.query(PaymentHistory).filter(PaymentHistory.transaction_reference == tx_id).first()
+        assert ph is not None
+        assert float(ph.amount) == 300.0
+    finally:
+        db.close()
+
+
+def test_paypal_webhook_individual_payment_valid_amount_missing_currency_quarantined(setup_db):
+    """
+    Individual payment with valid amount but missing currency in the payment record
+    must be quarantined for manual review, refusing to infer currency from invoice.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-MISS-CURR-{datetime.now().timestamp()}"
+        tx_id = f"PAY-MISS-CURR-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        # payment record has amount value but NO currency_code
+        webhook_payload = {
+            "id": f"WH-NOCURR-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "payments": [
+                    {
+                        "payment_id": tx_id,
+                        "amount": {"value": "300.00"}
+                    }
+                ]
+            }
+        }
+
+        res = process_webhook_event(db, webhook_payload, is_simulated=False)
+        db.refresh(invoice)
+
+        assert res["status"] == "quarantined"
+        assert res["reason"] == "missing_payment_currency"
+        assert invoice.status == "SENT"
+        assert db.query(PaymentHistory).filter(PaymentHistory.transaction_reference == tx_id).first() is None
+    finally:
+        db.close()
+
+
+# =========================================================================
+# Regression Tests — Flat PayPal Payment Currency Validation
+# =========================================================================
+
+def test_paypal_webhook_flat_payment_with_explicit_usd_succeeds(setup_db):
+    """
+    Flat payment with genuine explicit USD currency must succeed.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-FLAT-USD-{datetime.now().timestamp()}"
+        tx_id = f"TX-FLAT-USD-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        webhook_payload = {
+            "id": f"WH-FLAT-USD-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "transaction_id": tx_id,
+                "amount": {"value": "400.00", "currency_code": "USD"}
+            }
+        }
+
+        res = process_webhook_event(db, webhook_payload, is_simulated=False)
+        db.refresh(invoice)
+
+        assert res["status"] in ["success", "reconciled", "processed"]
+        assert invoice.status == "PARTIALLY_PAID"
+
+        ph = db.query(PaymentHistory).filter(PaymentHistory.transaction_reference == tx_id).first()
+        assert ph is not None
+        assert float(ph.amount) == 400.0
+    finally:
+        db.close()
+
+
+def test_paypal_webhook_flat_payment_with_missing_currency_quarantined(setup_db):
+    """
+    Flat payment with genuine amount but missing currency must be quarantined.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-FLAT-NO-CURR-{datetime.now().timestamp()}"
+        tx_id = f"TX-FLAT-NO-CURR-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=1000.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        # Flat webhook payload without currency_code
+        webhook_payload = {
+            "id": f"WH-FLAT-NO-CURR-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "transaction_id": tx_id,
+                "amount": {"value": "400.00"}
+            }
+        }
+
+        res = process_webhook_event(db, webhook_payload, is_simulated=False)
+        db.refresh(invoice)
+
+        assert res["status"] == "quarantined"
+        assert res["reason"] == "missing_payment_currency"
+        assert invoice.status == "SENT"
+        assert db.query(PaymentHistory).filter(PaymentHistory.transaction_reference == tx_id).first() is None
+    finally:
+        db.close()
+
+
+def test_paypal_webhook_flat_payment_missing_currency_invoice_has_usd_still_quarantined(setup_db):
+    """
+    Flat payment with missing currency while invoice.currency is USD must STILL be quarantined.
+    Must never silently substitute invoice.currency.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-FLAT-NOSUB-USD-{datetime.now().timestamp()}"
+        tx_id = f"TX-FLAT-NOSUB-USD-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=500.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        webhook_payload = {
+            "id": f"WH-FLAT-NOSUB-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "transaction_id": tx_id,
+                "amount": "250.00"  # Flat amount string without currency
+            }
+        }
+
+        res = process_webhook_event(db, webhook_payload, is_simulated=False)
+        db.refresh(invoice)
+
+        assert res["status"] == "quarantined"
+        assert res["reason"] == "missing_payment_currency"
+        assert invoice.status == "SENT"
+        assert db.query(PaymentHistory).filter(PaymentHistory.transaction_reference == tx_id).first() is None
+    finally:
+        db.close()
+
+
+def test_paypal_webhook_flat_payment_numeric_or_malformed_currency_quarantined_no_exception(setup_db):
+    """
+    Flat payment with numeric or malformed currency must be quarantined
+    for manual review cleanly without raising an unhandled AttributeError/exception.
+    """
+    db = SessionLocal()
+    try:
+        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
+        client = db.query(Client).filter(Client.owner_id == owner.id).first()
+        inv_ref = f"INV-FLAT-MALFORMED-{datetime.now().timestamp()}"
+        tx_id = f"TX-FLAT-MALFORMED-{datetime.now().timestamp()}"
+
+        invoice = Invoice(
+            client_id=client.id,
+            paypal_invoice_id=inv_ref,
+            amount=500.0,
+            currency="USD",
+            issue_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            status="SENT"
+        )
+        db.add(invoice)
+        db.commit()
+
+        # 1. Numeric currency code
+        webhook_payload_numeric = {
+            "id": f"WH-FLAT-NUM-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "transaction_id": tx_id,
+                "amount": {"value": "250.00", "currency_code": 123}
+            }
+        }
+
+        res_numeric = process_webhook_event(db, webhook_payload_numeric, is_simulated=False)
+        assert res_numeric["status"] == "quarantined"
+        assert res_numeric["reason"] == "missing_payment_currency"
+
+        # 2. Malformed symbol currency code
+        tx_id2 = f"TX-FLAT-SYM-{datetime.now().timestamp()}"
+        webhook_payload_symbols = {
+            "id": f"WH-FLAT-SYM-{datetime.now().timestamp()}",
+            "event_type": "INVOICING.INVOICE.PAID",
+            "resource": {
+                "id": inv_ref,
+                "transaction_id": tx_id2,
+                "amount": {"value": "250.00", "currency_code": "$$$"}
+            }
+        }
+
+        res_sym = process_webhook_event(db, webhook_payload_symbols, is_simulated=False)
+        assert res_sym["status"] == "quarantined"
+        assert res_sym["reason"] == "missing_payment_currency"
+
+        assert invoice.status == "SENT"
+        assert db.query(PaymentHistory).filter(PaymentHistory.invoice_id == invoice.id).count() == 0
+    finally:
+        db.close()
+
+
+
+
 
 
 
