@@ -1,0 +1,259 @@
+import React, { useState, useEffect } from 'react';
+import { api } from '../api/client';
+import { PlansComparisonResponse, RescuePlan, Action } from '../types';
+import { AtRiskBanner } from '../components/AtRiskBanner';
+import { ForecastChart } from '../components/ForecastChart';
+import { DriverExplanationCard } from '../components/DriverExplanationCard';
+import { RescuePlanCard } from '../components/RescuePlanCard';
+import { ActionTimeline } from '../components/ActionTimeline';
+import { Zap, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
+
+export const DashboardPage: React.FC = () => {
+  const [data, setData] = useState<PlansComparisonResponse | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<RescuePlan | null>(null);
+  const [activeAction, setActiveAction] = useState<Action | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const fetchForecast = async () => {
+    try {
+      setIsLoading(true);
+      const res = await api.getLatestForecast();
+      setData(res);
+      if (res.plans && res.plans.length > 0) {
+        const match = selectedPlan
+          ? res.plans.find((p) => p.plan_type === selectedPlan.plan_type) || res.plans[0]
+          : res.plans[0];
+        setSelectedPlan(match);
+        setActiveAction(match.primary_action);
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err.message || 'Failed to load forecast data' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchForecast();
+  }, []);
+
+  const handleSelectPlan = (plan: RescuePlan) => {
+    setSelectedPlan(plan);
+    setActiveAction(plan.primary_action);
+  };
+
+  const handleApprove = async (actionId: number, approvalHash: string) => {
+    try {
+      const updated = await api.approveAction(actionId, approvalHash);
+      setNotification({
+        type: 'success',
+        message: `Plan Approved! Action state is now APPROVED. HMAC cryptographic signature bound to ${updated.recipient}.`,
+      });
+      await fetchForecast();
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err.message || 'Approval failed' });
+    }
+  };
+
+  const handleExecute = async (actionId: number, idempotencyKey: string) => {
+    try {
+      const updated = await api.executeAction(actionId, idempotencyKey);
+      setNotification({
+        type: 'success',
+        message: `Dispatched to PayPal Sandbox! Action state is EXECUTED. Ref: ${updated.paypal_ref || 'Invoicing Sandbox'}`,
+      });
+      await fetchForecast();
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err.message || 'Execution failed' });
+    }
+  };
+
+  const handleSimulatePayment = async () => {
+    try {
+      setIsSimulating(true);
+      await api.simulateWebhook();
+      setNotification({
+        type: 'success',
+        message: `PayPal Sandbox Webhook Fired! Verified payment received. Action moved to CONFIRMED. Cashflow recalculated.`,
+      });
+      await fetchForecast();
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err.message || 'Webhook simulation failed' });
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
+  if (isLoading && !data) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-3">
+        <RefreshCw className="w-8 h-8 text-electric animate-spin" />
+        <p className="text-sm font-semibold text-ink">Running Forecaster Agent & training delay models...</p>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-12 flex flex-col items-center justify-center space-y-4">
+        {notification && (
+          <div className="p-4 rounded-xl border text-xs sm:text-sm flex items-center justify-between bg-rose-50 text-rose-800 border-rose-300 max-w-lg w-full">
+            <div className="flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{notification.message}</span>
+            </div>
+            <button
+              onClick={() => setNotification(null)}
+              className="text-xs font-bold text-sardine-slate hover:text-ink ml-4"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+        <div className="p-8 bg-white border border-slate-200 rounded-2xl shadow-sm text-center max-w-md w-full space-y-4">
+          <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
+          <h3 className="text-base font-bold text-ink">No Forecast Data Loaded</h3>
+          <p className="text-xs text-sardine-slate">
+            Run the forecast engine to predict upcoming cash shortfalls and generate rescue plans.
+          </p>
+          <button
+            onClick={fetchForecast}
+            className="px-4 py-2.5 bg-electric hover:bg-electric-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center space-x-2 mx-auto cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Generate Forecast</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const isCovered = data.shortfall_amount === 0 || activeAction?.state === 'confirmed';
+
+  return (
+    <div className="space-y-6 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Notifications Banner */}
+      {notification && (
+        <div
+          className={`p-4 rounded-xl border text-xs sm:text-sm flex items-center justify-between shadow-xs ${
+            notification.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+              : 'bg-rose-50 text-rose-800 border-rose-300'
+          }`}
+        >
+          <div className="flex items-center space-x-2">
+            {notification.type === 'success' ? (
+              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{notification.message}</span>
+          </div>
+          <button
+            onClick={() => setNotification(null)}
+            className="text-xs font-bold text-sardine-slate hover:text-ink ml-4"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* 1. Bento Tile: At-Risk Obligation Hero */}
+      <AtRiskBanner
+        obligation={data.obligation}
+        shortfallAmount={data.shortfall_amount}
+        firstShortfallDate={data.first_shortfall_date}
+        startingBalance={1800.0}
+        isCovered={isCovered}
+      />
+
+      {/* 2. Bento Grid: Trajectory Chart (2 cols) + Agentic Risk Intelligence (1 col) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <ForecastChart
+            projections={data.plans[0]?.forecast_without_plan || []}
+            selectedPlan={selectedPlan}
+            obligationDateStr={data.obligation.due_date}
+            obligationAmount={data.obligation.amount}
+          />
+        </div>
+        <div>
+          <DriverExplanationCard
+            explanationText={data.tradeoff_summary}
+            driverRankings={[]}
+            isSourceSeeded={true}
+          />
+        </div>
+      </div>
+
+      {/* 3. Bento Grid: Three Rescue Plans Side-by-Side Comparison */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div>
+            <div className="flex items-center space-x-2">
+              <h2 className="text-lg font-extrabold text-ink tracking-tight">Rescue Plan Options</h2>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-ink text-white rounded-md">
+                Cheapest Safe Fixes
+              </span>
+            </div>
+            <p className="text-xs text-sardine-slate mt-0.5">
+              Deterministic, costed options to plausibly protect Friday's payout. Approve one exact action.
+            </p>
+          </div>
+          <span className="text-xs text-sardine-slate font-medium italic">
+            *All plans state 'plausibly protects', never 'guarantees'.
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {data.plans.map((plan) => (
+            <RescuePlanCard
+              key={plan.id}
+              plan={plan}
+              isSelected={selectedPlan?.id === plan.id}
+              onSelect={() => handleSelectPlan(plan)}
+              onApprove={handleApprove}
+              onExecute={handleExecute}
+              isLoading={isLoading}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* 4. Action State Progression Stepper */}
+      {activeAction && <ActionTimeline action={activeAction} />}
+
+      {/* 5. Bento Tile: Hackathon Fast-Track Sandbox Bar */}
+      <div className="bento-ink p-6 border border-slate-800 shadow-bento">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center space-x-2">
+              <span className="px-2 py-0.5 rounded-full bg-electric-500/20 text-electric-300 border border-electric-400/30 text-[10px] font-bold uppercase tracking-wider">
+                PayPal AI Hackathon Fast-Track
+              </span>
+              <span className="text-xs text-sardine-muted font-medium">Under 3-Minute Live Verification</span>
+            </div>
+            <h3 className="text-base font-bold text-white tracking-tight">
+              Simulate Client Payment Arrival (Sandbox Webhook)
+            </h3>
+            <p className="text-xs text-sardine-muted max-w-xl">
+              Fires a verified <code className="text-electric-300 bg-slate-900 px-1 py-0.5 rounded">INVOICING.INVOICE.PAID</code> webhook event. Moves the approved action to{' '}
+              <strong className="text-emerald-400">CONFIRMED</strong> and recalculates balance to show the contractor obligation is fully covered.
+            </p>
+          </div>
+
+          <button
+            onClick={handleSimulatePayment}
+            disabled={isSimulating}
+            className="flex items-center space-x-2 px-5 py-3 bg-electric hover:bg-electric-600 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-glow-electric transition-all disabled:opacity-50 shrink-0"
+          >
+            <Zap className={`w-4 h-4 text-white ${isSimulating ? 'animate-bounce' : ''}`} />
+            <span>{isSimulating ? 'Processing Webhook...' : 'Simulate Client Payment ($2,000)'}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
