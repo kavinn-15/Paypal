@@ -19,6 +19,10 @@ class Owner(Base):
     country = Column(String(50), nullable=True, default="US")
     business_type = Column(String(50), nullable=True, default="Freelancer")
     preferred_currency = Column(String(10), nullable=True, default="USD")
+    locale = Column(String(10), default="en-US", nullable=False)
+    region_detection_enabled = Column(Boolean, default=True, nullable=False)
+    region_preference_source = Column(String(30), default="detected", nullable=False)  # "detected" | "manual"
+    region_preferences_updated_at = Column(DateTime, nullable=True)
     email_verified = Column(Boolean, default=True, nullable=False)
     email_verified_at = Column(DateTime, nullable=True)
     phone_number = Column(String(32), unique=True, index=True, nullable=True)

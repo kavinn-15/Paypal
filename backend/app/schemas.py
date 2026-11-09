@@ -20,6 +20,8 @@ class UserRegister(BaseModel):
     business_type: Optional[str] = Field(default="Freelancer", max_length=50)
     timezone: str = Field(default="UTC", max_length=50)
     terms_accepted: Optional[bool] = Field(default=True)
+    locale: Optional[str] = Field(default="en-US", max_length=10)
+    region_preference_source: Optional[str] = Field(default="detected", max_length=30)
 
 
 class UserLogin(BaseModel):
@@ -35,6 +37,9 @@ class TokenResponse(BaseModel):
     email: str
     name: str
     currency: str
+    preferred_currency: Optional[str] = "USD"
+    locale: Optional[str] = "en-US"
+    region_detection_enabled: Optional[bool] = True
     is_demo: bool
     country: Optional[str] = "US"
     business_type: Optional[str] = "Freelancer"
@@ -111,6 +116,10 @@ class UserProfile(BaseModel):
     country: Optional[str] = "US"
     business_type: Optional[str] = "Freelancer"
     preferred_currency: Optional[str] = "USD"
+    locale: Optional[str] = "en-US"
+    region_detection_enabled: bool = True
+    region_preference_source: str = "detected"
+    region_preferences_updated_at: Optional[datetime] = None
     email_verified: bool = True
     email_verified_at: Optional[datetime] = None
     phone_number: Optional[str] = None
@@ -121,6 +130,62 @@ class UserProfile(BaseModel):
     is_demo: bool
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+
+# ==========================================
+# Regional Preferences & Localization Schemas
+# ==========================================
+
+class RegionalPreferencesResponse(BaseModel):
+    country: str
+    country_name: str
+    flag: str
+    currency: str              # Base ledger currency
+    preferred_currency: str    # Preferred display currency
+    currency_symbol: str
+    locale: str
+    region_detection_enabled: bool
+    region_preference_source: str  # "detected" | "manual"
+    updated_at: Optional[datetime] = None
+
+
+class RegionalPreferencesUpdate(BaseModel):
+    country: Optional[str] = Field(default=None, min_length=2, max_length=2)
+    preferred_currency: Optional[str] = Field(default=None, min_length=3, max_length=3)
+    currency: Optional[str] = Field(default=None, min_length=3, max_length=3)
+    locale: Optional[str] = Field(default=None, max_length=10)
+    region_detection_enabled: Optional[bool] = None
+
+
+class RegionDetectionResponse(BaseModel):
+    country: str
+    country_name: str
+    flag: str
+    suggested_currency: str
+    currency_name: str
+    currency_symbol: str
+    decimals: int
+    dial_code: str
+    locale: str
+    detection_method: str
+    confidence: float
+
+
+class CountryItem(BaseModel):
+    code: str
+    name: str
+    flag: str
+    currency: str
+    dial_code: str
+    locale: str
+    popular: bool = False
+
+
+class CurrencyItem(BaseModel):
+    code: str
+    name: str
+    symbol: str
+    decimals: int
 
 
 # ==========================================

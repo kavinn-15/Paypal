@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { PayPalConnectionStatus } from '../types';
+import { PayPalConnectionStatus, CountryItem, CurrencyItem } from '../types';
 import { PhoneInput } from '../components/PhoneInput';
 import {
   Settings,
@@ -42,9 +42,67 @@ export const SettingsPage: React.FC = () => {
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [phoneSuccess, setPhoneSuccess] = useState<string | null>(null);
 
+  // Regional preferences state
+  const [countriesList, setCountriesList] = useState<CountryItem[]>([]);
+  const [currenciesList, setCurrenciesList] = useState<CurrencyItem[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState(currentUser?.country || 'US');
+  const [selectedDisplayCurrency, setSelectedDisplayCurrency] = useState(
+    currentUser?.preferred_currency || currentUser?.currency || 'USD'
+  );
+  const [autoDetectEnabled, setAutoDetectEnabled] = useState(
+    currentUser?.region_detection_enabled !== false
+  );
+  const [preferenceSource, setPreferenceSource] = useState(
+    currentUser?.region_preference_source || 'detected'
+  );
+  const [preferencesUpdatedAt, setPreferencesUpdatedAt] = useState<string | null>(
+    currentUser?.region_preferences_updated_at || null
+  );
+  const [regionalSaving, setRegionalSaving] = useState(false);
+  const [regionalSuccess, setRegionalSuccess] = useState<string | null>(null);
+  const [regionalError, setRegionalError] = useState<string | null>(null);
+
   useEffect(() => {
     api.getPayPalConnection().then(setStatus).catch(() => {});
+
+    // Fetch regional catalogs and current profile preferences
+    Promise.all([
+      api.getCountries().catch(() => []),
+      api.getCurrencies().catch(() => []),
+      api.getRegionalPreferences().catch(() => null)
+    ]).then(([cList, currList, prefs]) => {
+      if (cList.length > 0) setCountriesList(cList);
+      if (currList.length > 0) setCurrenciesList(currList);
+      if (prefs) {
+        setSelectedCountry(prefs.country);
+        setSelectedDisplayCurrency(prefs.preferred_currency);
+        setAutoDetectEnabled(prefs.region_detection_enabled);
+        setPreferenceSource(prefs.region_preference_source);
+        if (prefs.updated_at) setPreferencesUpdatedAt(prefs.updated_at);
+      }
+    });
   }, []);
+
+  const handleSaveRegionalPreferences = async () => {
+    setRegionalSaving(true);
+    setRegionalSuccess(null);
+    setRegionalError(null);
+    try {
+      const res = await api.updateRegionalPreferences({
+        country: selectedCountry,
+        preferred_currency: selectedDisplayCurrency,
+        region_detection_enabled: autoDetectEnabled
+      });
+      setPreferenceSource(res.region_preference_source);
+      if (res.updated_at) setPreferencesUpdatedAt(res.updated_at);
+      setRegionalSuccess('Regional preferences saved successfully. Dashboard and forecasting will use these settings.');
+      await refreshUser();
+    } catch (err: any) {
+      setRegionalError(err.message || 'Failed to update regional preferences.');
+    } finally {
+      setRegionalSaving(false);
+    }
+  };
 
   // Cooldown timer
   useEffect(() => {
@@ -251,6 +309,168 @@ export const SettingsPage: React.FC = () => {
                 + Register Phone
               </button>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Regional Preferences & Currency Localization Card */}
+      <div className="bento-card p-4 sm:p-6 space-y-4 sm:space-y-5 bg-white">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-cyan-50 border border-cyan-200 flex items-center justify-center text-cyan-700 shrink-0">
+              <Globe className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-black text-base text-ink tracking-tight">Regional Preferences &amp; Currency Localization</h3>
+              <p className="text-xs text-sardine-slate">
+                Operating country, display currency format, and automated approximate IP geolocation
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono px-2.5 py-1 rounded-full border bg-slate-50 text-slate-600 border-slate-200">
+              Source: <strong className="text-cyan-700 uppercase">{preferenceSource}</strong>
+            </span>
+            {preferencesUpdatedAt && (
+              <span className="text-[10px] text-slate-400 hidden sm:inline">
+                Updated {new Date(preferencesUpdatedAt).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {regionalSuccess && (
+          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-start space-x-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <span>{regionalSuccess}</span>
+          </div>
+        )}
+
+        {regionalError && (
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start space-x-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <span>{regionalError}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+          {/* Country Selection */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700">Country / Region</label>
+            <select
+              value={selectedCountry}
+              onChange={(e) => setSelectedCountry(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-ink focus:outline-none focus:border-electric cursor-pointer"
+            >
+              {countriesList.length > 0 ? (
+                countriesList.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.flag} {c.name} ({c.code})
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="US">🇺🇸 United States (US)</option>
+                  <option value="IN">🇮🇳 India (IN)</option>
+                  <option value="GB">🇬🇧 United Kingdom (GB)</option>
+                  <option value="DE">🇩🇪 Germany (DE)</option>
+                  <option value="CA">🇨🇦 Canada (CA)</option>
+                  <option value="AU">🇦🇺 Australia (AU)</option>
+                </>
+              )}
+            </select>
+            <span className="text-[10px] text-slate-500 block">
+              Governs regional formatting and standard payment dial codes.
+            </span>
+          </div>
+
+          {/* Preferred Display Currency */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700">Preferred Display Currency</label>
+            <select
+              value={selectedDisplayCurrency}
+              onChange={(e) => setSelectedDisplayCurrency(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-ink focus:outline-none focus:border-electric cursor-pointer"
+            >
+              {currenciesList.length > 0 ? (
+                currenciesList.map((cur) => (
+                  <option key={cur.code} value={cur.code}>
+                    {cur.code} ({cur.symbol}) — {cur.name}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="USD">USD ($) — US Dollar</option>
+                  <option value="INR">INR (₹) — Indian Rupee</option>
+                  <option value="EUR">EUR (€) — Euro</option>
+                  <option value="GBP">GBP (£) — British Pound</option>
+                  <option value="CAD">CAD (CA$) — Canadian Dollar</option>
+                  <option value="AUD">AUD (A$) — Australian Dollar</option>
+                </>
+              )}
+            </select>
+            <span className="text-[10px] text-slate-500 block">
+              Financial dashboard, summaries, and forecasts render in this currency.
+            </span>
+          </div>
+
+          {/* Base Accounting Ledger Currency (Informational / Safety) */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700">Base Accounting Ledger</label>
+            <div className="p-2.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-mono font-bold text-ink flex items-center justify-between">
+              <span>{currentUser?.currency || 'USD'} (Fixed)</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-sans font-bold">
+                Audited Ledger
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-500 block">
+              Underlying ledger currency. Preserved to prevent unauthorized cross-currency ledger drift.
+            </span>
+          </div>
+        </div>
+
+        {/* Auto detection toggle and actions */}
+        <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <label className="flex items-center space-x-2 text-xs text-slate-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoDetectEnabled}
+              onChange={(e) => setAutoDetectEnabled(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 text-electric focus:ring-0"
+            />
+            <span>Enable automatic regional detection on future visits</span>
+          </label>
+
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCountry(currentUser?.country || 'US');
+                setSelectedDisplayCurrency(currentUser?.preferred_currency || currentUser?.currency || 'USD');
+                setAutoDetectEnabled(currentUser?.region_detection_enabled !== false);
+                setRegionalSuccess(null);
+                setRegionalError(null);
+              }}
+              className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-600 hover:bg-slate-100 transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveRegionalPreferences}
+              disabled={regionalSaving}
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-electric hover:bg-electric-600 text-white text-xs font-bold transition shadow-xs disabled:opacity-50"
+            >
+              {regionalSaving ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <span>Save Regional Preferences</span>
+              )}
+            </button>
           </div>
         </div>
       </div>

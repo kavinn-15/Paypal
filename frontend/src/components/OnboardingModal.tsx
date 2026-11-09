@@ -31,7 +31,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 }) => {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [businessName, setBusinessName] = useState(currentUser?.name || '');
-  const [currency, setCurrency] = useState(currentUser?.currency || 'USD');
+  const [currency, setCurrency] = useState(currentUser?.preferred_currency || currentUser?.currency || 'USD');
   const [clientName, setClientName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
   const [invoiceAmount, setInvoiceAmount] = useState('2500');
@@ -216,19 +216,50 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   </p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                {['USD', 'EUR', 'GBP', 'INR', 'CAD', 'AUD'].map((cur) => (
+
+              {currentUser?.country && (
+                <div className="p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-800/40 text-cyan-300 text-xs flex items-center justify-between">
+                  <span>
+                    Account Region: <strong>{currentUser.country}</strong>
+                  </span>
+                  <span className="text-[10px] text-cyan-400 font-mono bg-cyan-900/40 px-2 py-0.5 rounded-full">
+                    Auto-configured
+                  </span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2">
+                {[
+                  { code: 'USD', name: 'US Dollar', symbol: '$' },
+                  { code: 'INR', name: 'Indian Rupee', symbol: '₹' },
+                  { code: 'EUR', name: 'Euro', symbol: '€' },
+                  { code: 'GBP', name: 'British Pound', symbol: '£' },
+                  { code: 'CAD', name: 'Canadian Dollar', symbol: 'CA$' },
+                  { code: 'AUD', name: 'Australian Dollar', symbol: 'A$' },
+                  { code: 'JPY', name: 'Japanese Yen', symbol: '¥' },
+                  { code: 'SGD', name: 'Singapore Dollar', symbol: 'S$' }
+                ].map((cur) => (
                   <button
-                    key={cur}
-                    onClick={() => setCurrency(cur)}
-                    className={`p-3 rounded-xl border text-left flex items-center justify-between text-xs font-bold transition-all ${
-                      currency === cur
-                        ? 'border-electric bg-electric/15 text-white'
-                        : 'border-ink-800 bg-ink-950 text-slate-300 hover:border-slate-700'
+                    key={cur.code}
+                    type="button"
+                    onClick={() => {
+                      setCurrency(cur.code);
+                      api.updateRegionalPreferences({
+                        preferred_currency: cur.code,
+                        currency: cur.code
+                      }).catch(() => {});
+                    }}
+                    className={`p-2.5 rounded-xl border text-left flex flex-col justify-between text-xs transition-all ${
+                      currency === cur.code
+                        ? 'border-electric bg-electric/15 text-white ring-1 ring-electric/50'
+                        : 'border-ink-800 bg-ink-950 text-slate-300 hover:border-slate-700 hover:text-white'
                     }`}
                   >
-                    <span>{cur}</span>
-                    {currency === cur && <Check className="w-4 h-4 text-electric" />}
+                    <div className="flex items-center justify-between w-full">
+                      <span className="font-bold font-mono text-cyan-400">{cur.code}</span>
+                      {currency === cur.code && <Check className="w-3.5 h-3.5 text-electric" />}
+                    </div>
+                    <span className="text-[10px] text-sardine-muted mt-1">{cur.symbol} · {cur.name}</span>
                   </button>
                 ))}
               </div>

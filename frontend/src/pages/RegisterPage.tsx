@@ -1,8 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import { PhoneInput } from '../components/PhoneInput';
+import { RegionalFooterSelector } from '../components/RegionalFooterSelector';
+import { CountryItem, CurrencyItem } from '../types';
+import { getStoredRegionalPreference, setStoredRegionalPreference } from '../utils/currency';
 import {
   Eye,
   EyeOff,
@@ -16,7 +19,9 @@ import {
   ArrowRight,
   CheckCircle2,
   Loader2,
-  ShieldCheck
+  ShieldCheck,
+  Sparkles,
+  MapPin
 } from 'lucide-react';
 
 const GoogleIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
@@ -54,12 +59,75 @@ export const RegisterPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  const [countriesList, setCountriesList] = useState<CountryItem[]>([]);
+  const [currenciesList, setCurrenciesList] = useState<CurrencyItem[]>([]);
+  const [detectedBadge, setDetectedBadge] = useState<{ countryName: string; flag: string; currency: string } | null>(null);
+
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const { register } = useAuth();
   const navigate = useNavigate();
+
+  // Load catalogs and detect regional preferences on mount
+  useEffect(() => {
+    let isMounted = true;
+    const initializeRegion = async () => {
+      try {
+        const [cList, currList] = await Promise.all([
+          api.getCountries().catch(() => []),
+          api.getCurrencies().catch(() => []),
+        ]);
+        if (isMounted) {
+          if (cList.length > 0) setCountriesList(cList);
+          if (currList.length > 0) setCurrenciesList(currList);
+        }
+
+        // Check stored preference or detect
+        const stored = getStoredRegionalPreference();
+        if (stored) {
+          if (isMounted) {
+            setCountry(stored.country);
+            setPreferredCurrency(stored.currency);
+            setDetectedBadge({
+              countryName: stored.countryName || stored.country,
+              flag: stored.flag || '🌐',
+              currency: stored.currency
+            });
+          }
+        } else {
+          const detected = await api.detectRegion().catch(() => null);
+          if (detected && isMounted) {
+            setCountry(detected.country);
+            setPreferredCurrency(detected.suggested_currency);
+            setDetectedBadge({
+              countryName: detected.country_name,
+              flag: detected.flag,
+              currency: detected.suggested_currency
+            });
+            setStoredRegionalPreference({
+              country: detected.country,
+              countryName: detected.country_name,
+              currency: detected.suggested_currency,
+              flag: detected.flag,
+              symbol: detected.currency_symbol,
+              locale: detected.locale,
+              source: 'detected',
+              updatedAt: new Date().toISOString()
+            });
+          }
+        }
+      } catch {
+        // Fallback silently
+      }
+    };
+
+    initializeRegion();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleGoogleSignUp = async () => {
     setError(null);
@@ -292,25 +360,56 @@ export const RegisterPage: React.FC = () => {
               </p>
             </div>
 
+            {/* Detected Location Badge */}
+            {detectedBadge && (
+              <div className="p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-800/40 text-cyan-300 text-xs flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  <span>
+                    Location detected: <strong>{detectedBadge.flag} {detectedBadge.countryName}</strong> (Suggested: <strong>{detectedBadge.currency}</strong>)
+                  </span>
+                </div>
+                <span className="text-[10px] text-cyan-400/80 bg-cyan-900/40 px-2 py-0.5 rounded-full font-mono">
+                  Auto-localized
+                </span>
+              </div>
+            )}
+
             {/* Country, Business Type, Currency */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
-                <label className="block text-xs font-semibold text-slate-300">Country</label>
+                <label className="block text-xs font-semibold text-slate-300">Country / Region</label>
                 <div className="relative">
                   <Globe className="w-4 h-4 text-sardine-muted absolute left-3 top-3.5 pointer-events-none" />
                   <select
                     value={country}
-                    onChange={(e) => setCountry(e.target.value)}
+                    onChange={(e) => {
+                      const newCountry = e.target.value;
+                      setCountry(newCountry);
+                      const matched = countriesList.find((c) => c.code === newCountry);
+                      if (matched && matched.currency) {
+                        setPreferredCurrency(matched.currency);
+                      }
+                    }}
                     className="w-full pl-9 pr-3 py-2.5 bg-ink-950 border border-ink-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:border-electric transition-colors appearance-none cursor-pointer"
                   >
-                    <option value="US">United States (US)</option>
-                    <option value="IN">India (IN)</option>
-                    <option value="GB">United Kingdom (GB)</option>
-                    <option value="DE">Germany (DE)</option>
-                    <option value="CA">Canada (CA)</option>
-                    <option value="AU">Australia (AU)</option>
-                    <option value="SG">Singapore (SG)</option>
-                    <option value="OTHER">Other Region</option>
+                    {countriesList.length > 0 ? (
+                      countriesList.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.flag} {c.name} ({c.code})
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="US">🇺🇸 United States (US)</option>
+                        <option value="IN">🇮🇳 India (IN)</option>
+                        <option value="GB">🇬🇧 United Kingdom (GB)</option>
+                        <option value="DE">🇩🇪 Germany (DE)</option>
+                        <option value="CA">🇨🇦 Canada (CA)</option>
+                        <option value="AU">🇦🇺 Australia (AU)</option>
+                        <option value="SG">🇸🇬 Singapore (SG)</option>
+                      </>
+                    )}
                   </select>
                 </div>
               </div>
@@ -334,7 +433,7 @@ export const RegisterPage: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="block text-xs font-semibold text-slate-300">Base Currency</label>
+                <label className="block text-xs font-semibold text-slate-300">Preferred Currency</label>
                 <div className="relative">
                   <DollarSign className="w-4 h-4 text-sardine-muted absolute left-3 top-3.5 pointer-events-none" />
                   <select
@@ -342,12 +441,22 @@ export const RegisterPage: React.FC = () => {
                     onChange={(e) => setPreferredCurrency(e.target.value)}
                     className="w-full pl-9 pr-3 py-2.5 bg-ink-950 border border-ink-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:border-electric transition-colors appearance-none cursor-pointer"
                   >
-                    <option value="USD">USD ($)</option>
-                    <option value="INR">INR (₹)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="GBP">GBP (£)</option>
-                    <option value="CAD">CAD (C$)</option>
-                    <option value="AUD">AUD (A$)</option>
+                    {currenciesList.length > 0 ? (
+                      currenciesList.map((curr) => (
+                        <option key={curr.code} value={curr.code}>
+                          {curr.code} ({curr.symbol}) — {curr.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="USD">USD ($) — US Dollar</option>
+                        <option value="INR">INR (₹) — Indian Rupee</option>
+                        <option value="EUR">EUR (€) — Euro</option>
+                        <option value="GBP">GBP (£) — British Pound</option>
+                        <option value="CAD">CAD (CA$) — Canadian Dollar</option>
+                        <option value="AUD">AUD (A$) — Australian Dollar</option>
+                      </>
+                    )}
                   </select>
                 </div>
               </div>
@@ -468,9 +577,15 @@ export const RegisterPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Footer info */}
-      <div className="py-6 text-center text-[11px] text-sardine-muted">
-        PayPal AI Hackathon 2026 &bull; Strict multi-tenant isolation &bull; Dedicated owner tenancy
+      {/* Footer info & Regional Selector */}
+      <div className="py-6 flex flex-col items-center justify-center gap-3 text-center text-[11px] text-sardine-muted">
+        <div className="flex items-center gap-2">
+          <span>Region &amp; Currency:</span>
+          <RegionalFooterSelector />
+        </div>
+        <div>
+          PayPal AI Hackathon 2026 &bull; Strict multi-tenant isolation &bull; Dedicated owner tenancy
+        </div>
       </div>
     </div>
   );

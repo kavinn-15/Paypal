@@ -24,6 +24,7 @@ from backend.app.api.negotiate import router as negotiate_router
 from backend.app.api.supervisor import router as supervisor_router
 from backend.app.api.resilience import router as resilience_router
 from backend.app.api.demo import router as demo_router
+from backend.app.api.region import router as region_router
 
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -106,6 +107,7 @@ app.include_router(actions_router)
 app.include_router(webhooks_router)
 app.include_router(audit_router)
 app.include_router(clients_router)
+app.include_router(region_router)
 
 
 @app.get("/health")

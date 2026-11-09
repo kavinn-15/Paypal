@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { PhoneInput } from '../components/PhoneInput';
+import { RegionalFooterSelector } from '../components/RegionalFooterSelector';
 import {
   Mail,
   Phone,
@@ -265,9 +266,15 @@ export const ForgotPasswordPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="py-4 sm:py-6 px-3 text-center text-[11px] text-sardine-muted flex flex-wrap items-center justify-center gap-1.5">
-        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-        <span>PayPal AI Hackathon 2026 &bull; Cryptographic single-use token invalidation</span>
+      <div className="py-4 sm:py-6 px-3 flex flex-col items-center justify-center gap-3 text-center text-[11px] text-sardine-muted">
+        <div className="flex items-center gap-2">
+          <span>Region &amp; Currency:</span>
+          <RegionalFooterSelector />
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-1.5">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <span>PayPal AI Hackathon 2026 &bull; Cryptographic single-use token invalidation</span>
+        </div>
       </div>
     </div>
   );

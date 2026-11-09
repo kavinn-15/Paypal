@@ -21,6 +21,7 @@ import {
   Play
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { RegionalFooterSelector } from '../components/RegionalFooterSelector';
 
 export const LandingPage: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -849,6 +850,16 @@ export const LandingPage: React.FC = () => {
                 <li className="py-1"><span className="text-slate-400">Deterministic Guardrails</span></li>
                 <li className="py-1"><span className="text-slate-400">PayPal Sandbox Environment</span></li>
               </ul>
+            </div>
+          </div>
+
+          <div className="pt-6 sm:pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-ink-800 pb-6 text-xs">
+            <div className="flex items-center gap-2 text-slate-400">
+              <span>Region &amp; Currency:</span>
+              <RegionalFooterSelector />
+            </div>
+            <div className="text-slate-400 text-xs">
+              Autonomous IP &amp; country detection with zero precision tracking.
             </div>
           </div>
 

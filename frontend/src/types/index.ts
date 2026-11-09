@@ -9,6 +9,10 @@ export interface Owner {
   currency?: string;
   preferred_currency?: string;
   country?: string;
+  locale?: string;
+  region_detection_enabled?: boolean;
+  region_preference_source?: string;
+  region_preferences_updated_at?: string;
   business_type?: string;
   email_verified?: boolean;
   account_status?: string;
@@ -26,6 +30,10 @@ export interface UserProfile {
   currency: string;
   preferred_currency?: string;
   country?: string;
+  locale?: string;
+  region_detection_enabled?: boolean;
+  region_preference_source?: string;
+  region_preferences_updated_at?: string;
   business_type?: string;
   email_verified?: boolean;
   account_status?: string;
@@ -45,10 +53,65 @@ export interface TokenResponse {
   phone_verified?: boolean;
   name: string;
   currency: string;
+  preferred_currency?: string;
   country?: string;
+  locale?: string;
+  region_detection_enabled?: boolean;
   business_type?: string;
   email_verified?: boolean;
   is_demo: boolean;
+}
+
+export interface RegionDetectionResponse {
+  country: string;
+  country_name: string;
+  flag: string;
+  suggested_currency: string;
+  currency_name: string;
+  currency_symbol: string;
+  decimals: number;
+  dial_code: string;
+  locale: string;
+  detection_method: string;
+  confidence: number;
+}
+
+export interface CountryItem {
+  code: string;
+  name: string;
+  flag: string;
+  currency: string;
+  dial_code: string;
+  locale: string;
+  popular?: boolean;
+}
+
+export interface CurrencyItem {
+  code: string;
+  name: string;
+  symbol: string;
+  decimals: number;
+}
+
+export interface RegionalPreferencesResponse {
+  country: string;
+  country_name: string;
+  flag: string;
+  currency: string;
+  preferred_currency: string;
+  currency_symbol: string;
+  locale: string;
+  region_detection_enabled: boolean;
+  region_preference_source: string;
+  updated_at?: string;
+}
+
+export interface RegionalPreferencesUpdate {
+  country?: string;
+  preferred_currency?: string;
+  currency?: string;
+  locale?: string;
+  region_detection_enabled?: boolean;
 }
 
 export interface PhoneAuthResponse {

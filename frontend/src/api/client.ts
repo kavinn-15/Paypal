@@ -16,7 +16,12 @@ import {
   TimelineEntry,
   TokenResponse,
   PhoneAuthResponse,
-  GoogleAuthUrlResponse
+  GoogleAuthUrlResponse,
+  RegionDetectionResponse,
+  CountryItem,
+  CurrencyItem,
+  RegionalPreferencesResponse,
+  RegionalPreferencesUpdate
 } from '../types';
 
 const API_BASE = '/api';
@@ -435,4 +440,21 @@ export const api = {
   getCurrentUser: () => request<any>('/auth/me'),
 
   getIntegrityCheck: () => request<any>('/finance/integrity-check'),
+
+  detectRegion: (clientHint?: string) => {
+    const query = clientHint ? `?client_hint=${encodeURIComponent(clientHint)}` : '';
+    return request<RegionDetectionResponse>(`/region/detect${query}`);
+  },
+
+  getCountries: () => request<CountryItem[]>('/region/countries'),
+
+  getCurrencies: () => request<CurrencyItem[]>('/region/currencies'),
+
+  getRegionalPreferences: () => request<RegionalPreferencesResponse>('/profile/regional-preferences'),
+
+  updateRegionalPreferences: (data: RegionalPreferencesUpdate) =>
+    request<RegionalPreferencesResponse>('/profile/regional-preferences', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 };
