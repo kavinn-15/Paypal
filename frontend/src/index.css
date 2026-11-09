@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-electric: #4b5bfc;
+  --color-electric-soft: #7ea1f3;
+  --color-ink: #081026;
+  --color-slate: #6b7c99;
+  --color-muted: #a4acc4;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: #F8FAFC;
+  color: #081026;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overflow-x: hidden;
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* Safe area insets for mobile notches / home bars */
+@supports (padding: env(safe-area-inset-bottom)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+code, pre {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Strictly prevent horizontal slide bar / scrollbar on header & nav */
+header, nav, header *, nav *, .no-scrollbar {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+header::-webkit-scrollbar, nav::-webkit-scrollbar, header *::-webkit-scrollbar, nav *::-webkit-scrollbar, .no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Bento card styling */
+.bento-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 1rem;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bento-card:hover {
+  border-color: #CBD5E1;
+  box-shadow: 0 10px 30px -10px rgba(8, 16, 38, 0.07);
+}
+
+.bento-ink {
+  background: #081026;
+  color: #FFFFFF;
+  border: 1px solid #15254F;
+  border-radius: 1rem;
+}
+
+/* Controlled responsive table container */
+.responsive-table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
+}
+
+.responsive-table-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.responsive-table-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.responsive-table-container::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 9999px;
+}
+
+.responsive-table-container::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Minimum 44px touch target utility for mobile buttons */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
