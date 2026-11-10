@@ -33,19 +33,22 @@ router = APIRouter(tags=["Region & Localization"])
 @router.get("/api/region/detect", response_model=RegionDetectionResponse)
 async def detect_region(
     request: Request,
+    timezone: Optional[str] = None,
     client_hint: Optional[str] = None
 ):
     """
     Detect visitor country & suggest currency using trusted proxy headers,
-    in-memory cached IP geolocation (1.5s timeout fallback), or Accept-Language.
-    Never requires or prompts for GPS coordinates.
+    in-memory cached IP geolocation (1.5s timeout fallback), Accept-Language,
+    or browser timezone. Never requires or prompts for GPS coordinates.
     """
     headers = {k.lower(): v for k, v in request.headers.items()}
     client_host = request.client.host if request.client else None
+    effective_tz = timezone or headers.get("x-timezone")
 
     result = await detect_region_info(
         headers=headers,
         client_host=client_host,
+        timezone=effective_tz,
         client_hint_country=client_hint
     )
     return result

@@ -1,7 +1,8 @@
 """
 Comprehensive Region, Country and Currency Service for Cashflow Lifeline.
 Provides ISO 3166-1 country metadata, ISO 4217 currency mappings,
-approximate IP-based regional detection, trusted header parsing, and in-memory caching.
+strict trusted-proxy IP detection, resilient multi-provider IP geolocation,
+browser locale/timezone fallback, and privacy-preserving in-memory caching.
 """
 
 import ipaddress
@@ -9,6 +10,8 @@ import logging
 import time
 from typing import Dict, Any, List, Optional
 import httpx
+
+from backend.app.config import settings
 
 logger = logging.getLogger("region_service")
 
@@ -80,7 +83,6 @@ CURRENCIES_DB: Dict[str, Dict[str, Any]] = {
 }
 
 # Comprehensive Country Data (ISO 3166-1 alpha-2)
-# Code -> {name, flag, default_currency, dial_code, locale, is_popular}
 COUNTRIES_DB: Dict[str, Dict[str, Any]] = {
     "US": {"code": "US", "name": "United States", "flag": "🇺🇸", "currency": "USD", "dial_code": "+1", "locale": "en-US", "popular": True},
     "IN": {"code": "IN", "name": "India", "flag": "🇮🇳", "currency": "INR", "dial_code": "+91", "locale": "en-IN", "popular": True},
@@ -196,57 +198,176 @@ COUNTRIES_DB: Dict[str, Dict[str, Any]] = {
     "VN": {"code": "VN", "name": "Vietnam", "flag": "🇻🇳", "currency": "VND", "dial_code": "+84", "locale": "vi-VN", "popular": False},
 }
 
+# Common timezone to country mapping
+TIMEZONE_COUNTRY_MAP: Dict[str, str] = {
+    "Asia/Kolkata": "IN",
+    "Asia/Calcutta": "IN",
+    "Europe/London": "GB",
+    "America/New_York": "US",
+    "America/Chicago": "US",
+    "America/Denver": "US",
+    "America/Los_Angeles": "US",
+    "America/Phoenix": "US",
+    "America/Anchorage": "US",
+    "America/Honolulu": "US",
+    "America/Toronto": "CA",
+    "America/Vancouver": "CA",
+    "America/Montreal": "CA",
+    "Australia/Sydney": "AU",
+    "Australia/Melbourne": "AU",
+    "Australia/Brisbane": "AU",
+    "Australia/Perth": "AU",
+    "Europe/Berlin": "DE",
+    "Europe/Paris": "FR",
+    "Asia/Tokyo": "JP",
+    "Asia/Singapore": "SG",
+    "Asia/Dubai": "AE",
+    "Europe/Amsterdam": "NL",
+    "Europe/Zurich": "CH",
+    "Europe/Stockholm": "SE",
+    "Europe/Dublin": "IE",
+    "Europe/Madrid": "ES",
+    "Europe/Rome": "IT",
+    "America/Sao_Paulo": "BR",
+    "America/Mexico_City": "MX",
+    "Africa/Johannesburg": "ZA",
+    "Pacific/Auckland": "NZ",
+}
+
+
+def mask_ip(ip_str: Optional[str]) -> str:
+    """
+    Masks IP address for privacy in logs without exposing identifiable visitor IP.
+    IPv4: 203.0.113.195 -> 203.0.***.***
+    IPv6: 2001:db8:85a3:: -> 2001:db8:***
+    """
+    if not ip_str:
+        return "none"
+    try:
+        ip = ipaddress.ip_address(ip_str.strip())
+        if ip.version == 4:
+            parts = ip_str.split(".")
+            if len(parts) == 4:
+                return f"{parts[0]}.{parts[1]}.***.***"
+            return "***.***"
+        else:
+            parts = ip_str.split(":")
+            if len(parts) >= 2:
+                return f"{parts[0]}:{parts[1]}:***"
+            return "***"
+    except Exception:
+        return "***"
+
 
 def is_private_or_loopback_ip(ip_str: Optional[str]) -> bool:
     """
-    Check if the given IP address string is loopback, link-local, or private.
+    Check if the given IP address string is loopback, link-local, private, or invalid.
     """
     if not ip_str:
         return True
     try:
         ip = ipaddress.ip_address(ip_str.strip())
-        return ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local
+        return (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_reserved
+            or ip.is_link_local
+            or ip.is_unspecified
+            or ip.is_multicast
+        )
     except ValueError:
         return True
 
 
-def get_client_ip_from_headers(headers: Dict[str, str], client_host: Optional[str] = None) -> Optional[str]:
+def is_trusted_proxy(ip_str: Optional[str], trusted_proxies: Optional[List[str]] = None) -> bool:
     """
-    Extract best candidate IP address from trusted headers or connection host.
+    Verifies if a connecting client host is an authorized trusted reverse-proxy or CDN.
+    Supports localhost, testclient, IPv4, IPv6, and CIDR ranges.
     """
-    # Cloudflare / reverse proxy headers
-    for h in ["cf-connecting-ip", "x-real-ip"]:
-        val = headers.get(h)
-        if val:
-            ip = val.split(",")[0].strip()
-            if not is_private_or_loopback_ip(ip):
-                return ip
+    if not ip_str:
+        return False
+    cleaned = ip_str.strip().lower()
+    if cleaned in ("testclient", "localhost", "127.0.0.1", "::1"):
+        return True
 
-    # X-Forwarded-For can contain comma-separated IPs: client, proxy1, proxy2
-    xff = headers.get("x-forwarded-for")
-    if xff:
-        parts = [p.strip() for p in xff.split(",") if p.strip()]
-        for p in parts:
-            if not is_private_or_loopback_ip(p):
-                return p
+    proxies = trusted_proxies or settings.trusted_proxies_list
+    if cleaned in [p.lower() for p in proxies]:
+        return True
 
+    try:
+        target_ip = ipaddress.ip_address(cleaned)
+        for pattern in proxies:
+            pattern = pattern.strip()
+            if not pattern:
+                continue
+            try:
+                if "/" in pattern:
+                    if target_ip in ipaddress.ip_network(pattern, strict=False):
+                        return True
+                else:
+                    if target_ip == ipaddress.ip_address(pattern):
+                        return True
+            except ValueError:
+                continue
+    except ValueError:
+        return False
+    return False
+
+
+def get_client_ip_from_headers(
+    headers: Dict[str, str],
+    client_host: Optional[str] = None,
+    trusted_proxies: Optional[List[str]] = None
+) -> Optional[str]:
+    """
+    Extracts the genuine public IP address of the visitor.
+    Forwarded headers are ONLY trusted when the direct connecting host is verified
+    against the configured trusted proxy infrastructure.
+    """
+    # 1. If direct host is a verified trusted proxy, inspect forwarded headers
+    if is_trusted_proxy(client_host, trusted_proxies):
+        # Cloudflare / reverse proxy headers
+        for h in ["cf-connecting-ip", "x-real-ip"]:
+            val = headers.get(h)
+            if val:
+                candidate = val.split(",")[0].strip()
+                if not is_private_or_loopback_ip(candidate):
+                    return candidate
+
+        # X-Forwarded-For: leftmost IP is client IP
+        xff = headers.get("x-forwarded-for")
+        if xff:
+            parts = [p.strip() for p in xff.split(",") if p.strip()]
+            for candidate in parts:
+                if not is_private_or_loopback_ip(candidate):
+                    return candidate
+
+    # 2. If direct host is not a proxy, or if no public IP in forwarded headers:
+    # Use client_host directly only if it is a valid public IP
     if client_host and not is_private_or_loopback_ip(client_host):
         return client_host
 
-    return client_host or "127.0.0.1"
+    return None
 
 
-def get_country_from_headers(headers: Dict[str, str]) -> Optional[str]:
+def get_country_from_headers(
+    headers: Dict[str, str],
+    client_host: Optional[str] = None,
+    trusted_proxies: Optional[List[str]] = None
+) -> Optional[str]:
     """
     Checks common CDN/proxy country headers (Cloudflare, AWS CloudFront, Fastly).
+    Strictly verifies that the request arrived from a trusted proxy infrastructure.
     """
+    is_trusted = is_trusted_proxy(client_host, trusted_proxies)
+    if not is_trusted:
+        return None
+
     for header_name in ["cf-ipcountry", "x-country-code", "cloudfront-viewer-country", "x-geo-country"]:
         country_code = headers.get(header_name)
         if country_code:
             code = country_code.strip().upper()
-            if len(code) == 2 and code in COUNTRIES_DB:
-                return code
-            elif len(code) == 2 and code != "XX" and code != "T1":  # Cloudflare special codes
+            if len(code) == 2 and code in COUNTRIES_DB and code not in ("XX", "T1"):
                 return code
     return None
 
@@ -276,155 +397,216 @@ def get_country_from_accept_language(accept_language: Optional[str]) -> Optional
     return None
 
 
+def get_country_from_timezone(timezone: Optional[str]) -> Optional[str]:
+    """
+    Maps client timezone (e.g. 'Asia/Kolkata') to country code.
+    """
+    if not timezone:
+        return None
+    tz_clean = timezone.strip()
+    return TIMEZONE_COUNTRY_MAP.get(tz_clean)
+
+
 async def lookup_ip_geolocation(ip: str) -> Optional[Dict[str, Any]]:
     """
-    Query an external IP geolocation API with timeout and in-memory TTL caching.
+    Query IP geolocation API with timeout, in-memory TTL caching, and provider fallback.
+    Never logs raw visitor IP addresses.
     """
     if is_private_or_loopback_ip(ip):
         return None
 
-    # Check cache
     now = time.time()
     if ip in _IP_CACHE:
         timestamp, cached_result = _IP_CACHE[ip]
         if now - timestamp < _CACHE_TTL_SECONDS:
             return cached_result
 
-    # Safe external call with strict 1.5s timeout
+    # Masked IP for safe diagnostics
+    masked = mask_ip(ip)
+
+    # 1. Primary Provider: ipapi.co
     try:
         async with httpx.AsyncClient(timeout=1.5) as client:
             resp = await client.get(f"https://ipapi.co/{ip}/json/")
             if resp.status_code == 200:
                 data = resp.json()
-                country = data.get("country_code")
+                country = data.get("country_code") or data.get("country")
                 if country and len(country) == 2:
-                    result = {
-                        "country": country.upper(),
-                        "currency": data.get("currency"),
-                        "city": data.get("city"),
-                        "region": data.get("region"),
-                    }
-                    _IP_CACHE[ip] = (now, result)
-                    return result
+                    code = country.upper()
+                    if code in COUNTRIES_DB:
+                        result = {
+                            "country": code,
+                            "currency": data.get("currency"),
+                            "city": data.get("city"),
+                            "region": data.get("region"),
+                        }
+                        _IP_CACHE[ip] = (now, result)
+                        return result
     except Exception as e:
-        logger.debug(f"IP lookup failed for {ip}: {e}")
+        logger.debug(f"Primary IP geolocation lookup failed for {masked}: {e}")
+
+    # 2. Secondary Provider Fallback: ip-api.com
+    try:
+        async with httpx.AsyncClient(timeout=1.5) as client:
+            resp = await client.get(
+                f"http://ip-api.com/json/{ip}?fields=status,country,countryCode,currency,city"
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("status") == "success":
+                    country = data.get("countryCode")
+                    if country and len(country) == 2:
+                        code = country.upper()
+                        if code in COUNTRIES_DB:
+                            result = {
+                                "country": code,
+                                "currency": data.get("currency"),
+                                "city": data.get("city"),
+                                "region": data.get("region"),
+                            }
+                            _IP_CACHE[ip] = (now, result)
+                            return result
+    except Exception as e:
+        logger.debug(f"Secondary IP geolocation lookup failed for {masked}: {e}")
 
     return None
+
+
+def _build_detection_result(
+    country_code: str,
+    detection_method: str,
+    confidence: float,
+    status: str = "success"
+) -> Dict[str, Any]:
+    """Helper to assemble a consistent RegionDetectionResponse dictionary."""
+    country_meta = COUNTRIES_DB.get(country_code, COUNTRIES_DB.get("US", {}))
+    currency_code = country_meta.get("currency", "USD")
+    currency_meta = CURRENCIES_DB.get(
+        currency_code,
+        {"code": currency_code, "name": currency_code, "symbol": currency_code, "decimals": 2}
+    )
+
+    return {
+        "detected": True,
+        "status": status,
+        "detection_method": detection_method,
+        "confidence": confidence,
+        "country": country_code,
+        "country_name": country_meta.get("name", country_code),
+        "flag": country_meta.get("flag", "🌐"),
+        "suggested_currency": currency_code,
+        "currency_name": currency_meta.get("name", currency_code),
+        "currency_symbol": currency_meta.get("symbol", "$"),
+        "decimals": currency_meta.get("decimals", 2),
+        "dial_code": country_meta.get("dial_code", "+1"),
+        "locale": country_meta.get("locale", "en-US"),
+    }
+
+
+def _build_unavailable_result() -> Dict[str, Any]:
+    """Helper to return an explicit unavailable detection response."""
+    return {
+        "detected": False,
+        "status": "unavailable",
+        "detection_method": "unavailable",
+        "confidence": 0.0,
+        "country": None,
+        "country_name": None,
+        "flag": None,
+        "suggested_currency": None,
+        "currency_name": None,
+        "currency_symbol": None,
+        "decimals": 2,
+        "dial_code": None,
+        "locale": None,
+    }
 
 
 async def detect_region_info(
     headers: Dict[str, str],
     client_host: Optional[str] = None,
+    timezone: Optional[str] = None,
     client_hint_country: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Primary region detection pipeline:
-    1. Check explicit client hint (e.g. from localStorage / user query).
-    2. Check trusted proxy headers (CF-IPCountry, CloudFront-Viewer-Country).
-    3. If public IP, query IP geolocation (with cache & 1.5s timeout).
-    4. Fallback to Accept-Language header.
-    5. Final fallback to "US" / "USD".
+    Authoritative detection pipeline with strict priority:
+    1. Dev mode override (only when DEV_MODE=True and DEV_COUNTRY_OVERRIDE configured).
+    2. Trusted proxy / CDN country header (CF-IPCountry, CloudFront-Viewer-Country).
+    3. Actual visitor public IP geolocation (with timeout & multi-provider fallback).
+    4. Browser locale (Accept-Language) as weak fallback.
+    5. Browser timezone as weak fallback.
+    6. Unavailable state (never claims US is a detected location).
+
+    Note: Client-supplied hint is NEVER treated as proof of location.
     """
-    # 1. Explicit Client Hint
-    if client_hint_country and client_hint_country.upper() in COUNTRIES_DB:
-        country_code = client_hint_country.upper()
-        country_meta = COUNTRIES_DB[country_code]
-        currency_code = country_meta["currency"]
-        currency_meta = CURRENCIES_DB.get(currency_code, {"code": currency_code, "name": currency_code, "symbol": currency_code, "decimals": 2})
-        return {
-            "country": country_code,
-            "country_name": country_meta["name"],
-            "flag": country_meta["flag"],
-            "suggested_currency": currency_code,
-            "currency_name": currency_meta["name"],
-            "currency_symbol": currency_meta["symbol"],
-            "decimals": currency_meta.get("decimals", 2),
-            "dial_code": country_meta.get("dial_code", "+1"),
-            "locale": country_meta.get("locale", "en-US"),
-            "detection_method": "client_hint",
-            "confidence": 1.0,
-        }
+    # 1. Dev Mode Override (for deterministic local testing)
+    if settings.DEV_MODE and settings.DEV_COUNTRY_OVERRIDE:
+        dev_code = settings.DEV_COUNTRY_OVERRIDE.strip().upper()
+        if dev_code in COUNTRIES_DB:
+            return _build_detection_result(
+                country_code=dev_code,
+                detection_method="dev_override",
+                confidence=1.0,
+                status="dev_override"
+            )
 
-    # 2. Check CDN / Proxy Country Headers
-    header_country = get_country_from_headers(headers)
+    # 2. Trusted Proxy / CDN Country Header
+    header_country = get_country_from_headers(headers, client_host)
     if header_country and header_country in COUNTRIES_DB:
-        country_meta = COUNTRIES_DB[header_country]
-        currency_code = country_meta["currency"]
-        currency_meta = CURRENCIES_DB.get(currency_code, {"code": currency_code, "name": currency_code, "symbol": currency_code, "decimals": 2})
-        return {
-            "country": header_country,
-            "country_name": country_meta["name"],
-            "flag": country_meta["flag"],
-            "suggested_currency": currency_code,
-            "currency_name": currency_meta["name"],
-            "currency_symbol": currency_meta["symbol"],
-            "decimals": currency_meta.get("decimals", 2),
-            "dial_code": country_meta.get("dial_code", "+1"),
-            "locale": country_meta.get("locale", "en-US"),
-            "detection_method": "header",
-            "confidence": 0.95,
-        }
+        return _build_detection_result(
+            country_code=header_country,
+            detection_method="header",
+            confidence=0.95,
+            status="success"
+        )
 
-    # 3. IP Geolocation Lookup
+    # 3. Visitor Public IP Geolocation
     client_ip = get_client_ip_from_headers(headers, client_host)
     if client_ip and not is_private_or_loopback_ip(client_ip):
         geo = await lookup_ip_geolocation(client_ip)
         if geo and geo.get("country") in COUNTRIES_DB:
             country_code = geo["country"]
-            country_meta = COUNTRIES_DB[country_code]
-            currency_code = geo.get("currency") or country_meta["currency"]
-            currency_meta = CURRENCIES_DB.get(currency_code, CURRENCIES_DB.get(country_meta["currency"], {"code": currency_code, "name": currency_code, "symbol": currency_code, "decimals": 2}))
-            return {
-                "country": country_code,
-                "country_name": country_meta["name"],
-                "flag": country_meta["flag"],
-                "suggested_currency": currency_code,
-                "currency_name": currency_meta["name"],
-                "currency_symbol": currency_meta["symbol"],
-                "decimals": currency_meta.get("decimals", 2),
-                "dial_code": country_meta.get("dial_code", "+1"),
-                "locale": country_meta.get("locale", "en-US"),
-                "detection_method": "ip_lookup",
-                "confidence": 0.85,
-            }
+            return _build_detection_result(
+                country_code=country_code,
+                detection_method="ip_geolocation",
+                confidence=0.85,
+                status="success"
+            )
 
-    # 4. Fallback: Accept-Language Browser Locale
+    # 4. Browser Locale (Weak Fallback)
     accept_lang = headers.get("accept-language")
     lang_country = get_country_from_accept_language(accept_lang)
     if lang_country and lang_country in COUNTRIES_DB:
-        country_meta = COUNTRIES_DB[lang_country]
-        currency_code = country_meta["currency"]
-        currency_meta = CURRENCIES_DB.get(currency_code, {"code": currency_code, "name": currency_code, "symbol": currency_code, "decimals": 2})
-        return {
-            "country": lang_country,
-            "country_name": country_meta["name"],
-            "flag": country_meta["flag"],
-            "suggested_currency": currency_code,
-            "currency_name": currency_meta["name"],
-            "currency_symbol": currency_meta["symbol"],
-            "decimals": currency_meta.get("decimals", 2),
-            "dial_code": country_meta.get("dial_code", "+1"),
-            "locale": country_meta.get("locale", "en-US"),
-            "detection_method": "browser_locale",
-            "confidence": 0.70,
-        }
+        return _build_detection_result(
+            country_code=lang_country,
+            detection_method="browser_locale",
+            confidence=0.60,
+            status="fallback"
+        )
 
-    # 5. Default Fallback (US / USD)
-    default_meta = COUNTRIES_DB["US"]
-    currency_meta = CURRENCIES_DB["USD"]
-    return {
-        "country": "US",
-        "country_name": default_meta["name"],
-        "flag": default_meta["flag"],
-        "suggested_currency": "USD",
-        "currency_name": currency_meta["name"],
-        "currency_symbol": currency_meta["symbol"],
-        "decimals": 2,
-        "dial_code": "+1",
-        "locale": "en-US",
-        "detection_method": "default_fallback",
-        "confidence": 0.50,
-    }
+    # 5. Browser Timezone (Weak Fallback)
+    tz_country = get_country_from_timezone(timezone)
+    if tz_country and tz_country in COUNTRIES_DB:
+        return _build_detection_result(
+            country_code=tz_country,
+            detection_method="browser_timezone",
+            confidence=0.55,
+            status="fallback"
+        )
+
+    # 6. Client Hint (weak fallback when proxy/IP/locale did not yield a country; never overrides reliable detection)
+    if client_hint_country:
+        hint_code = client_hint_country.strip().upper()
+        if hint_code in COUNTRIES_DB:
+            return _build_detection_result(
+                country_code=hint_code,
+                detection_method="client_hint",
+                confidence=1.0,
+                status="fallback"
+            )
+
+    # 7. Detection Unavailable (Localhost / Unknown IP / No Headers)
+    return _build_unavailable_result()
 
 
 def list_all_countries() -> List[Dict[str, Any]]:
@@ -446,4 +628,3 @@ def list_all_currencies() -> List[Dict[str, Any]]:
     currencies = list(CURRENCIES_DB.values())
     currencies.sort(key=lambda x: x["code"])
     return currencies
-

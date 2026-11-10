@@ -98,6 +98,11 @@ class Settings(BaseSettings):
     ALLOW_DEMO_ENDPOINTS: bool = Field(default=True)
     PORT: int = Field(default=8000)
 
+    # Regional Detection & Geolocation Configuration
+    TRUSTED_PROXIES: str = Field(default="127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")
+    DEV_COUNTRY_OVERRIDE: Optional[str] = Field(default=None)  # Active ONLY when DEV_MODE=True
+    IP_GEOLOCATION_PROVIDER: str = Field(default="ipapi")  # "ipapi" | "ip_api"
+
     model_config = SettingsConfigDict(
         env_file=ROOT_DIR / ".env",
         env_file_encoding="utf-8",
@@ -111,6 +116,10 @@ class Settings(BaseSettings):
     @property
     def allowed_origins_list(self) -> List[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def trusted_proxies_list(self) -> List[str]:
+        return [p.strip() for p in self.TRUSTED_PROXIES.split(",") if p.strip()]
 
     @model_validator(mode="after")
     def validate_production_security(self) -> 'Settings':

@@ -63,17 +63,19 @@ export interface TokenResponse {
 }
 
 export interface RegionDetectionResponse {
-  country: string;
-  country_name: string;
-  flag: string;
-  suggested_currency: string;
-  currency_name: string;
-  currency_symbol: string;
-  decimals: number;
-  dial_code: string;
-  locale: string;
+  detected: boolean;
+  status: 'success' | 'fallback' | 'unavailable' | 'dev_override' | string;
   detection_method: string;
   confidence: number;
+  country?: string | null;
+  country_name?: string | null;
+  flag?: string | null;
+  suggested_currency?: string | null;
+  currency_name?: string | null;
+  currency_symbol?: string | null;
+  decimals?: number;
+  dial_code?: string | null;
+  locale?: string | null;
 }
 
 export interface CountryItem {

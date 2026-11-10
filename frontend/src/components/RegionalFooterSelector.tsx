@@ -3,8 +3,10 @@ import { Globe, Search, Check, X, Sparkles, Loader2, ArrowRight } from 'lucide-r
 import { api } from '../api/client';
 import { CountryItem, CurrencyItem } from '../types';
 import {
-  getStoredRegionalPreference,
-  setStoredRegionalPreference,
+  getStoredManualPreference,
+  setStoredManualPreference,
+  getStoredDetectedRegion,
+  setStoredDetectedRegion,
   StoredRegionalPreference
 } from '../utils/currency';
 import { useAuth } from '../context/AuthContext';
@@ -40,50 +42,61 @@ export const RegionalFooterSelector: React.FC<RegionalFooterSelectorProps> = ({
   const [detectionNotice, setDetectionNotice] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 1. Initial Load: Auth User > localStorage > Auto Detect
+  // 1. Initial Load: Auth User > Manual Storage > Cached Detected > Live Auto Detect
   useEffect(() => {
     const initPreferences = async () => {
-      // If authenticated and user has preferences
+      // 1. Authenticated User: Highest priority (never overwrite with detection)
       if (currentUser?.country && (currentUser?.preferred_currency || currentUser?.currency)) {
         setSelectedCountry(currentUser.country);
         setSelectedCurrency(currentUser.preferred_currency || currentUser.currency || 'USD');
         return;
       }
 
-      // Check localStorage
-      const stored = getStoredRegionalPreference();
-      if (stored) {
-        setSelectedCountry(stored.country);
-        setSelectedCountryName(stored.countryName || stored.country);
-        setSelectedFlag(stored.flag || '🌐');
-        setSelectedCurrency(stored.currency);
-        setSelectedSymbol(stored.symbol || '$');
+      // 2. Anonymous Returning Visitor with explicit manual preference
+      const manualStored = getStoredManualPreference();
+      if (manualStored) {
+        setSelectedCountry(manualStored.country);
+        setSelectedCountryName(manualStored.countryName || manualStored.country);
+        setSelectedFlag(manualStored.flag || '🌐');
+        setSelectedCurrency(manualStored.currency);
+        setSelectedSymbol(manualStored.symbol || '$');
         return;
       }
 
-      // Fallback: Auto detect silently
+      // 3. Cached Detection (session / non-manual storage)
+      const cachedDetected = getStoredDetectedRegion();
+      if (cachedDetected && cachedDetected.country) {
+        setSelectedCountry(cachedDetected.country);
+        setSelectedCountryName(cachedDetected.countryName || cachedDetected.country);
+        setSelectedFlag(cachedDetected.flag || '🌐');
+        setSelectedCurrency(cachedDetected.currency);
+        setSelectedSymbol(cachedDetected.symbol || '$');
+        return;
+      }
+
+      // 4. Fresh Visitor: Auto detect silently
       try {
         const detected = await api.detectRegion();
-        if (detected) {
+        if (detected && detected.detected && detected.country) {
           setSelectedCountry(detected.country);
-          setSelectedCountryName(detected.country_name);
-          setSelectedFlag(detected.flag);
-          setSelectedCurrency(detected.suggested_currency);
-          setSelectedSymbol(detected.currency_symbol);
+          setSelectedCountryName(detected.country_name || detected.country);
+          setSelectedFlag(detected.flag || '🌐');
+          setSelectedCurrency(detected.suggested_currency || 'USD');
+          setSelectedSymbol(detected.currency_symbol || '$');
 
-          setStoredRegionalPreference({
+          setStoredDetectedRegion({
             country: detected.country,
-            countryName: detected.country_name,
-            currency: detected.suggested_currency,
-            flag: detected.flag,
-            symbol: detected.currency_symbol,
+            countryName: detected.country_name || detected.country,
+            currency: detected.suggested_currency || 'USD',
+            flag: detected.flag || '🌐',
+            symbol: detected.currency_symbol || '$',
             locale: detected.locale,
             source: 'detected',
             updatedAt: new Date().toISOString()
           });
         }
       } catch (err) {
-        // Silently fallback to defaults
+        // Silently fallback to neutral defaults
       }
     };
 
@@ -148,12 +161,16 @@ export const RegionalFooterSelector: React.FC<RegionalFooterSelectorProps> = ({
     setDetectionNotice(null);
     try {
       const detected = await api.detectRegion();
-      setSelectedCountry(detected.country);
-      setSelectedCountryName(detected.country_name);
-      setSelectedFlag(detected.flag);
-      setSelectedCurrency(detected.suggested_currency);
-      setSelectedSymbol(detected.currency_symbol);
-      setDetectionNotice(`Detected: ${detected.country_name} (${detected.suggested_currency})`);
+      if (detected && detected.detected && detected.country) {
+        setSelectedCountry(detected.country);
+        setSelectedCountryName(detected.country_name || detected.country);
+        setSelectedFlag(detected.flag || '🌐');
+        setSelectedCurrency(detected.suggested_currency || 'USD');
+        setSelectedSymbol(detected.currency_symbol || '$');
+        setDetectionNotice(`Detected: ${detected.country_name || detected.country} (${detected.suggested_currency || 'USD'})`);
+      } else {
+        setDetectionNotice('Automatic location detection is unavailable in this environment. Please choose manually below.');
+      }
     } catch {
       setDetectionNotice('Unable to detect location. Please select manually.');
     } finally {
@@ -219,7 +236,7 @@ export const RegionalFooterSelector: React.FC<RegionalFooterSelectorProps> = ({
         updatedAt: new Date().toISOString()
       };
 
-      setStoredRegionalPreference(prefData);
+      setStoredManualPreference(prefData);
 
       // If user is authenticated, save directly to their profile
       if (currentUser && refreshUser) {

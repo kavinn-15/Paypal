@@ -5,7 +5,10 @@ import { api } from '../api/client';
 import { PhoneInput } from '../components/PhoneInput';
 import { RegionalFooterSelector } from '../components/RegionalFooterSelector';
 import { CountryItem, CurrencyItem } from '../types';
-import { getStoredRegionalPreference, setStoredRegionalPreference } from '../utils/currency';
+import {
+  getStoredManualPreference,
+  setStoredDetectedRegion
+} from '../utils/currency';
 import {
   Eye,
   EyeOff,
@@ -84,39 +87,35 @@ export const RegisterPage: React.FC = () => {
           if (currList.length > 0) setCurrenciesList(currList);
         }
 
-        // Check stored preference or detect
-        const stored = getStoredRegionalPreference();
-        if (stored) {
-          if (isMounted) {
-            setCountry(stored.country);
-            setPreferredCurrency(stored.currency);
-            setDetectedBadge({
-              countryName: stored.countryName || stored.country,
-              flag: stored.flag || '🌐',
-              currency: stored.currency
-            });
-          }
-        } else {
-          const detected = await api.detectRegion().catch(() => null);
-          if (detected && isMounted) {
-            setCountry(detected.country);
-            setPreferredCurrency(detected.suggested_currency);
-            setDetectedBadge({
-              countryName: detected.country_name,
-              flag: detected.flag,
-              currency: detected.suggested_currency
-            });
-            setStoredRegionalPreference({
-              country: detected.country,
-              countryName: detected.country_name,
-              currency: detected.suggested_currency,
-              flag: detected.flag,
-              symbol: detected.currency_symbol,
-              locale: detected.locale,
-              source: 'detected',
-              updatedAt: new Date().toISOString()
-            });
-          }
+        // Check stored manual preference first
+        const manualStored = getStoredManualPreference();
+        if (manualStored && isMounted) {
+          setCountry(manualStored.country);
+          setPreferredCurrency(manualStored.currency);
+          // User already manually picked their region, no auto-detection badge needed
+          return;
+        }
+
+        // Fresh visitor: auto-detect region
+        const detected = await api.detectRegion().catch(() => null);
+        if (detected && detected.detected && detected.country && isMounted) {
+          setCountry(detected.country);
+          setPreferredCurrency(detected.suggested_currency || 'USD');
+          setDetectedBadge({
+            countryName: detected.country_name || detected.country,
+            flag: detected.flag || '🌐',
+            currency: detected.suggested_currency || 'USD'
+          });
+          setStoredDetectedRegion({
+            country: detected.country,
+            countryName: detected.country_name || detected.country,
+            currency: detected.suggested_currency || 'USD',
+            flag: detected.flag || '🌐',
+            symbol: detected.currency_symbol || '$',
+            locale: detected.locale,
+            source: 'detected',
+            updatedAt: new Date().toISOString()
+          });
         }
       } catch {
         // Fallback silently
@@ -386,6 +385,7 @@ export const RegisterPage: React.FC = () => {
                     onChange={(e) => {
                       const newCountry = e.target.value;
                       setCountry(newCountry);
+                      setDetectedBadge(null);
                       const matched = countriesList.find((c) => c.code === newCountry);
                       if (matched && matched.currency) {
                         setPreferredCurrency(matched.currency);
@@ -438,7 +438,10 @@ export const RegisterPage: React.FC = () => {
                   <DollarSign className="w-4 h-4 text-sardine-muted absolute left-3 top-3.5 pointer-events-none" />
                   <select
                     value={preferredCurrency}
-                    onChange={(e) => setPreferredCurrency(e.target.value)}
+                    onChange={(e) => {
+                      setPreferredCurrency(e.target.value);
+                      setDetectedBadge(null);
+                    }}
                     className="w-full pl-9 pr-3 py-2.5 bg-ink-950 border border-ink-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:border-electric transition-colors appearance-none cursor-pointer"
                   >
                     {currenciesList.length > 0 ? (

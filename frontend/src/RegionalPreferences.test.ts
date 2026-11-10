@@ -5,8 +5,13 @@ import {
   getCurrencyFractionDigits,
   getStoredRegionalPreference,
   setStoredRegionalPreference,
+  getStoredManualPreference,
+  setStoredManualPreference,
+  getStoredDetectedRegion,
+  setStoredDetectedRegion,
   ZERO_DECIMAL_CURRENCIES,
   REGIONAL_PREFERENCE_STORAGE_KEY,
+  DETECTED_REGION_STORAGE_KEY,
   StoredRegionalPreference
 } from './utils/currency';
 
@@ -123,6 +128,65 @@ describe('Regional Preferences & Currency Localization Tests', () => {
       expect(retrieved?.currency).toBe('INR');
       expect(retrieved?.flag).toBe('🇮🇳');
       expect(retrieved?.symbol).toBe('₹');
+    });
+
+    it('separates manual preferences from auto-detected caching', () => {
+      expect(getStoredManualPreference()).toBeNull();
+      expect(getStoredDetectedRegion()).toBeNull();
+
+      // Cache a detected region
+      const detectedPref: StoredRegionalPreference = {
+        country: 'GB',
+        countryName: 'United Kingdom',
+        currency: 'GBP',
+        flag: '🇬🇧',
+        symbol: '£',
+        source: 'detected',
+        updatedAt: '2026-11-10T00:00:00.000Z'
+      };
+      setStoredDetectedRegion(detectedPref);
+
+      // getStoredManualPreference must remain null!
+      expect(getStoredManualPreference()).toBeNull();
+      expect(getStoredDetectedRegion()?.country).toBe('GB');
+
+      // Now save a manual user selection
+      const manualPref: StoredRegionalPreference = {
+        country: 'IN',
+        countryName: 'India',
+        currency: 'INR',
+        flag: '🇮🇳',
+        symbol: '₹',
+        source: 'manual',
+        updatedAt: '2026-11-10T00:00:00.000Z'
+      };
+      setStoredManualPreference(manualPref);
+
+      expect(getStoredManualPreference()?.country).toBe('IN');
+      // getStoredRegionalPreference prioritizes manual over detected
+      expect(getStoredRegionalPreference()?.country).toBe('IN');
+    });
+
+    it('evicts stale legacy or detected items residing under the manual key', () => {
+      // Simulate old bug where a detected US fallback was saved directly to REGIONAL_PREFERENCE_STORAGE_KEY
+      localStorage.setItem(REGIONAL_PREFERENCE_STORAGE_KEY, JSON.stringify({
+        country: 'US',
+        countryName: 'United States',
+        currency: 'USD',
+        flag: '🇺🇸',
+        symbol: '$',
+        source: 'detected' // disposable
+      }));
+
+      // getStoredManualPreference should detect that source is 'detected', evict it, and return null
+      const manual = getStoredManualPreference();
+      expect(manual).toBeNull();
+      expect(localStorage.getItem(REGIONAL_PREFERENCE_STORAGE_KEY)).toBeNull();
+    });
+
+    it('formats 3-decimal currencies like KWD properly', () => {
+      const formattedKWD = formatCurrency(12.345, 'KWD', 'en-US');
+      expect(formattedKWD).toContain('12.345');
     });
   });
 });

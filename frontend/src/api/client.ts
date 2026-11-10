@@ -441,8 +441,29 @@ export const api = {
 
   getIntegrityCheck: () => request<any>('/finance/integrity-check'),
 
-  detectRegion: (clientHint?: string) => {
-    const query = clientHint ? `?client_hint=${encodeURIComponent(clientHint)}` : '';
+  detectRegion: (options?: { timezone?: string; clientHint?: string } | string) => {
+    const params = new URLSearchParams();
+    let tz: string | undefined;
+    let hint: string | undefined;
+
+    if (typeof options === 'string') {
+      hint = options;
+    } else if (options) {
+      tz = options.timezone;
+      hint = options.clientHint;
+    }
+
+    if (!tz && typeof Intl !== 'undefined') {
+      try {
+        tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      } catch {
+        // ignore
+      }
+    }
+
+    if (tz) params.append('timezone', tz);
+    if (hint) params.append('client_hint', hint);
+    const query = params.toString() ? `?${params.toString()}` : '';
     return request<RegionDetectionResponse>(`/region/detect${query}`);
   },
 

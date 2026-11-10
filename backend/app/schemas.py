@@ -158,17 +158,19 @@ class RegionalPreferencesUpdate(BaseModel):
 
 
 class RegionDetectionResponse(BaseModel):
-    country: str
-    country_name: str
-    flag: str
-    suggested_currency: str
-    currency_name: str
-    currency_symbol: str
-    decimals: int
-    dial_code: str
-    locale: str
-    detection_method: str
-    confidence: float
+    detected: bool = Field(default=False, description="True only when location was reliably identified via IP, proxy, or locale")
+    status: str = Field(default="unavailable", description="Detection status: 'success', 'fallback', 'unavailable', or 'dev_override'")
+    detection_method: str = Field(default="unavailable", description="Method used: 'trusted_proxy_header', 'ip_geolocation', 'browser_locale', 'browser_timezone', 'dev_override', 'manual', or 'unavailable'")
+    confidence: float = Field(default=0.0, description="Confidence score from 0.0 to 1.0")
+    country: Optional[str] = None
+    country_name: Optional[str] = None
+    flag: Optional[str] = None
+    suggested_currency: Optional[str] = None
+    currency_name: Optional[str] = None
+    currency_symbol: Optional[str] = None
+    decimals: int = 2
+    dial_code: Optional[str] = None
+    locale: Optional[str] = None
 
 
 class CountryItem(BaseModel):

@@ -174,3 +174,126 @@ def test_update_regional_preferences_invalid_country_rejected(client, auth_user)
     res2 = client.put("/api/profile/regional-preferences", json={"preferred_currency": "XYZ"}, headers=headers)
     assert res2.status_code == 400
     assert "Unsupported currency code" in res2.json()["detail"]
+
+
+def test_detect_region_public_ip_india_mocked(client, monkeypatch):
+    """Public IP from India resolves to IN and INR with status 'success'."""
+    from backend.app.services import region_service
+
+    async def mock_lookup(ip: str):
+        return {"country": "IN", "currency": "INR", "city": "Bengaluru", "region": "Karnataka"}
+
+    monkeypatch.setattr(region_service, "lookup_ip_geolocation", mock_lookup)
+    headers = {"X-Forwarded-For": "103.21.244.2"}
+    res = client.get("/api/region/detect", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["detected"] is True
+    assert data["status"] == "success"
+    assert data["country"] == "IN"
+    assert data["suggested_currency"] == "INR"
+    assert data["detection_method"] == "ip_geolocation"
+
+
+def test_detect_region_public_ip_us_mocked(client, monkeypatch):
+    """Public IP from US resolves to US and USD with status 'success'."""
+    from backend.app.services import region_service
+
+    async def mock_lookup(ip: str):
+        return {"country": "US", "currency": "USD", "city": "Ashburn", "region": "Virginia"}
+
+    monkeypatch.setattr(region_service, "lookup_ip_geolocation", mock_lookup)
+    headers = {"X-Forwarded-For": "8.8.8.8"}
+    res = client.get("/api/region/detect", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["detected"] is True
+    assert data["status"] == "success"
+    assert data["country"] == "US"
+    assert data["suggested_currency"] == "USD"
+    assert data["detection_method"] == "ip_geolocation"
+
+
+def test_detect_region_public_ip_uk_mocked(client, monkeypatch):
+    """Public IP from UK resolves to GB and GBP with status 'success'."""
+    from backend.app.services import region_service
+
+    async def mock_lookup(ip: str):
+        return {"country": "GB", "currency": "GBP", "city": "London", "region": "England"}
+
+    monkeypatch.setattr(region_service, "lookup_ip_geolocation", mock_lookup)
+    headers = {"X-Forwarded-For": "212.58.244.20"}
+    res = client.get("/api/region/detect", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["detected"] is True
+    assert data["status"] == "success"
+    assert data["country"] == "GB"
+    assert data["suggested_currency"] == "GBP"
+    assert data["detection_method"] == "ip_geolocation"
+
+
+def test_client_hint_cannot_override_reliable_detection(client):
+    """A stale or malicious client_hint cannot override a reliable proxy header."""
+    headers = {"CF-IPCountry": "IN"}
+    res = client.get("/api/region/detect?client_hint=US", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    # IN must win over the client_hint US
+    assert data["country"] == "IN"
+    assert data["suggested_currency"] == "INR"
+    assert data["detection_method"] == "header"
+
+
+def test_untrusted_proxy_host_header_ignored():
+    """Proxy headers from untrusted hosts are ignored for geolocation."""
+    from backend.app.services.region_service import get_country_from_headers
+
+    # Untrusted client host outside trusted list
+    headers = {"cf-ipcountry": "DE"}
+    country = get_country_from_headers(headers, client_host="203.0.113.195", trusted_proxies=["127.0.0.1"])
+    assert country is None
+
+
+def test_dev_country_override(client, monkeypatch):
+    """DEV_COUNTRY_OVERRIDE takes precedence when DEV_MODE is enabled."""
+    from backend.app.config import settings
+
+    monkeypatch.setattr(settings, "DEV_MODE", True)
+    monkeypatch.setattr(settings, "DEV_COUNTRY_OVERRIDE", "IN")
+
+    res = client.get("/api/region/detect")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["detected"] is True
+    assert data["country"] == "IN"
+    assert data["suggested_currency"] == "INR"
+    assert data["detection_method"] == "dev_override"
+
+
+def test_localhost_without_headers_returns_unavailable(client):
+    """Pure localhost request without hints/headers returns explicit unavailable response."""
+    res = client.get("/api/region/detect")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["detected"] is False
+    assert data["status"] == "unavailable"
+    assert data["detection_method"] == "unavailable"
+    assert data["country"] is None
+    assert data["suggested_currency"] is None
+
+
+def test_provider_failure_returns_graceful_unavailable(client, monkeypatch):
+    """When external geolocation provider fails, service fails closed without 500 error."""
+    from backend.app.services import region_service
+
+    async def failing_lookup(ip: str):
+        return None
+
+    monkeypatch.setattr(region_service, "lookup_ip_geolocation", failing_lookup)
+    headers = {"X-Forwarded-For": "198.51.100.1"}
+    res = client.get("/api/region/detect", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["detected"] is False
+    assert data["status"] == "unavailable"

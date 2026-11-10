@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   CheckCircle2,
@@ -38,6 +38,15 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   const [payeeName, setPayeeName] = useState('');
   const [obligationAmount, setObligationAmount] = useState('1500');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (currentUser?.preferred_currency || currentUser?.currency) {
+      setCurrency(currentUser.preferred_currency || currentUser.currency);
+    }
+    if (currentUser?.name && !businessName) {
+      setBusinessName(currentUser.name);
+    }
+  }, [currentUser]);
 
   if (!isOpen) return null;
 

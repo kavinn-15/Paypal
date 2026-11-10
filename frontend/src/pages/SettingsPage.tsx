@@ -21,7 +21,8 @@ import {
   X,
   Check,
   RotateCcw,
-  Loader2
+  Loader2,
+  Sparkles
 } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
@@ -61,6 +62,15 @@ export const SettingsPage: React.FC = () => {
   const [regionalSaving, setRegionalSaving] = useState(false);
   const [regionalSuccess, setRegionalSuccess] = useState<string | null>(null);
   const [regionalError, setRegionalError] = useState<string | null>(null);
+  const [isRedetecting, setIsRedetecting] = useState(false);
+  const [redetectSuggestion, setRedetectSuggestion] = useState<{
+    country: string;
+    countryName: string;
+    flag: string;
+    currency: string;
+    method: string;
+  } | null>(null);
+  const [redetectNotice, setRedetectNotice] = useState<string | null>(null);
 
   useEffect(() => {
     api.getPayPalConnection().then(setStatus).catch(() => {});
@@ -101,6 +111,39 @@ export const SettingsPage: React.FC = () => {
       setRegionalError(err.message || 'Failed to update regional preferences.');
     } finally {
       setRegionalSaving(false);
+    }
+  };
+
+  const handleRedetectLocation = async () => {
+    setIsRedetecting(true);
+    setRedetectNotice(null);
+    setRedetectSuggestion(null);
+    try {
+      const detected = await api.detectRegion();
+      if (detected && detected.detected && detected.country) {
+        setRedetectSuggestion({
+          country: detected.country,
+          countryName: detected.country_name || detected.country,
+          flag: detected.flag || '🌐',
+          currency: detected.suggested_currency || 'USD',
+          method: detected.detection_method
+        });
+      } else {
+        setRedetectNotice('Unable to detect your location reliably. You can select your country and currency manually below.');
+      }
+    } catch {
+      setRedetectNotice('Unable to detect your location reliably. You can select your country and currency manually below.');
+    } finally {
+      setIsRedetecting(false);
+    }
+  };
+
+  const handleApplySuggestion = () => {
+    if (redetectSuggestion) {
+      setSelectedCountry(redetectSuggestion.country);
+      setSelectedDisplayCurrency(redetectSuggestion.currency);
+      setRedetectSuggestion(null);
+      setRedetectNotice(`Applied ${redetectSuggestion.countryName} (${redetectSuggestion.currency}). Click "Save Regional Preferences" to persist.`);
     }
   };
 
@@ -328,7 +371,26 @@ export const SettingsPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleRedetectLocation}
+              disabled={isRedetecting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-cyan-200 bg-cyan-50 hover:bg-cyan-100/70 text-cyan-800 text-xs font-semibold transition disabled:opacity-50 shadow-xs cursor-pointer"
+              title="Re-detect country and currency using network geolocation"
+            >
+              {isRedetecting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-700" />
+                  <span>Detecting...</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 text-cyan-700" />
+                  <span>Re-detect My Location</span>
+                </>
+              )}
+            </button>
             <span className="text-[11px] font-mono px-2.5 py-1 rounded-full border bg-slate-50 text-slate-600 border-slate-200">
               Source: <strong className="text-cyan-700 uppercase">{preferenceSource}</strong>
             </span>
@@ -339,6 +401,46 @@ export const SettingsPage: React.FC = () => {
             )}
           </div>
         </div>
+
+        {redetectSuggestion && (
+          <div className="p-3 bg-cyan-50 border border-cyan-300 rounded-xl text-xs text-cyan-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fadeIn">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-cyan-600 shrink-0" />
+              <span>
+                Detected location: <strong>{redetectSuggestion.flag} {redetectSuggestion.countryName}</strong> (Suggested: <strong>{redetectSuggestion.currency}</strong>). Apply to form fields?
+              </span>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={handleApplySuggestion}
+                className="px-3 py-1 rounded-lg bg-cyan-700 text-white font-semibold hover:bg-cyan-800 transition shadow-xs text-xs"
+              >
+                Apply
+              </button>
+              <button
+                type="button"
+                onClick={() => setRedetectSuggestion(null)}
+                className="px-2.5 py-1 rounded-lg text-slate-600 hover:bg-slate-200 transition text-xs font-medium"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        {redetectNotice && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center justify-between gap-2">
+            <span>{redetectNotice}</span>
+            <button
+              type="button"
+              onClick={() => setRedetectNotice(null)}
+              className="text-amber-700 hover:text-amber-900 text-xs font-semibold px-1"
+            >
+              &times;
+            </button>
+          </div>
+        )}
 
         {regionalSuccess && (
           <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-start space-x-2">

@@ -14,6 +14,7 @@ export const THREE_DECIMAL_CURRENCIES = new Set([
 ]);
 
 export const REGIONAL_PREFERENCE_STORAGE_KEY = 'cashflow_regional_preference';
+export const DETECTED_REGION_STORAGE_KEY = 'cashflow_detected_region';
 
 export interface StoredRegionalPreference {
   country: string;
@@ -100,12 +101,54 @@ export function getCurrencySymbol(currencyCode: string = 'USD', locale: string =
 }
 
 /**
- * Read anonymous or pre-login regional preference from localStorage.
+ * Read explicit manual regional preference from localStorage.
+ * Stale or detected entries residing under the manual key are evicted.
  */
-export function getStoredRegionalPreference(): StoredRegionalPreference | null {
+export function getStoredManualPreference(): StoredRegionalPreference | null {
   try {
     if (typeof localStorage === 'undefined') return null;
     const item = localStorage.getItem(REGIONAL_PREFERENCE_STORAGE_KEY);
+    if (!item) return null;
+    const parsed = JSON.parse(item) as StoredRegionalPreference;
+    if (parsed && parsed.source === 'manual') {
+      return parsed;
+    }
+    // Clean up disposable or legacy detected entries in the manual key
+    localStorage.removeItem(REGIONAL_PREFERENCE_STORAGE_KEY);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save explicit user manual preference to localStorage and notify listeners.
+ */
+export function setStoredManualPreference(pref: StoredRegionalPreference): void {
+  try {
+    const manualPref: StoredRegionalPreference = {
+      ...pref,
+      source: 'manual',
+      updatedAt: new Date().toISOString()
+    };
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(REGIONAL_PREFERENCE_STORAGE_KEY, JSON.stringify(manualPref));
+    }
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('regional-preference-changed', { detail: manualPref }));
+    }
+  } catch (e) {
+    console.error('Failed to save manual regional preference:', e);
+  }
+}
+
+/**
+ * Read cached auto-detected region from localStorage/sessionStorage.
+ */
+export function getStoredDetectedRegion(): StoredRegionalPreference | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const item = localStorage.getItem(DETECTED_REGION_STORAGE_KEY);
     if (!item) return null;
     return JSON.parse(item) as StoredRegionalPreference;
   } catch {
@@ -114,17 +157,44 @@ export function getStoredRegionalPreference(): StoredRegionalPreference | null {
 }
 
 /**
- * Store regional preference to localStorage and dispatch custom event.
+ * Cache auto-detected region without contaminating manual preference.
  */
-export function setStoredRegionalPreference(pref: StoredRegionalPreference): void {
+export function setStoredDetectedRegion(pref: StoredRegionalPreference): void {
   try {
+    const detectedPref: StoredRegionalPreference = {
+      ...pref,
+      source: 'detected',
+      updatedAt: new Date().toISOString()
+    };
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(REGIONAL_PREFERENCE_STORAGE_KEY, JSON.stringify(pref));
+      localStorage.setItem(DETECTED_REGION_STORAGE_KEY, JSON.stringify(detectedPref));
     }
     if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('regional-preference-changed', { detail: pref }));
+      window.dispatchEvent(new CustomEvent('regional-preference-changed', { detail: detectedPref }));
     }
   } catch (e) {
-    console.error('Failed to save regional preference to localStorage:', e);
+    console.error('Failed to cache detected region:', e);
+  }
+}
+
+/**
+ * Read active regional preference with proper priority:
+ * 1. Explicit user manual preference
+ * 2. Cached auto-detected region
+ */
+export function getStoredRegionalPreference(): StoredRegionalPreference | null {
+  const manual = getStoredManualPreference();
+  if (manual) return manual;
+  return getStoredDetectedRegion();
+}
+
+/**
+ * Store regional preference, routing by source (manual vs detected).
+ */
+export function setStoredRegionalPreference(pref: StoredRegionalPreference): void {
+  if (pref.source === 'manual') {
+    setStoredManualPreference(pref);
+  } else {
+    setStoredDetectedRegion(pref);
   }
 }
