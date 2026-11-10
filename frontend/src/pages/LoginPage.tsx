@@ -15,7 +15,8 @@ import {
   Play,
   Loader2,
   CheckCircle,
-  RotateCcw
+  RotateCcw,
+  Flame
 } from 'lucide-react';
 
 const GoogleIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
@@ -92,6 +93,7 @@ export const LoginPage: React.FC = () => {
     }
 
     setLoading(true);
+
     try {
       const res = await login(email.trim(), password);
       if (res && res.email_verified === false) {
@@ -190,7 +192,6 @@ export const LoginPage: React.FC = () => {
     try {
       const res = await api.getGoogleAuthUrl();
       if (res.auth_url) {
-        // If placeholder credentials are used in local dev mode, simulate callback directly
         const clientId = res.client_id || import.meta.env.VITE_GOOGLE_CLIENT_ID;
         const isPlaceholder = !clientId || clientId.includes('placeholder_google_client_id') || res.auth_url.includes('placeholder_google_client_id');
         if (isPlaceholder) {
@@ -219,38 +220,38 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-ink-950 flex flex-col justify-between text-white selection:bg-electric selection:text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--tx)] flex flex-col justify-between ignara-page-enter">
       {/* Top Simple Header */}
-      <div className="max-w-[1440px] mx-auto w-full px-3 sm:px-6 py-4 sm:py-6 flex items-center justify-between">
-        <Link to="/" className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-lg bg-ink-900 border border-electric/40 flex items-center justify-center font-mono font-bold text-electric text-xs shadow-glow-electric shrink-0">
-            CL
+      <div className="max-w-[1080px] mx-auto w-full px-4 sm:px-6 py-4 sm:py-6 flex items-center justify-between">
+        <Link to="/" className="flex items-center gap-3 group">
+          <div
+            className="w-10 h-10 rounded-[12px] flex items-center justify-center text-white shrink-0 shadow-md"
+            style={{ background: 'var(--grad-ember)' }}
+          >
+            <Flame className="w-5 h-5 text-white fill-white/20" strokeWidth={2.2} />
           </div>
-          <span className="font-extrabold text-sm sm:text-base tracking-tight text-white flex items-center gap-1.5">
+          <span className="font-semibold text-base sm:text-lg tracking-tight text-[var(--tx)] flex items-center gap-1.5">
             Cashflow Lifeline
-            <span className="hidden xs:inline-block text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-electric/15 text-electric-300 border border-electric/30">
-              PayPal AI
-            </span>
           </span>
         </Link>
-        <Link to="/" className="text-xs text-sardine-muted hover:text-white transition-colors py-1.5">
+        <Link to="/" className="text-xs text-[var(--mu)] hover:text-[var(--tx)] transition-colors py-1.5">
           &larr; Back to Home
         </Link>
       </div>
 
       {/* Main Login Card */}
-      <div className="max-w-md w-full mx-auto px-3 sm:px-4 py-4 sm:py-6">
-        <div className="rounded-2xl border border-ink-800 bg-ink-900/90 backdrop-blur-xl p-4 sm:p-8 shadow-2xl space-y-4 sm:space-y-6">
-          <div className="space-y-1.5 text-center">
-            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">Sign In</h1>
-            <p className="text-xs text-sardine-muted">
+      <div className="max-w-md w-full mx-auto px-4 py-4 sm:py-6">
+        <div className="ignara-card p-6 sm:p-8 space-y-5">
+          <div className="space-y-1 text-center">
+            <h1 className="ignara-h1 text-2xl font-semibold">Sign In</h1>
+            <p className="text-xs text-[var(--mu)]">
               Access your real-time cashflow predictions and rescue inbox
             </p>
           </div>
 
           {error && (
-            <div className="p-3 sm:p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start space-x-2.5">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
+            <div className="p-3.5 rounded-[14px] bg-[var(--r)]/15 border border-[var(--r)]/30 text-[var(--r)] text-xs flex items-start space-x-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <div className="leading-relaxed break-words flex-1">{error}</div>
             </div>
           )}
@@ -260,10 +261,10 @@ export const LoginPage: React.FC = () => {
             type="button"
             onClick={handleGoogleSignIn}
             disabled={googleLoading || loading}
-            className="w-full py-3 px-4 rounded-xl bg-ink-950 border border-ink-700 hover:border-slate-500 text-white text-xs font-semibold flex items-center justify-center space-x-2.5 transition-all shadow-xs disabled:opacity-50 cursor-pointer min-h-[44px]"
+            className="ignara-btn-secondary w-full py-2.5 text-xs font-semibold"
           >
             {googleLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin text-electric shrink-0" />
+              <Loader2 className="w-4 h-4 animate-spin text-[var(--o1)] shrink-0" />
             ) : (
               <GoogleIcon className="w-4 h-4 shrink-0" />
             )}
@@ -271,25 +272,25 @@ export const LoginPage: React.FC = () => {
           </button>
 
           {/* Divider */}
-          <div className="relative flex items-center justify-center">
-            <div className="border-t border-ink-800 w-full" />
-            <span className="bg-ink-900 px-3 text-[10px] font-mono uppercase tracking-wider text-sardine-muted absolute">
+          <div className="relative flex items-center justify-center my-1">
+            <div className="border-t border-[var(--line)] w-full" />
+            <span className="bg-[var(--card)] px-3 text-[10.5px] font-mono uppercase tracking-wider text-[var(--dim)] absolute">
               or select method
             </span>
           </div>
 
           {/* Segmented Login Tabs */}
-          <div className="grid grid-cols-3 gap-1 p-1 bg-ink-950 rounded-xl border border-ink-800">
+          <div className="grid grid-cols-3 gap-1 p-1 bg-[var(--side)] rounded-[999px] border border-[var(--line)]">
             <button
               type="button"
               onClick={() => {
                 setActiveTab('email');
                 setError(null);
               }}
-              className={`py-2 px-1 text-center rounded-lg text-[11px] sm:text-xs font-semibold transition-all flex items-center justify-center space-x-1 sm:space-x-1.5 min-h-[40px] ${
+              className={`py-1.5 px-1 text-center rounded-[999px] text-[11px] font-medium transition-all flex items-center justify-center space-x-1 min-h-[36px] ${
                 activeTab === 'email'
-                  ? 'bg-electric text-white shadow-xs'
-                  : 'text-sardine-muted hover:text-white hover:bg-ink-900'
+                  ? 'bg-[var(--card)] text-[var(--tx)] shadow-xs'
+                  : 'text-[var(--mu)] hover:text-[var(--tx)]'
               }`}
             >
               <Mail className="w-3.5 h-3.5 shrink-0" />
@@ -302,10 +303,10 @@ export const LoginPage: React.FC = () => {
                 setActiveTab('phone_password');
                 setError(null);
               }}
-              className={`py-2 px-1 text-center rounded-lg text-[11px] sm:text-xs font-semibold transition-all flex items-center justify-center space-x-1 sm:space-x-1.5 min-h-[40px] ${
+              className={`py-1.5 px-1 text-center rounded-[999px] text-[11px] font-medium transition-all flex items-center justify-center space-x-1 min-h-[36px] ${
                 activeTab === 'phone_password'
-                  ? 'bg-electric text-white shadow-xs'
-                  : 'text-sardine-muted hover:text-white hover:bg-ink-900'
+                  ? 'bg-[var(--card)] text-[var(--tx)] shadow-xs'
+                  : 'text-[var(--mu)] hover:text-[var(--tx)]'
               }`}
             >
               <Phone className="w-3.5 h-3.5 shrink-0" />
@@ -318,10 +319,10 @@ export const LoginPage: React.FC = () => {
                 setActiveTab('phone_otp');
                 setError(null);
               }}
-              className={`py-2 px-1 text-center rounded-lg text-[11px] sm:text-xs font-semibold transition-all flex items-center justify-center space-x-1 sm:space-x-1.5 min-h-[40px] ${
+              className={`py-1.5 px-1 text-center rounded-[999px] text-[11px] font-medium transition-all flex items-center justify-center space-x-1 min-h-[36px] ${
                 activeTab === 'phone_otp'
-                  ? 'bg-electric text-white shadow-xs'
-                  : 'text-sardine-muted hover:text-white hover:bg-ink-900'
+                  ? 'bg-[var(--card)] text-[var(--tx)] shadow-xs'
+                  : 'text-[var(--mu)] hover:text-[var(--tx)]'
               }`}
             >
               <KeyRound className="w-3.5 h-3.5 shrink-0" />
@@ -333,11 +334,11 @@ export const LoginPage: React.FC = () => {
           {activeTab === 'email' && (
             <form onSubmit={handleEmailSubmit} className="space-y-4">
               <div className="space-y-1">
-                <label className="block text-xs font-semibold text-slate-300">
+                <label className="block text-xs font-semibold text-[var(--tx)]">
                   Work / Business Email
                 </label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-sardine-muted absolute left-3 top-3.5 pointer-events-none" />
+                  <Mail className="w-4 h-4 text-[var(--dim)] absolute left-3 top-3.5 pointer-events-none" />
                   <input
                     type="email"
                     value={email}
@@ -345,35 +346,35 @@ export const LoginPage: React.FC = () => {
                     placeholder="alex@freelance.org"
                     required
                     autoFocus
-                    className="w-full pl-9 pr-3 py-2.5 bg-ink-950 border border-ink-700 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-electric transition-colors"
+                    className="ignara-input w-full pl-9"
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-semibold text-slate-300">Password</label>
+                  <label className="block text-xs font-semibold text-[var(--tx)]">Password</label>
                   <Link
                     to="/forgot-password"
-                    className="text-xs text-electric-300 hover:text-electric transition-colors font-medium"
+                    className="text-xs text-[var(--o1)] hover:underline font-medium"
                   >
                     Forgot password?
                   </Link>
                 </div>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-sardine-muted absolute left-3 top-3.5 pointer-events-none" />
+                  <Lock className="w-4 h-4 text-[var(--dim)] absolute left-3 top-3.5 pointer-events-none" />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     required
-                    className="w-full pl-9 pr-10 py-2.5 bg-ink-950 border border-ink-700 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-electric transition-colors"
+                    className="ignara-input w-full pl-9 pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-sardine-muted hover:text-white"
+                    className="absolute right-3 top-3 text-[var(--dim)] hover:text-[var(--tx)] cursor-pointer"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -381,12 +382,12 @@ export const LoginPage: React.FC = () => {
               </div>
 
               <div className="flex items-center justify-between text-xs pt-1">
-                <label className="flex items-center space-x-2 text-slate-300 cursor-pointer">
+                <label className="flex items-center space-x-2 text-[var(--mu)] cursor-pointer">
                   <input
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded border-ink-700 bg-ink-950 text-electric focus:ring-0"
+                    className="w-3.5 h-3.5 rounded border-[var(--line)] text-[var(--o1)] focus:ring-0 cursor-pointer"
                   />
                   <span>Remember me on this browser</span>
                 </label>
@@ -395,7 +396,7 @@ export const LoginPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 rounded-xl bg-electric hover:bg-electric-600 text-white font-bold text-xs sm:text-sm shadow-glow-electric transition-all flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+                className="ignara-btn-primary w-full py-2.5 text-xs font-semibold"
               >
                 {loading ? (
                   <>
@@ -415,7 +416,7 @@ export const LoginPage: React.FC = () => {
           {/* Tab 2: Phone + Password */}
           {activeTab === 'phone_password' && (
             <form onSubmit={handlePhonePasswordSubmit} className="space-y-4">
-              <div className="bg-ink-950/70 p-3 rounded-xl border border-ink-800">
+              <div className="p-3 rounded-[14px] bg-[var(--side)] border border-[var(--line)]">
                 <PhoneInput
                   value={phoneNumber}
                   onChange={(full, code) => {
@@ -430,28 +431,28 @@ export const LoginPage: React.FC = () => {
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-semibold text-slate-300">Password</label>
+                  <label className="block text-xs font-semibold text-[var(--tx)]">Password</label>
                   <Link
                     to="/forgot-password"
-                    className="text-xs text-electric-300 hover:text-electric transition-colors font-medium"
+                    className="text-xs text-[var(--o1)] hover:underline font-medium"
                   >
                     Forgot password?
                   </Link>
                 </div>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-sardine-muted absolute left-3 top-3.5 pointer-events-none" />
+                  <Lock className="w-4 h-4 text-[var(--dim)] absolute left-3 top-3.5 pointer-events-none" />
                   <input
                     type={showPhonePassword ? 'text' : 'password'}
                     value={phonePassword}
                     onChange={(e) => setPhonePassword(e.target.value)}
                     placeholder="••••••••"
                     required
-                    className="w-full pl-9 pr-10 py-2.5 bg-ink-950 border border-ink-700 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-electric transition-colors"
+                    className="ignara-input w-full pl-9 pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPhonePassword(!showPhonePassword)}
-                    className="absolute right-3 top-3 text-sardine-muted hover:text-white"
+                    className="absolute right-3 top-3 text-[var(--dim)] hover:text-[var(--tx)] cursor-pointer"
                   >
                     {showPhonePassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -461,7 +462,7 @@ export const LoginPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 rounded-xl bg-electric hover:bg-electric-600 text-white font-bold text-xs sm:text-sm shadow-glow-electric transition-all flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+                className="ignara-btn-primary w-full py-2.5 text-xs font-semibold"
               >
                 {loading ? (
                   <>
@@ -483,7 +484,7 @@ export const LoginPage: React.FC = () => {
             <div>
               {otpStep === 'input_phone' ? (
                 <form onSubmit={handleRequestPhoneLoginOtp} className="space-y-4">
-                  <div className="bg-ink-950/70 p-3 rounded-xl border border-ink-800">
+                  <div className="p-3 rounded-[14px] bg-[var(--side)] border border-[var(--line)]">
                     <PhoneInput
                       value={phoneNumber}
                       onChange={(full, code) => {
@@ -496,14 +497,14 @@ export const LoginPage: React.FC = () => {
                     />
                   </div>
 
-                  <p className="text-[11px] text-sardine-muted leading-relaxed">
+                  <p className="text-[11.5px] text-[var(--mu)] leading-relaxed">
                     We will send a 6-digit one-time SMS verification code to your verified mobile number.
                   </p>
 
                   <button
                     type="submit"
                     disabled={loading || !phoneNumber.trim()}
-                    className="w-full py-3 rounded-xl bg-electric hover:bg-electric-600 text-white font-bold text-xs sm:text-sm shadow-glow-electric transition-all flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+                    className="ignara-btn-primary w-full py-2.5 text-xs font-semibold"
                   >
                     {loading ? (
                       <>
@@ -521,7 +522,7 @@ export const LoginPage: React.FC = () => {
               ) : (
                 <form onSubmit={handleVerifyPhoneLoginOtp} className="space-y-4">
                   {otpSentMessage && (
-                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center space-x-2">
+                    <div className="p-3 rounded-[14px] bg-[var(--g)]/15 border border-[var(--g)]/30 text-[var(--g)] text-xs flex items-center space-x-2">
                       <CheckCircle className="w-4 h-4 shrink-0" />
                       <span>{otpSentMessage}</span>
                     </div>
@@ -529,7 +530,7 @@ export const LoginPage: React.FC = () => {
 
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <label className="block text-xs font-semibold text-slate-300">
+                      <label className="block text-xs font-semibold text-[var(--tx)]">
                         6-Digit SMS Code
                       </label>
                       <button
@@ -539,7 +540,7 @@ export const LoginPage: React.FC = () => {
                           setOtpCode('');
                           setError(null);
                         }}
-                        className="text-[11px] text-electric-300 hover:underline"
+                        className="text-[11px] text-[var(--o1)] hover:underline cursor-pointer"
                       >
                         Change number
                       </button>
@@ -554,20 +555,20 @@ export const LoginPage: React.FC = () => {
                       placeholder="123456"
                       required
                       autoFocus
-                      className="w-full text-center tracking-[0.4em] font-mono text-xl py-3 bg-ink-950 border border-ink-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-electric"
+                      className="ignara-input w-full text-center tracking-[0.4em] font-mono text-xl py-3"
                     />
                   </div>
 
-                  <div className="flex items-center justify-between text-xs text-sardine-muted">
+                  <div className="flex items-center justify-between text-xs text-[var(--mu)]">
                     <span>
                       {cooldown > 0 ? (
-                        <span>Resend in <strong className="text-white font-mono">{cooldown}s</strong></span>
+                        <span>Resend in <strong className="text-[var(--tx)] font-mono">{cooldown}s</strong></span>
                       ) : (
                         <button
                           type="button"
                           onClick={handleResendPhoneLoginOtp}
                           disabled={loading}
-                          className="text-electric-300 hover:text-white font-semibold flex items-center space-x-1"
+                          className="text-[var(--o1)] hover:underline font-semibold flex items-center space-x-1 cursor-pointer"
                         >
                           <RotateCcw className="w-3 h-3" />
                           <span>Resend SMS Code</span>
@@ -580,7 +581,7 @@ export const LoginPage: React.FC = () => {
                   <button
                     type="submit"
                     disabled={loading || otpCode.length !== 6}
-                    className="w-full py-3 rounded-xl bg-electric hover:bg-electric-600 text-white font-bold text-xs sm:text-sm shadow-glow-electric transition-all flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+                    className="ignara-btn-primary w-full py-2.5 text-xs font-semibold"
                   >
                     {loading ? (
                       <>
@@ -600,9 +601,9 @@ export const LoginPage: React.FC = () => {
           )}
 
           {/* Sandbox Demo Evaluation */}
-          <div className="relative flex items-center justify-center">
-            <div className="border-t border-ink-800 w-full" />
-            <span className="bg-ink-900 px-3 text-[10px] font-mono uppercase tracking-wider text-sardine-muted absolute">
+          <div className="relative flex items-center justify-center my-1">
+            <div className="border-t border-[var(--line)] w-full" />
+            <span className="bg-[var(--card)] px-3 text-[10.5px] font-mono uppercase tracking-wider text-[var(--dim)] absolute">
               or sandbox evaluation
             </span>
           </div>
@@ -612,28 +613,28 @@ export const LoginPage: React.FC = () => {
               type="button"
               onClick={handleDemoSignIn}
               disabled={demoLoading}
-              className="w-full py-2.5 rounded-xl bg-ink-950 border border-electric/30 hover:border-electric text-electric-300 font-semibold text-xs transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+              className="ignara-btn-secondary w-full py-2.5 text-xs font-semibold"
             >
               {demoLoading ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-electric" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--o1)]" />
                   <span>Loading Demo Scenario...</span>
                 </>
               ) : (
                 <>
-                  <Play className="w-3.5 h-3.5 fill-electric-300" />
+                  <Play className="w-3.5 h-3.5 fill-[var(--o1)] text-[var(--o1)]" />
                   <span>Explore Demo (Alex Morgan Persona)</span>
                 </>
               )}
             </button>
-            <p className="text-[10px] text-center text-sardine-muted">
+            <p className="text-[10.5px] text-center text-[var(--dim)]">
               Pre-seeded with contractor shortfall &amp; PayPal sandbox data
             </p>
           </div>
 
-          <div className="text-center pt-2 text-xs text-sardine-muted">
+          <div className="text-center pt-2 text-xs text-[var(--mu)]">
             Don&rsquo;t have an account?{' '}
-            <Link to="/register" className="text-electric-300 font-bold hover:underline">
+            <Link to="/register" className="text-[var(--o1)] font-semibold hover:underline">
               Create account free
             </Link>
           </div>
@@ -641,7 +642,7 @@ export const LoginPage: React.FC = () => {
       </div>
 
       {/* Footer info */}
-      <div className="py-6 text-center text-[11px] text-sardine-muted">
+      <div className="py-6 text-center text-xs text-[var(--dim)]">
         PayPal AI Hackathon 2026 &bull; Strict multi-tenant isolation &bull; Encrypted sessions
       </div>
     </div>

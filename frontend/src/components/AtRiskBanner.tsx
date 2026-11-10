@@ -1,7 +1,8 @@
 import React from 'react';
-import { ShieldAlert, CheckCircle2, ArrowUpRight, Clock, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, TrendingDown, TrendingUp, AlertTriangle, Wallet, Calendar, AlertOctagon } from 'lucide-react';
 import { Obligation } from '../types';
 import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
+import { CountUp } from './CountUp';
 
 interface AtRiskBannerProps {
   obligation?: Obligation;
@@ -18,97 +19,206 @@ export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
   startingBalance,
   isCovered = false,
 }) => {
-  const { formatCurrency, formatDate } = useRegionalPreferences();
+  const { formatCurrency, formatDate, currencySymbol } = useRegionalPreferences();
   if (!obligation) return null;
 
   const dueFormatted = obligation.due_date
     ? formatDate(obligation.due_date, {
-        weekday: 'long',
+        weekday: 'short',
         month: 'short',
         day: 'numeric',
       })
-    : 'upcoming';
+    : 'Friday';
+
+  // Calculate percentage of obligation covered by initial balance
+  const coveragePercent = Math.min(Math.round((startingBalance / (obligation.amount || 1)) * 100), 100);
 
   return (
-    <div
-      className={`bento-card p-4 sm:p-6 md:p-8 transition-all ${
-        isCovered
-          ? 'bg-gradient-to-br from-emerald-500/10 via-white to-white border-emerald-300/80'
-          : 'bg-white border-slate-200/90 shadow-bento'
-      }`}
-    >
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5 sm:gap-6">
-        {/* Left Side: Problem Statement */}
-        <div className="space-y-2 max-w-2xl">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
-                isCovered
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                  : 'bg-rose-50 text-rose-700 border-rose-200'
-              }`}
-            >
-              {isCovered ? 'Obligation Protected' : 'Critical Cashflow Risk'}
-            </span>
-            <span className="text-xs text-sardine-slate font-medium">
-              Target Obligation: #{obligation.id}
+    <div className="space-y-4 w-full">
+      {/* 1. Hero Card: Ember Gradient with thin white progress bar & shadow */}
+      <div className="ignara-card-hero p-5 sm:p-7 relative overflow-hidden">
+        {/* Subtle background glow */}
+        <div className="absolute -right-16 -top-16 w-56 h-56 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5">
+          <div className="space-y-2 max-w-2xl">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-white/20 text-white backdrop-blur-xs border border-white/25">
+                {isCovered ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                    <span>Obligation Protected</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="w-3.5 h-3.5 text-white" />
+                    <span>Autonomous Warning &bull; Target #{obligation.id}</span>
+                  </>
+                )}
+              </span>
+              <span className="text-[12px] text-white/80 font-medium">
+                Due: {dueFormatted} ({obligation.payee_name})
+              </span>
+            </div>
+
+            <h1 className="text-2xl sm:text-3xl font-medium tracking-tight text-white leading-tight">
+              {isCovered ? (
+                <span>Contractor Payout to {obligation.payee_name} is Fully Protected</span>
+              ) : (
+                <span>
+                  Projected Shortfall of{' '}
+                  <span className="font-semibold underline decoration-white/40">
+                    <CountUp value={shortfallAmount} formatFn={(v) => formatCurrency(v)} />
+                  </span>{' '}
+                  Before Friday
+                </span>
+              )}
+            </h1>
+
+            <p className="text-[13px] sm:text-[14px] text-white/90 leading-relaxed max-w-xl">
+              {isCovered
+                ? `PayPal Sandbox webhook verified payment. Available balance comfortably covers Friday's ${formatCurrency(obligation.amount, { currency: obligation.currency })} payout.`
+                : `Current PayPal balance is ${formatCurrency(startingBalance)}. Due to predictable client payment delays, available liquidity cannot cover the ${formatCurrency(obligation.amount, { currency: obligation.currency })} contractor payout.`}
+            </p>
+          </div>
+
+          {/* Hero Metric & White Progress Bar */}
+          <div className="w-full lg:w-auto shrink-0 bg-black/20 backdrop-blur-md p-4 rounded-[18px] border border-white/20 min-w-[240px]">
+            <div className="flex justify-between items-baseline mb-2">
+              <span className="text-[11px] uppercase font-semibold tracking-wider text-white/80">
+                Runway Coverage
+              </span>
+              <span className="text-xl font-semibold text-white font-mono">
+                {isCovered ? '100%' : `${coveragePercent}%`}
+              </span>
+            </div>
+
+            {/* Thin White Progress Bar */}
+            <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-white rounded-full transition-all duration-1000 ease-[var(--ease-ignara)]"
+                style={{ width: isCovered ? '100%' : `${coveragePercent}%` }}
+              />
+            </div>
+
+            <div className="flex justify-between items-center mt-2.5 text-[11px] text-white/80">
+              <span>{formatCurrency(startingBalance)} Start</span>
+              <span>{formatCurrency(obligation.amount)} Target</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Three KPI Cards: Icon + Muted Label + Big Number + Delta Pill + Tiny Sparkline */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        {/* KPI 1: Balance Today */}
+        <div className="ignara-card p-4 sm:p-5 flex flex-col justify-between relative ignara-card-hover">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 text-[var(--mu)] text-xs font-medium">
+              <Wallet className="w-4 h-4 text-[var(--o1)]" strokeWidth={1.8} />
+              <span>Balance Today</span>
+            </div>
+            <span className="ignara-status-up">
+              <TrendingUp className="w-3 h-3" />
+              <span>Available</span>
             </span>
           </div>
 
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-ink tracking-tight leading-snug sm:leading-tight">
-            {isCovered ? (
-              <span>Contractor Payout to {obligation.payee_name} is Fully Covered</span>
-            ) : (
-              <span>
-                Projected Shortfall of{' '}
-                <span className="text-rose-600 font-mono">
-                  {formatCurrency(shortfallAmount)}
-                </span>{' '}
-                before Friday
-              </span>
-            )}
-          </h1>
+          <div className="flex items-baseline justify-between mt-1">
+            <div className="ignara-num-big">
+              <CountUp value={startingBalance} formatFn={(v) => formatCurrency(v)} />
+            </div>
 
-          <p className="text-xs sm:text-sm text-sardine-slate leading-relaxed">
-            {isCovered
-              ? `PayPal Sandbox webhook verified payment. Your available balance now comfortably covers Friday's ${formatCurrency(obligation.amount, { currency: obligation.currency })} contractor obligation.`
-              : `Current PayPal balance is ${formatCurrency(startingBalance)} today. Due to predictable client payment lags, your balance cannot cover the ${formatCurrency(obligation.amount, { currency: obligation.currency })} contractor payout to ${obligation.payee_name} due ${dueFormatted}.`}
-          </p>
+            {/* Tiny SVG Sparkline */}
+            <svg className="w-16 h-7 text-[var(--g)] overflow-visible shrink-0" viewBox="0 0 64 28">
+              <path
+                d="M 0 20 Q 16 12 32 18 T 64 4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                className="ignara-sparkline-path"
+              />
+            </svg>
+          </div>
+          <span className="text-[11px] text-[var(--dim)] mt-1">Primary PayPal balance</span>
         </div>
 
-        {/* Right Side: Bento Metrics Pod */}
-        <div className="w-full lg:w-auto shrink-0 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/70">
-          <div className="px-3 py-1 flex sm:block justify-between items-center sm:text-left">
-            <div>
-              <span className="text-[10px] font-bold uppercase text-sardine-slate block tracking-wider">Balance Today</span>
-              <span className="text-base sm:text-lg font-bold font-mono text-ink">
-                {formatCurrency(startingBalance)}
-              </span>
+        {/* KPI 2: Due Friday */}
+        <div className="ignara-card p-4 sm:p-5 flex flex-col justify-between relative ignara-card-hover">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 text-[var(--mu)] text-xs font-medium">
+              <Calendar className="w-4 h-4 text-[var(--mu)]" strokeWidth={1.8} />
+              <span>Due Friday</span>
             </div>
-            <span className="text-[10px] text-emerald-600 font-medium block">Healthy initial</span>
-          </div>
-
-          <div className="px-3 py-1 border-t sm:border-t-0 sm:border-x border-slate-200 pt-2 sm:pt-1 flex sm:block justify-between items-center sm:text-left">
-            <div>
-              <span className="text-[10px] font-bold uppercase text-sardine-slate block tracking-wider">Due Friday</span>
-              <span className="text-base sm:text-lg font-bold font-mono text-rose-600">
-                {formatCurrency(obligation.amount, { currency: obligation.currency })}
-              </span>
-            </div>
-            <span className="text-[10px] text-sardine-slate font-medium block">Contractor</span>
-          </div>
-
-          <div className="px-3 py-1 border-t sm:border-t-0 border-slate-200 pt-2 sm:pt-1 flex sm:block justify-between items-center sm:text-left">
-            <div>
-              <span className="text-[10px] font-bold uppercase text-sardine-slate block tracking-wider">Protection Gap</span>
-              <span className={`text-base sm:text-lg font-extrabold font-mono ${isCovered ? 'text-emerald-600' : 'text-rose-600'}`}>
-                {isCovered ? formatCurrency(0) : formatCurrency(shortfallAmount)}
-              </span>
-            </div>
-            <span className="text-[10px] text-sardine-slate font-medium block">
-              {isCovered ? 'Protected' : 'Shortfall'}
+            <span className="text-[11px] font-medium text-[var(--mu)] bg-[var(--card2)] px-2 py-0.5 rounded-[8px]">
+              Contractor
             </span>
           </div>
+
+          <div className="flex items-baseline justify-between mt-1">
+            <div className="ignara-num-big">
+              <CountUp value={obligation.amount} formatFn={(v) => formatCurrency(v, { currency: obligation.currency })} />
+            </div>
+
+            {/* Tiny SVG Sparkline */}
+            <svg className="w-16 h-7 text-[var(--mu)] overflow-visible shrink-0" viewBox="0 0 64 28">
+              <path
+                d="M 0 14 Q 16 14 32 14 T 64 14"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeDasharray="4 3"
+                className="ignara-sparkline-path"
+              />
+            </svg>
+          </div>
+          <span className="text-[11px] text-[var(--dim)] mt-1">Payee: {obligation.payee_name}</span>
+        </div>
+
+        {/* KPI 3: Protection Gap / Shortfall */}
+        <div className="ignara-card p-4 sm:p-5 flex flex-col justify-between relative ignara-card-hover">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 text-[var(--mu)] text-xs font-medium">
+              <AlertOctagon className={`w-4 h-4 ${isCovered ? 'text-[var(--g)]' : 'text-[var(--r)]'}`} strokeWidth={1.8} />
+              <span>Protection Gap</span>
+            </div>
+            {isCovered ? (
+              <span className="ignara-status-up">
+                <CheckCircle2 className="w-3 h-3" />
+                <span>Protected</span>
+              </span>
+            ) : (
+              <span className="ignara-status-down">
+                <TrendingDown className="w-3 h-3" />
+                <span>Shortfall</span>
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-baseline justify-between mt-1">
+            <div className={`ignara-num-big ${isCovered ? 'text-[var(--g)]' : 'text-[var(--r)]'}`}>
+              <CountUp value={isCovered ? 0 : shortfallAmount} formatFn={(v) => formatCurrency(v)} />
+            </div>
+
+            {/* Tiny SVG Sparkline */}
+            <svg
+              className={`w-16 h-7 overflow-visible shrink-0 ${isCovered ? 'text-[var(--g)]' : 'text-[var(--r)]'}`}
+              viewBox="0 0 64 28"
+            >
+              <path
+                d={isCovered ? "M 0 24 Q 24 16 48 8 T 64 4" : "M 0 4 Q 20 10 40 18 T 64 24"}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                className="ignara-sparkline-path"
+              />
+            </svg>
+          </div>
+          <span className="text-[11px] text-[var(--dim)] mt-1">
+            {isCovered ? 'Zero deficit remaining' : 'Must bridge before Friday payout'}
+          </span>
         </div>
       </div>
     </div>

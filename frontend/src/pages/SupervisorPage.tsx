@@ -26,19 +26,19 @@ export const SupervisorPage: React.FC = () => {
   }, []);
 
   return (
-    <div className="max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-4 sm:space-y-6 w-full overflow-hidden">
+    <div className="space-y-4 w-full overflow-hidden ignara-page-enter">
       {/* Header Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b border-slate-200 pb-4 sm:pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-2 border-b border-[var(--line)]">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-black text-ink tracking-tight font-display">
-              Autonomous Agent Orchestrator &amp; Supervisor
+            <h1 className="ignara-h1 ignara-h1-reveal">
+              Agent Orchestrator
             </h1>
-            <span className="text-[10px] sm:text-xs bg-electric-50 text-electric-700 border border-electric-200 px-2.5 py-0.5 rounded-full font-bold">
-              Multi-Agent Coordination
+            <span className="text-[11px] bg-[var(--card2)] text-[var(--o1)] border border-[var(--o1)]/30 px-2.5 py-0.5 rounded-full font-semibold">
+              Multi-Agent Supervisor
             </span>
           </div>
-          <p className="text-xs text-sardine-slate mt-1">
+          <p className="text-xs text-[var(--mu)] mt-1">
             Supervises specialized agents, validates outputs against financial guardrails, and resolves trade-offs
           </p>
         </div>
@@ -46,36 +46,38 @@ export const SupervisorPage: React.FC = () => {
         <button
           onClick={executeWorkflow}
           disabled={isLoading}
-          className="flex items-center justify-center space-x-2 px-4 py-2.5 bg-ink hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-50 border border-slate-700 hover:border-electric w-full sm:w-auto min-h-[44px]"
+          className="ignara-btn-primary w-full sm:w-auto"
         >
-          <RefreshCw className={`w-3.5 h-3.5 text-electric-soft ${isLoading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 text-white ${isLoading ? 'animate-spin' : ''}`} />
           <span>{isLoading ? 'Orchestrating Agents...' : 'Re-run Supervisor'}</span>
         </button>
       </div>
 
       {/* Supervisory Recommendation Banner */}
       {runData && (
-        <div className="bento-ink p-4 sm:p-6 space-y-4 w-full overflow-hidden">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="ignara-card p-5 sm:p-6 space-y-4 w-full overflow-hidden ignara-stagger-1 border border-[var(--line)] bg-[var(--card)]">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[var(--line)]">
             <div className="flex items-center space-x-2">
-              <Bot className="w-5 h-5 text-electric-soft shrink-0" />
-              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-electric-soft">
+              <Bot className="w-5 h-5 text-[var(--o1)] shrink-0" />
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--o1)]">
                 Supervisory Strategic Decision
               </span>
             </div>
-            <span className="text-xs font-mono font-bold bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg text-emerald-400 self-start sm:self-auto">
+            <span className="text-xs font-mono font-semibold bg-[var(--side)] border border-[var(--line)] px-2.5 py-1 rounded-[10px] text-[var(--g)] self-start sm:self-auto">
               Confidence Score: {(runData.confidence_score * 100).toFixed(0)}%
             </span>
           </div>
 
           <div className="space-y-2">
             <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3">
-              <h2 className="text-lg sm:text-xl font-black text-white">Recommended Strategy: Plan {runData.recommended_plan}</h2>
-              <span className="text-xs text-sardine-muted">
+              <h2 className="ignara-h3 text-lg font-semibold text-[var(--tx)]">
+                Recommended Strategy: Plan {runData.recommended_plan}
+              </h2>
+              <span className="text-xs text-[var(--mu)]">
                 Targeting: {runData.obligation_evaluated} ({formatCurrency(runData.shortfall_amount)} shortfall)
               </span>
             </div>
-            <p className="text-xs text-slate-300 leading-relaxed max-w-3xl">
+            <p className="text-[13px] text-[var(--mu)] leading-relaxed max-w-3xl">
               {runData.final_recommendation}
             </p>
           </div>
@@ -83,41 +85,41 @@ export const SupervisorPage: React.FC = () => {
       )}
 
       {/* Step-by-Step Agent Trace */}
-      <div className="space-y-4">
-        <h3 className="font-black text-sm sm:text-base text-ink tracking-tight flex items-center space-x-2">
-          <Layers className="w-4 h-4 text-electric" />
-          <span>Agent Workflow Execution Trace</span>
+      <div className="space-y-3 ignara-stagger-2">
+        <h3 className="ignara-h3 flex items-center space-x-2">
+          <Layers className="w-4 h-4 text-[var(--o1)]" />
+          <span>Agent Execution Trace</span>
         </h3>
 
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {runData?.steps_trace.map((step, idx) => (
             <div
               key={idx}
-              className="bento-card p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 shadow-2xs hover:border-electric/30"
+              className="ignara-card p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 hover:border-[var(--o1)]/40 ignara-card-hover"
             >
               <div className="flex items-start space-x-3 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-xs text-ink shrink-0 mt-0.5">
+                <div className="w-8 h-8 rounded-[10px] bg-[var(--side)] border border-[var(--line)] flex items-center justify-center font-semibold text-xs text-[var(--tx)] shrink-0 mt-0.5">
                   #{idx + 1}
                 </div>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                    <span className="font-black text-sm text-ink">{step.agent_name}</span>
+                    <span className="font-semibold text-sm text-[var(--tx)]">{step.agent_name}</span>
                     {(step.step_type || step.summary) && (
-                      <span className="text-[10px] font-mono px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-sardine-slate">
+                      <span className="text-[10px] font-mono px-2 py-0.5 bg-[var(--card2)] border border-[var(--line)] rounded-[6px] text-[var(--mu)]">
                         {step.step_type || step.summary}
                       </span>
                     )}
-                    <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded font-bold">
+                    <span className="text-[10px] text-[var(--g)] bg-[var(--g)]/15 border border-[var(--g)]/30 px-2 py-0.5 rounded-[6px] font-semibold">
                       {step.status}
                     </span>
                   </div>
-                  <p className="text-xs text-sardine-slate mt-1 leading-relaxed">
+                  <p className="text-xs text-[var(--mu)] mt-1 leading-relaxed">
                     {step.details || step.key_finding}
                   </p>
                 </div>
               </div>
 
-              <div className="text-left md:text-right text-[11px] font-mono text-sardine-slate shrink-0 pl-11 md:pl-0 border-t md:border-t-0 pt-2 md:pt-0 border-slate-100">
+              <div className="text-left md:text-right text-[11px] font-mono text-[var(--dim)] shrink-0 pl-11 md:pl-0 border-t md:border-t-0 pt-2 md:pt-0 border-[var(--line)]">
                 <span>{step.duration_ms !== undefined ? `Latency: ${step.duration_ms}ms` : step.timestamp}</span>
               </div>
             </div>

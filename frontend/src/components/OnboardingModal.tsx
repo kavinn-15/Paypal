@@ -124,26 +124,40 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-ink-950/80 backdrop-blur-md">
-      <div className="w-full max-w-xl max-h-[92vh] rounded-2xl border border-ink-700 bg-ink-900 text-white shadow-2xl overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-md">
+      <div
+        className="w-full max-w-xl max-h-[92vh] rounded-[22px] border flex flex-col shadow-2xl overflow-hidden"
+        style={{
+          backgroundColor: 'var(--card)',
+          borderColor: 'var(--line)',
+          color: 'var(--tx)'
+        }}
+      >
         {/* Header with progress */}
-        <div className="p-4 sm:p-5 border-b border-ink-800 flex items-center justify-between shrink-0">
-          <div className="flex items-center space-x-2 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-electric/20 border border-electric/40 text-electric flex items-center justify-center font-bold text-xs shrink-0">
+        <div
+          className="p-4 sm:p-5 border-b flex items-center justify-between shrink-0"
+          style={{ borderColor: 'var(--line)' }}
+        >
+          <div className="flex items-center space-x-2.5 min-w-0">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 text-white font-mono"
+              style={{ background: 'linear-gradient(135deg, var(--o1), var(--o2))' }}
+            >
               {currentStep}/8
             </div>
             <div className="min-w-0">
-              <span className="text-xs font-bold text-white uppercase tracking-wider block truncate">
+              <span className="text-xs font-bold tracking-wider uppercase block truncate" style={{ color: 'var(--tx)' }}>
                 Getting Started with Cashflow Lifeline
               </span>
-              <div className="text-[10px] text-sardine-muted truncate">
+              <div className="text-[10px] truncate" style={{ color: 'var(--mu)' }}>
                 Step {currentStep} of 8 &bull; Can be updated anytime in Settings
               </div>
             </div>
           </div>
           <button
             onClick={handleSkip}
-            className="text-sardine-muted hover:text-white p-1.5 rounded-lg text-xs flex items-center space-x-1 shrink-0 min-h-[36px]"
+            className="p-1.5 rounded-lg text-xs flex items-center space-x-1 shrink-0 min-h-[36px] transition-colors"
+            style={{ color: 'var(--mu)' }}
           >
             <span>Skip Tour</span>
             <X className="w-4 h-4" />
@@ -151,10 +165,13 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
         </div>
 
         {/* Step Progress Bar */}
-        <div className="w-full bg-ink-950 h-1 shrink-0">
+        <div className="w-full h-1 shrink-0" style={{ backgroundColor: 'var(--line)' }}>
           <div
-            className="bg-electric h-1 transition-all duration-300"
-            style={{ width: `${(currentStep / 8) * 100}%` }}
+            className="h-1 transition-all duration-300"
+            style={{
+              width: `${(currentStep / 8) * 100}%`,
+              background: 'linear-gradient(90deg, var(--o1), var(--o2))'
+            }}
           />
         </div>
 
@@ -408,7 +425,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 type="button"
                 onClick={handleRunFirstForecast}
                 disabled={saving}
-                className="px-6 py-3 rounded-xl bg-electric hover:bg-electric-600 text-white font-bold text-xs shadow-glow-electric transition-all cursor-pointer disabled:opacity-50"
+                className="px-6 py-3 rounded-xl ignara-btn-primary text-white font-bold text-xs shadow-glow-electric transition-all cursor-pointer disabled:opacity-50"
               >
                 {saving ? 'Synthesizing Trajectories...' : 'Execute Baseline Forecast'}
               </button>
@@ -421,8 +438,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
-              <h2 className="text-2xl font-black text-white">You Are All Set!</h2>
-              <p className="text-xs text-sardine-muted max-w-md mx-auto leading-relaxed">
+              <h2 className="text-2xl font-black" style={{ color: 'var(--tx)' }}>You Are All Set!</h2>
+              <p className="text-xs max-w-md mx-auto leading-relaxed" style={{ color: 'var(--mu)' }}>
                 Your private dashboard is active. You can add further invoices, simulate what-if scenarios, and inspect AI rescue plans at any time.
               </p>
             </div>
@@ -430,11 +447,15 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
         </div>
 
         {/* Footer controls */}
-        <div className="p-3.5 sm:p-4 bg-ink-950 border-t border-ink-800 flex items-center justify-between shrink-0">
+        <div
+          className="p-3.5 sm:p-4 border-t flex items-center justify-between shrink-0"
+          style={{ backgroundColor: 'var(--card2)', borderColor: 'var(--line)' }}
+        >
           {currentStep > 1 && currentStep < 8 ? (
             <button
               onClick={handleBack}
-              className="px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white flex items-center space-x-1 min-h-[40px]"
+              className="px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1 min-h-[40px] transition-colors"
+              style={{ color: 'var(--mu)' }}
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back</span>
@@ -448,7 +469,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               <>
                 <button
                   onClick={handleNext}
-                  className="px-2.5 sm:px-3 py-2 text-xs text-sardine-muted hover:text-white min-h-[40px] flex items-center"
+                  className="px-2.5 sm:px-3 py-2 text-xs min-h-[40px] flex items-center transition-colors"
+                  style={{ color: 'var(--mu)' }}
                 >
                   Skip Step
                 </button>
@@ -458,7 +480,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                     else if (currentStep === 6) handleSaveObligation();
                     else handleNext();
                   }}
-                  className="px-4 sm:px-5 py-2 rounded-xl bg-electric hover:bg-electric-600 text-white text-xs font-bold shadow-glow-electric flex items-center space-x-1.5 cursor-pointer min-h-[40px]"
+                  className="px-4 sm:px-5 py-2 rounded-xl ignara-btn-primary text-white text-xs font-bold flex items-center space-x-1.5 cursor-pointer min-h-[40px]"
                 >
                   <span>Continue</span>
                   <ArrowRight className="w-3.5 h-3.5" />

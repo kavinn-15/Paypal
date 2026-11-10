@@ -20,7 +20,8 @@ import {
   X,
   Play,
   LogOut,
-  UserCheck
+  UserCheck,
+  Flame
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
@@ -116,13 +117,23 @@ export const LandingPage: React.FC = () => {
             {/* Logo */}
             <div className="flex items-center space-x-3">
               <Link to="/" className="flex items-center space-x-2.5">
-                <div className="w-9 h-9 rounded-xl bg-ink-900 border border-electric/40 flex items-center justify-center font-mono font-bold text-electric text-sm shadow-glow-electric">
-                  CL
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-md shrink-0"
+                  style={{ background: 'linear-gradient(135deg, var(--o1), var(--o2))' }}
+                >
+                  <Flame className="w-5 h-5 fill-white/20 text-white" />
                 </div>
                 <div className="flex flex-col">
                   <span className="font-extrabold text-base tracking-tight text-white flex items-center gap-1.5">
                     Cashflow Lifeline
-                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-electric/15 text-electric-300 border border-electric/30">
+                    <span
+                      className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border"
+                      style={{
+                        backgroundColor: 'rgba(251, 124, 60, 0.15)',
+                        color: 'var(--o1)',
+                        borderColor: 'rgba(251, 124, 60, 0.3)'
+                      }}
+                    >
                       PayPal AI
                     </span>
                   </span>
@@ -157,7 +168,7 @@ export const LandingPage: React.FC = () => {
                   </div>
                   <Link
                     to="/dashboard"
-                    className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-electric text-white hover:bg-electric-600 shadow-glow-electric transition-all flex items-center space-x-1"
+                    className="px-3.5 py-2 rounded-lg text-xs font-semibold ignara-btn-primary text-white shadow-glow-electric transition-all flex items-center space-x-1"
                   >
                     <span>Dashboard</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -189,7 +200,7 @@ export const LandingPage: React.FC = () => {
                   </Link>
                   <Link
                     to="/register"
-                    className="px-4 py-2 rounded-lg text-xs font-semibold bg-electric text-white hover:bg-electric-600 shadow-glow-electric transition-all flex items-center space-x-1"
+                    className="px-4 py-2 rounded-lg text-xs font-semibold ignara-btn-primary text-white shadow-glow-electric transition-all flex items-center space-x-1"
                   >
                     <span>Get Started Free</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -236,7 +247,7 @@ export const LandingPage: React.FC = () => {
                   <Link
                     to="/dashboard"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="w-full py-3 rounded-xl text-xs font-semibold bg-electric text-white text-center shadow-glow-electric min-h-[44px] flex items-center justify-center space-x-2"
+                    className="w-full py-3 rounded-xl text-xs font-semibold ignara-btn-primary text-white text-center shadow-glow-electric min-h-[44px] flex items-center justify-center space-x-2"
                   >
                     <span>Go to Dashboard</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -272,7 +283,7 @@ export const LandingPage: React.FC = () => {
                     <Link
                       to="/register"
                       onClick={() => setMobileMenuOpen(false)}
-                      className="py-3 rounded-xl text-xs font-semibold bg-electric text-white text-center shadow-glow-electric min-h-[44px] flex items-center justify-center"
+                      className="py-3 rounded-xl text-xs font-semibold ignara-btn-primary text-white text-center shadow-glow-electric min-h-[44px] flex items-center justify-center"
                     >
                       Get Started
                     </Link>
@@ -286,18 +297,25 @@ export const LandingPage: React.FC = () => {
 
       {/* 2. Hero Section */}
       <section className="relative overflow-hidden pt-8 pb-16 sm:pt-12 sm:pb-20 lg:pt-20 lg:pb-28">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(75,91,252,0.18),rgba(255,255,255,0))]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(251,124,60,0.15),rgba(255,255,255,0))]" />
         
         <div className="max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8 relative z-10">
           <div className="max-w-3xl mx-auto text-center space-y-5 sm:space-y-6">
-            <div className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full bg-electric-500/10 border border-electric-500/30 text-electric-300 text-xs font-medium">
+            <div
+              className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full border text-xs font-medium"
+              style={{
+                backgroundColor: 'rgba(251, 124, 60, 0.1)',
+                borderColor: 'rgba(251, 124, 60, 0.3)',
+                color: 'var(--o1)'
+              }}
+            >
               <Sparkles className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">PayPal AI Hackathon 2026 &bull; Build What&rsquo;s Next</span>
             </div>
 
             <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-[1.15] sm:leading-[1.1]">
               Stay Ahead of Cashflow. <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-electric-300 via-electric to-blue-400">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-300 to-rose-400">
                 Never Be Surprised by a Shortfall.
               </span>
             </h1>
@@ -309,7 +327,7 @@ export const LandingPage: React.FC = () => {
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
               <Link
                 to="/register"
-                className="w-full sm:w-auto px-7 py-3.5 rounded-xl font-bold text-sm bg-electric text-white hover:bg-electric-600 shadow-glow-electric transition-all flex items-center justify-center space-x-2 min-h-[44px]"
+                className="w-full sm:w-auto px-7 py-3.5 rounded-xl font-bold text-sm ignara-btn-primary text-white shadow-glow-electric transition-all flex items-center justify-center space-x-2 min-h-[44px]"
               >
                 <span>Get Started Free</span>
                 <ArrowRight className="w-4 h-4 shrink-0" />
@@ -865,14 +883,14 @@ export const LandingPage: React.FC = () => {
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link
                 to="/register"
-                className="w-full sm:w-auto px-7 py-3.5 rounded-xl font-bold text-sm bg-electric text-white hover:bg-electric-600 shadow-glow-electric transition-all min-h-[44px] flex items-center justify-center"
+                className="w-full sm:w-auto px-7 py-3.5 rounded-xl font-bold text-sm ignara-btn-primary text-white shadow-glow-electric transition-all min-h-[44px] flex items-center justify-center"
               >
                 Create Free Account
               </Link>
               <button
                 onClick={handleLaunchDemo}
                 disabled={demoLoading}
-                className="w-full sm:w-auto px-6 py-3.5 rounded-xl font-semibold text-sm bg-ink-950 text-white border border-slate-700 hover:border-electric transition-all min-h-[44px] flex items-center justify-center"
+                className="w-full sm:w-auto px-6 py-3.5 rounded-xl font-semibold text-sm bg-ink-950 text-white border border-slate-700 hover:border-orange-500 transition-all min-h-[44px] flex items-center justify-center"
               >
                 {demoLoading ? 'Starting...' : 'Explore Demo Persona'}
               </button>
@@ -888,8 +906,11 @@ export const LandingPage: React.FC = () => {
             {/* Col 1 */}
             <div className="space-y-3 sm:col-span-2 md:col-span-1">
               <div className="flex items-center space-x-2">
-                <div className="w-7 h-7 rounded-lg bg-ink-900 border border-electric/40 flex items-center justify-center font-mono font-bold text-electric text-xs shrink-0">
-                  CL
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs shrink-0"
+                  style={{ background: 'linear-gradient(135deg, var(--o1), var(--o2))' }}
+                >
+                  <Flame className="w-4 h-4 fill-white/20 text-white" />
                 </div>
                 <span className="font-extrabold text-sm text-white">Cashflow Lifeline</span>
               </div>

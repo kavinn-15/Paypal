@@ -30,87 +30,70 @@ export const ActionTimeline: React.FC<ActionTimelineProps> = ({ action }) => {
   const currentIndex = stateIndexMap[action.state] ?? 0;
 
   return (
-    <div className="bento-card p-4 sm:p-6 border border-slate-200/90 shadow-bento space-y-4 w-full overflow-hidden">
+    <div className="ignara-card p-5 sm:p-6 space-y-4 w-full overflow-hidden">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <div>
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            <h2 className="font-extrabold text-sm sm:text-base text-ink tracking-tight">
-              Deterministic State Progression
-            </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="ignara-h3">Deterministic State Progression</h2>
             {action.state === 'simulated' ? (
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-50 text-purple-800 border border-purple-300 px-2 py-0.5 rounded-full">
+              <span className="text-[10px] font-semibold uppercase tracking-wider bg-purple-500/15 text-purple-400 border border-purple-500/30 px-2.5 py-0.5 rounded-full">
                 Simulated Payment (Demo Forecast)
               </span>
             ) : action.state === 'confirmed' ? (
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full">
+              <span className="text-[10px] font-semibold uppercase tracking-wider bg-[var(--g)]/15 text-[var(--g)] border border-[var(--g)]/30 px-2.5 py-0.5 rounded-full">
                 Verified PayPal Confirmed
               </span>
             ) : action.is_simulated ? (
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full">
+              <span className="text-[10px] font-semibold uppercase tracking-wider bg-[var(--y)]/15 text-[var(--y)] border border-[var(--y)]/30 px-2.5 py-0.5 rounded-full">
                 Simulated Event
               </span>
             ) : null}
           </div>
-          <p className="text-xs text-sardine-slate mt-0.5">
+          <p className="text-xs text-[var(--mu)] mt-0.5">
             Enforced 4-state sequence: proposed &rarr; approved &rarr; executed &rarr; confirmed
           </p>
         </div>
 
-        <span className="text-xs font-mono font-bold text-sardine-slate bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200 truncate max-w-full">
+        <span className="text-xs font-mono font-medium text-[var(--mu)] bg-[var(--side)] px-3 py-1 rounded-[10px] border border-[var(--line)] truncate max-w-full">
           ID: {action.idempotency_key.slice(0, 16)}...
         </span>
       </div>
 
-      {/* Progress Stepper */}
+      {/* Progress Stepper with Ember line */}
       <div className="relative flex items-center justify-between pt-4 pb-2 px-2">
-        <div className="absolute left-4 right-4 top-1/2 -translate-y-1/2 h-0.5 bg-slate-200 z-0"></div>
+        <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 h-0.5 bg-[var(--line)] z-0"></div>
         <div
-          className="absolute left-4 top-1/2 -translate-y-1/2 h-0.5 bg-electric transition-all duration-500 z-0"
-          style={{ width: `calc(${(currentIndex / 3) * 100}% - 16px)` }}
+          className="absolute left-6 top-1/2 -translate-y-1/2 h-0.5 bg-[var(--o1)] transition-all duration-500 ease-[var(--ease-ignara)] z-0"
+          style={{ width: `calc(${(currentIndex / 3) * 100}% - 24px)` }}
         ></div>
 
         {states.map((step, idx) => {
           const isCompleted = idx < currentIndex || action.state === 'confirmed';
           const isCurrent = idx === currentIndex && action.state !== 'confirmed';
           return (
-            <div key={step.id} className="relative z-10 flex flex-col items-center max-w-[70px] sm:max-w-none">
+            <div key={step.id} className="relative z-10 flex flex-col items-center max-w-[80px] sm:max-w-none">
               <div
-                className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center font-bold text-xs transition-all shadow-xs ${
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-semibold text-xs transition-all shadow-xs ${
                   isCompleted
-                    ? 'bg-ink text-white ring-4 ring-slate-100'
+                    ? 'bg-[var(--o1)] text-white ring-4 ring-[var(--o1)]/20'
                     : isCurrent
-                    ? 'bg-electric text-white ring-4 ring-electric-100 animate-pulse'
-                    : 'bg-white text-sardine-muted border-2 border-slate-300'
+                    ? 'bg-[var(--o1)] text-white ring-4 ring-[var(--o1)]/30 animate-pulse'
+                    : 'bg-[var(--card)] text-[var(--dim)] border-2 border-[var(--line)]'
                 }`}
               >
-                {isCompleted ? <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[3] text-electric-300" /> : idx + 1}
+                {isCompleted ? <Check className="w-3.5 h-3.5 stroke-[2.5] text-white" /> : idx + 1}
               </div>
               <span
-                className={`text-[10px] sm:text-xs mt-1.5 font-bold text-center leading-tight ${
-                  isCompleted || isCurrent ? 'text-ink' : 'text-sardine-muted'
+                className={`text-[11px] sm:text-xs mt-2 font-medium text-center leading-tight ${
+                  isCompleted || isCurrent ? 'text-[var(--tx)]' : 'text-[var(--dim)]'
                 }`}
               >
                 {step.label}
               </span>
-              <span className="text-[9px] text-sardine-slate hidden md:block text-center">{step.desc}</span>
+              <span className="text-[10px] text-[var(--mu)] hidden md:block text-center mt-0.5">{step.desc}</span>
             </div>
           );
         })}
-      </div>
-
-      {/* Footer Details */}
-      <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-100 flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between text-xs text-sardine-slate gap-2 font-mono">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span>Type: <strong className="text-ink">{action.action_type}</strong></span>
-          <span>Target: <strong className="text-ink truncate max-w-[150px] inline-block align-bottom">{action.recipient}</strong></span>
-          <span>Amount: <strong className="text-ink">{formatCurrency(action.amount, { currency: action.currency })}</strong></span>
-        </div>
-
-        {action.paypal_ref && (
-          <div className="text-[11px] text-sardine-slate">
-            PayPal Ref: <span className="text-ink font-semibold">{action.paypal_ref}</span>
-          </div>
-        )}
       </div>
     </div>
   );

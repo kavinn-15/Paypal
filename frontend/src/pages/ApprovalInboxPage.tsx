@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { Action } from '../types';
-import { ShieldCheck, Lock, RefreshCw, Key, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Lock, RefreshCw, Key, AlertCircle, CheckCircle } from 'lucide-react';
 import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 
 export const ApprovalInboxPage: React.FC = () => {
@@ -29,10 +29,17 @@ export const ApprovalInboxPage: React.FC = () => {
     fetchActions();
   }, []);
 
+  useEffect(() => {
+    if (notification) {
+      const t = setTimeout(() => setNotification(null), 2400);
+      return () => clearTimeout(t);
+    }
+  }, [notification]);
+
   const handleApprove = async (action: Action) => {
     try {
       await api.approveAction(action.id, action.approval_hash);
-      setNotification(`Action #${action.id} approved successfully!`);
+      setNotification(`Action #${action.id} signed and approved successfully!`);
       await fetchActions();
     } catch (err: any) {
       setNotification(`Approval failed: ${err.message}`);
@@ -40,97 +47,116 @@ export const ApprovalInboxPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-4 sm:space-y-6 w-full overflow-hidden">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200 pb-4">
+    <div className="space-y-4 w-full overflow-hidden ignara-page-enter">
+      {/* Toast */}
+      {notification && (
+        <div className="ignara-toast">
+          <div className="flex items-center gap-2">
+            {notification.includes('failed') ? (
+              <AlertCircle className="w-4 h-4 text-[var(--r)] shrink-0" />
+            ) : (
+              <CheckCircle className="w-4 h-4 text-[var(--g)] shrink-0" />
+            )}
+            <span>{notification}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-2 border-b border-[var(--line)]">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-xl font-extrabold text-ink tracking-tight">Guardrail Approval Inbox</h2>
-            <span className="text-[10px] bg-ink text-white px-2 py-0.5 rounded-md font-bold uppercase tracking-wider">
+            <h1 className="ignara-h1 ignara-h1-reveal">Approval Inbox</h1>
+            <span className="text-[11px] bg-[var(--card2)] text-[var(--o1)] border border-[var(--o1)]/30 px-2.5 py-0.5 rounded-full font-semibold uppercase tracking-wider">
               Deterministic Guardrail
             </span>
           </div>
-          <p className="text-xs text-sardine-slate mt-1">
+          <p className="text-xs text-[var(--mu)] mt-1">
             Actions requiring explicit owner authorization. All actions cryptographically bound via HMAC-SHA256 signatures.
           </p>
         </div>
+
         <button
           onClick={fetchActions}
-          className="p-2.5 text-sardine-slate hover:text-ink rounded-xl hover:bg-slate-100 transition-colors border border-slate-200 bg-white min-h-[44px] min-w-[44px] flex items-center justify-center self-end sm:self-auto shadow-2xs"
+          className="ignara-btn-secondary"
           title="Refresh actions"
         >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 text-[var(--mu)] ${isLoading ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
         </button>
       </div>
 
       {error && (
-        <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center space-x-2">
-          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+        <div className="p-3.5 rounded-[14px] bg-[var(--r)]/15 border border-[var(--r)]/30 text-[var(--r)] text-xs font-semibold flex items-center space-x-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
-      {notification && (
-        <div className="p-3.5 rounded-xl bg-electric-50 border border-electric-200 text-electric-600 text-xs font-semibold">
-          {notification}
-        </div>
-      )}
-
       {actions.length === 0 ? (
-        <div className="text-center py-16 bento-card border border-slate-200/90 p-4">
-          <ShieldCheck className="w-10 h-10 text-sardine-muted mx-auto mb-2" />
-          <p className="text-sm font-semibold text-ink">No actions currently pending approval.</p>
-          <p className="text-xs text-sardine-slate mt-0.5">Run a forecast on the dashboard to generate rescue plans.</p>
+        <div className="text-center py-16 ignara-card p-6">
+          <ShieldCheck className="w-10 h-10 text-[var(--dim)] mx-auto mb-2" />
+          <p className="text-sm font-semibold text-[var(--tx)]">No actions currently pending approval.</p>
+          <p className="text-xs text-[var(--mu)] mt-0.5">Run a forecast on the dashboard to generate rescue plans.</p>
         </div>
       ) : (
-        <div className="bento-card border border-slate-200/90 shadow-bento overflow-hidden divide-y divide-slate-100">
-          {actions.map((act) => (
-            <div key={act.id} className="p-4 sm:p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 sm:gap-4 hover:bg-slate-50/50 transition-colors">
-              <div className="space-y-1.5 w-full md:w-auto min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                      act.state === 'confirmed'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : act.state === 'simulated'
-                        ? 'bg-purple-100 text-purple-800 border border-purple-300'
-                        : act.state === 'executed'
-                        ? 'bg-ink text-white'
-                        : act.state === 'approved'
-                        ? 'bg-electric-50 text-electric-600 border border-electric-200'
-                        : 'bg-amber-100 text-amber-800'
-                    }`}
-                  >
-                    {act.state === 'simulated' ? 'Simulated Payment' : act.state}
-                  </span>
-                  <span className="font-mono text-xs font-bold text-ink">{act.action_type}</span>
-                  {act.is_simulated && (
-                    <span className="text-[9px] font-semibold bg-amber-50 text-amber-800 border border-amber-300 px-1.5 py-0.2 rounded">
-                      Simulated
+        <div className="space-y-3 ignara-stagger-1">
+          {actions.map((act) => {
+            const isProposed = act.state === 'proposed';
+            return (
+              <div
+                key={act.id}
+                className={`ignara-card p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ignara-card-hover ${
+                  isProposed ? 'border-l-4 border-l-[var(--o1)]' : ''
+                }`}
+              >
+                <div className="space-y-1.5 w-full md:w-auto min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`text-[10px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+                        act.state === 'confirmed'
+                          ? 'bg-[var(--g)]/15 text-[var(--g)] border-[var(--g)]/30'
+                          : act.state === 'simulated'
+                          ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
+                          : act.state === 'executed'
+                          ? 'bg-[var(--side)] text-[var(--tx)] border-[var(--line)]'
+                          : act.state === 'approved'
+                          ? 'bg-[var(--o1)]/15 text-[var(--o1)] border-[var(--o1)]/30'
+                          : 'bg-[var(--y)]/15 text-[var(--y)] border-[var(--y)]/30'
+                      }`}
+                    >
+                      {act.state === 'simulated' ? 'Simulated Payment' : act.state}
                     </span>
-                  )}
+                    <span className="font-mono text-xs font-semibold text-[var(--tx)]">{act.action_type}</span>
+                    {act.is_simulated && (
+                      <span className="text-[10px] font-semibold bg-[var(--y)]/15 text-[var(--y)] border border-[var(--y)]/30 px-2 py-0.5 rounded-[6px]">
+                        Simulated
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="text-sm font-semibold text-[var(--tx)] font-mono truncate">
+                    Target: {act.recipient} &mdash; {formatCurrency(act.amount, { currency: act.currency, showCode: true })}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--mu)] font-mono">
+                    <span className="truncate max-w-[200px]">ID: {act.idempotency_key}</span>
+                    <span className="text-[var(--o1)] font-semibold truncate max-w-[200px]">HMAC: {act.approval_hash.slice(0, 16)}...</span>
+                  </div>
                 </div>
 
-                <div className="text-sm font-extrabold text-ink font-mono truncate">
-                  Target: {act.recipient} &mdash; {formatCurrency(act.amount, { currency: act.currency, showCode: true })}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-sardine-slate font-mono">
-                  <span className="truncate max-w-[200px]">ID: {act.idempotency_key}</span>
-                  <span className="text-electric font-semibold truncate max-w-[200px]">HMAC: {act.approval_hash.slice(0, 16)}...</span>
-                </div>
+                {isProposed && (
+                  <button
+                    onClick={() => handleApprove(act)}
+                    className="ignara-btn-primary w-full md:w-auto text-xs min-h-[44px]"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Sign &amp; Approve</span>
+                  </button>
+                )}
               </div>
-
-              {act.state === 'proposed' && (
-                <button
-                  onClick={() => handleApprove(act)}
-                  className="w-full md:w-auto px-4 py-2.5 bg-electric hover:bg-electric-600 text-white text-xs font-bold rounded-xl flex items-center justify-center space-x-1.5 shadow-xs transition-colors shrink-0 min-h-[44px]"
-                >
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>Sign &amp; Approve</span>
-                </button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

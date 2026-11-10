@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { ShieldCheck, Mail, ArrowRight, RefreshCw, AlertCircle, CheckCircle2, LogOut } from 'lucide-react';
+import { ShieldCheck, Mail, ArrowRight, RefreshCw, AlertCircle, CheckCircle2, LogOut, Flame } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const EmailVerificationPage: React.FC = () => {
@@ -8,7 +8,6 @@ export const EmailVerificationPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Get email from query params, location state, currentUser, or localStorage
   const searchParams = new URLSearchParams(location.search);
   const emailParam = searchParams.get('email') || (location.state as any)?.email;
   const email = emailParam || currentUser?.email || localStorage.getItem('cashflow_user_email') || '';
@@ -22,14 +21,12 @@ export const EmailVerificationPage: React.FC = () => {
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // If user is already verified, take them straight to dashboard
   useEffect(() => {
     if (isEmailVerified) {
       navigate('/dashboard', { replace: true });
     }
   }, [isEmailVerified, navigate]);
 
-  // Resend cooldown timer countdown
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const interval = setInterval(() => {
@@ -39,7 +36,6 @@ export const EmailVerificationPage: React.FC = () => {
   }, [resendCooldown]);
 
   const handleDigitChange = (index: number, value: string) => {
-    // If pasted string has length > 1
     if (value.length > 1) {
       const cleaned = value.replace(/\D/g, '').slice(0, 6);
       const newDigits = [...otpDigits];
@@ -57,7 +53,6 @@ export const EmailVerificationPage: React.FC = () => {
     newDigits[index] = cleaned;
     setOtpDigits(newDigits);
 
-    // Auto-advance
     if (cleaned && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
@@ -143,61 +138,58 @@ export const EmailVerificationPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-ink-950 flex flex-col justify-center items-center py-8 sm:py-12 px-3 sm:px-6 lg:px-8 selection:bg-electric selection:text-white relative overflow-hidden">
-      {/* Background glow effects */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[350px] bg-electric/15 blur-[120px] rounded-full pointer-events-none" />
-
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--tx)] flex flex-col justify-center items-center py-8 sm:py-12 px-4 selection:bg-[var(--o1)]/30 ignara-page-enter">
       <div className="w-full sm:max-w-md relative z-10">
-        {/* Brand */}
         <div className="text-center">
-          <Link to="/" className="inline-flex items-center space-x-2.5 group">
-            <div className="w-10 h-10 rounded-xl bg-ink-900 border border-electric/40 flex items-center justify-center font-mono font-bold text-electric text-base shadow-glow-electric group-hover:border-electric transition-colors">
-              CL
+          <Link to="/" className="inline-flex items-center gap-3 group">
+            <div
+              className="w-10 h-10 rounded-[12px] flex items-center justify-center text-white shrink-0 shadow-md"
+              style={{ background: 'var(--grad-ember)' }}
+            >
+              <Flame className="w-5 h-5 text-white fill-white/20" strokeWidth={2.2} />
             </div>
-            <span className="font-extrabold text-xl tracking-tight text-white">
+            <span className="font-semibold text-xl tracking-tight text-[var(--tx)]">
               Cashflow Lifeline
             </span>
           </Link>
-          <div className="mt-3 inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-electric/10 border border-electric/30 text-electric-300 text-xs font-semibold">
+          <div className="mt-3 inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-[var(--card2)] border border-[var(--line)] text-[var(--o1)] text-xs font-semibold">
             <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
             <span>Secure Email Verification</span>
           </div>
-          <h2 className="mt-4 text-xl sm:text-2xl font-bold tracking-tight text-white">
+          <h2 className="mt-4 text-xl sm:text-2xl font-semibold tracking-tight text-[var(--tx)]">
             Verify Your Email Address
           </h2>
-          <p className="mt-2 text-xs sm:text-sm text-sardine-muted break-words">
+          <p className="mt-2 text-xs sm:text-sm text-[var(--mu)] break-words">
             We sent a 6-digit confirmation code to{' '}
-            <span className="text-white font-mono font-semibold break-all">
+            <span className="text-[var(--tx)] font-mono font-semibold break-all">
               {email ? maskEmail(email) : 'your inbox'}
             </span>
-            . Enter the code below to unlock your financial workspace.
+            . Enter the code below to unlock your workspace.
           </p>
         </div>
 
-        {/* Card */}
-        <div className="mt-6 sm:mt-8 bg-ink-900/90 border border-ink-800 rounded-2xl p-4 sm:p-8 backdrop-blur-xl shadow-2xl">
+        <div className="mt-6 sm:mt-8 ignara-card p-6 sm:p-8 space-y-5">
           {error && (
-            <div className="mb-4 sm:mb-6 p-3 sm:p-3.5 bg-rose-950/60 border border-rose-800/80 rounded-xl flex items-start space-x-2.5 text-xs text-rose-200 animate-fadeIn">
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <div className="p-3.5 bg-[var(--r)]/15 border border-[var(--r)]/30 rounded-[14px] flex items-start space-x-2.5 text-xs text-[var(--r)]">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <div className="flex-1 break-words">{error}</div>
             </div>
           )}
 
           {successMsg && (
-            <div className="mb-4 sm:mb-6 p-3 sm:p-3.5 bg-emerald-950/60 border border-emerald-800/80 rounded-xl flex items-start space-x-2.5 text-xs text-emerald-200 animate-fadeIn">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="p-3.5 bg-[var(--g)]/15 border border-[var(--g)]/30 rounded-[14px] flex items-start space-x-2.5 text-xs text-[var(--g)]">
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
               <div className="flex-1 break-words">{successMsg}</div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-sardine-muted text-center mb-3">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--dim)] text-center mb-3">
                 6-Digit Security Code
               </label>
 
-              {/* 6 Digit Input Boxes */}
-              <div className="flex justify-center gap-1.5 sm:gap-3" onPaste={handlePaste}>
+              <div className="flex justify-center gap-1.5 sm:gap-2.5" onPaste={handlePaste}>
                 {otpDigits.map((digit, index) => (
                   <input
                     key={index}
@@ -209,7 +201,7 @@ export const EmailVerificationPage: React.FC = () => {
                     value={digit}
                     onChange={(e) => handleDigitChange(index, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(index, e)}
-                    className="w-9 h-11 sm:w-12 sm:h-14 text-center text-lg sm:text-2xl font-mono font-bold bg-ink-950 border border-ink-700 rounded-lg sm:rounded-xl text-white focus:outline-none focus:border-electric focus:ring-2 focus:ring-electric/30 transition-all"
+                    className="w-9 h-11 sm:w-11 sm:h-14 text-center text-lg sm:text-2xl font-mono font-semibold ignara-input"
                   />
                 ))}
               </div>
@@ -218,7 +210,7 @@ export const EmailVerificationPage: React.FC = () => {
             <button
               type="submit"
               disabled={isSubmitting || fullOtp.length !== 6}
-              className="w-full py-3 px-4 rounded-xl font-semibold text-xs uppercase tracking-wider bg-electric hover:bg-electric-600 active:bg-electric-700 text-white shadow-glow-electric transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 min-h-[44px]"
+              className="ignara-btn-primary w-full py-2.5 text-xs font-semibold uppercase tracking-wider min-h-[44px]"
             >
               {isSubmitting ? (
                 <>
@@ -234,15 +226,14 @@ export const EmailVerificationPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Resend Action with Cooldown */}
-          <div className="mt-5 sm:mt-6 pt-4 sm:pt-5 border-t border-ink-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-sardine-muted">
+          <div className="pt-4 border-t border-[var(--line)] flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-[var(--mu)]">
             <span className="flex items-center space-x-1.5">
-              <Mail className="w-3.5 h-3.5 text-sardine-slate shrink-0" />
+              <Mail className="w-3.5 h-3.5 text-[var(--dim)] shrink-0" />
               <span>Didn&rsquo;t get the code?</span>
             </span>
 
             {resendCooldown > 0 ? (
-              <span className="font-mono text-sardine-slate bg-ink-950 px-2.5 py-1 rounded-md border border-ink-800">
+              <span className="font-mono text-[var(--dim)] bg-[var(--side)] px-2.5 py-1 rounded-[8px] border border-[var(--line)]">
                 Resend in {resendCooldown}s
               </span>
             ) : (
@@ -250,7 +241,7 @@ export const EmailVerificationPage: React.FC = () => {
                 type="button"
                 onClick={handleResend}
                 disabled={isResending}
-                className="font-semibold text-electric hover:text-electric-300 transition-colors disabled:opacity-50 flex items-center space-x-1 min-h-[44px] sm:min-h-0 py-1"
+                className="font-semibold text-[var(--o1)] hover:underline transition-colors disabled:opacity-50 flex items-center space-x-1 min-h-[44px] sm:min-h-0 py-1 cursor-pointer"
               >
                 {isResending ? (
                   <>
@@ -264,15 +255,14 @@ export const EmailVerificationPage: React.FC = () => {
             )}
           </div>
 
-          {/* Logout / Switch Account */}
-          <div className="mt-4 pt-4 border-t border-ink-800/60 flex items-center justify-center">
+          <div className="pt-3 border-t border-[var(--line)] flex items-center justify-center">
             <button
               type="button"
               onClick={async () => {
                 await logout();
                 navigate('/login');
               }}
-              className="inline-flex items-center space-x-1.5 text-xs text-sardine-slate hover:text-rose-400 transition-colors py-1.5 min-h-[44px] sm:min-h-0"
+              className="inline-flex items-center space-x-1.5 text-xs text-[var(--mu)] hover:text-[var(--r)] transition-colors py-1.5 min-h-[44px] sm:min-h-0 cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5 shrink-0" />
               <span>Sign out or use a different account</span>
@@ -283,4 +273,3 @@ export const EmailVerificationPage: React.FC = () => {
     </div>
   );
 };
-

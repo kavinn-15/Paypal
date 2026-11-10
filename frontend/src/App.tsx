@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { RegionalPreferencesProvider } from './context/RegionalPreferencesContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { PublicRoute } from './components/PublicRoute';
 import { Navbar } from './components/Navbar';
+import { IgnaraSidebar } from './components/IgnaraSidebar';
+import { IgnaraHeader } from './components/IgnaraHeader';
 import { OnboardingModal } from './components/OnboardingModal';
 
 // Pages
@@ -31,13 +33,31 @@ import { api } from './api/client';
 
 const AuthenticatedLayout: React.FC = () => {
   const { currentUser, logout } = useAuth();
+  const location = useLocation();
+  const mainScrollRef = useRef<HTMLElement | null>(null);
   const [isResetting, setIsResetting] = useState<boolean>(false);
   const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  const [pendingInboxCount, setPendingInboxCount] = useState<number>(0);
+
+  // Scroll to top of main area on route transition
+  useEffect(() => {
+    if (mainScrollRef.current) {
+      mainScrollRef.current.scrollTo(0, 0);
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     if (sessionStorage.getItem('cashflow_show_onboarding') === 'true') {
       setShowOnboarding(true);
     }
+    // Fetch real pending actions for the sidebar badge
+    api.getActions()
+      .then((acts) => {
+        const count = acts.filter((a) => a.state === 'proposed').length;
+        setPendingInboxCount(count);
+      })
+      .catch(() => {});
   }, []);
 
   const handleResetDemo = async () => {
@@ -64,17 +84,30 @@ const AuthenticatedLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-between w-full overflow-x-hidden">
-      <div className="flex-1 flex flex-col w-full">
-        <Navbar
-          onResetDemo={handleResetDemo}
-          isResetting={isResetting}
+    <div className="h-screen w-screen overflow-hidden flex bg-[var(--bg)] text-[var(--tx)] font-sans antialiased">
+      {/* Ignara 276px Left Sidebar */}
+      <IgnaraSidebar
+        isOpenMobile={mobileMenuOpen}
+        onCloseMobile={() => setMobileMenuOpen(false)}
+        pendingInboxCount={pendingInboxCount}
+      />
+
+      {/* Main column */}
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
+        {/* Ignara Top Header */}
+        <IgnaraHeader
+          onToggleMobileMenu={() => setMobileMenuOpen(true)}
           currentUser={currentUser}
           onLogout={handleLogout}
+          onResetDemo={handleResetDemo}
+          isResetting={isResetting}
         />
 
-        <main className="flex-1 w-full">
-          <Outlet />
+        {/* Ignara Main Scroll Container: max-width 1080px, padding 14px 28px 40px, gap 16px */}
+        <main ref={mainScrollRef} className="flex-1 overflow-y-auto ignara-scroll px-4 sm:px-7 py-3.5 sm:py-[14px] pb-10">
+          <div className="max-w-[1080px] mx-auto flex flex-col gap-4">
+            <Outlet />
+          </div>
         </main>
       </div>
 
@@ -90,21 +123,6 @@ const AuthenticatedLayout: React.FC = () => {
           setShowOnboarding(false);
         }}
       />
-
-      <footer className="border-t border-slate-200 py-5 sm:py-6 text-xs text-sardine-slate bg-white w-full">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-3 text-center sm:text-left">
-          <div className="text-xs">
-            <strong className="text-ink">Cashflow Lifeline</strong> &mdash; Built for PayPal AI Hackathon 2026 (&ldquo;Build What&rsquo;s Next with PayPal and AI&rdquo;)
-          </div>
-          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-x-2 sm:gap-x-3 gap-y-1 text-[11px] sm:text-xs">
-            <span>PayPal Sandbox Verified</span>
-            <span className="hidden sm:inline">&bull;</span>
-            <span>Deterministic Guardrails</span>
-            <span className="hidden sm:inline">&bull;</span>
-            <span>SHA-256 Merkle Chain Audit</span>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 };
@@ -173,8 +191,10 @@ export const App: React.FC = () => {
             >
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/whatif" element={<WhatIfPage />} />
+              <Route path="/what-if" element={<WhatIfPage />} />
               <Route path="/supervisor" element={<SupervisorPage />} />
               <Route path="/negotiation" element={<NegotiationPage />} />
+              <Route path="/negotiations" element={<NegotiationPage />} />
               <Route path="/resilience" element={<ResiliencePage />} />
               <Route path="/timeline" element={<TimelinePage />} />
               <Route path="/clients" element={<ClientsPage />} />
@@ -186,6 +206,7 @@ export const App: React.FC = () => {
               <Route path="/approvals" element={<ApprovalInboxPage />} />
               <Route path="/audit" element={<AuditPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/setting" element={<SettingsPage />} />
             </Route>
 
             {/* Fallback */}

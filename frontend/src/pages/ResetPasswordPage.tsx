@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
-import { Eye, EyeOff, Lock, AlertCircle, CheckCircle2, ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, Lock, AlertCircle, CheckCircle2, ArrowRight, Loader2, ShieldCheck, Flame } from 'lucide-react';
 
 export const ResetPasswordPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -28,10 +28,10 @@ export const ResetPasswordPage: React.FC = () => {
   }, [newPassword]);
 
   const strengthColor = useMemo(() => {
-    if (passwordStrength <= 1) return 'bg-red-500';
-    if (passwordStrength === 2) return 'bg-amber-500';
+    if (passwordStrength <= 1) return 'bg-[var(--r)]';
+    if (passwordStrength === 2) return 'bg-[var(--y)]';
     if (passwordStrength === 3) return 'bg-blue-400';
-    return 'bg-emerald-400';
+    return 'bg-[var(--g)]';
   }, [passwordStrength]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -66,6 +66,9 @@ export const ResetPasswordPage: React.FC = () => {
         await api.resetPassword(token, newPassword);
       }
       setSuccess(true);
+      setTimeout(() => {
+        navigate('/login', { replace: true });
+      }, 2500);
     } catch (err: any) {
       setError(err.message || 'Invalid or expired password reset token. Please request a new link.');
     } finally {
@@ -74,56 +77,59 @@ export const ResetPasswordPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-ink-950 flex flex-col justify-between text-white selection:bg-electric selection:text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--tx)] flex flex-col justify-between selection:bg-[var(--o1)]/30 ignara-page-enter">
       {/* Header */}
-      <div className="max-w-[1440px] mx-auto w-full px-3 sm:px-6 py-4 sm:py-6 flex items-center justify-between">
-        <Link to="/" className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-lg bg-ink-900 border border-electric/40 flex items-center justify-center font-mono font-bold text-electric text-xs shadow-glow-electric shrink-0">
-            CL
+      <div className="max-w-[1080px] mx-auto w-full px-4 sm:px-6 py-4 sm:py-6 flex items-center justify-between">
+        <Link to="/" className="flex items-center gap-3 group">
+          <div
+            className="w-10 h-10 rounded-[12px] flex items-center justify-center text-white shrink-0 shadow-md"
+            style={{ background: 'var(--grad-ember)' }}
+          >
+            <Flame className="w-5 h-5 text-white fill-white/20" strokeWidth={2.2} />
           </div>
-          <span className="font-extrabold text-sm sm:text-base tracking-tight text-white flex items-center gap-1.5">
+          <span className="font-semibold text-base sm:text-lg tracking-tight text-[var(--tx)]">
             Cashflow Lifeline
           </span>
         </Link>
-        <Link to="/login" className="text-xs text-sardine-muted hover:text-white transition-colors py-1.5">
+        <Link to="/login" className="text-xs text-[var(--mu)] hover:text-[var(--tx)] transition-colors py-1.5">
           &larr; Back to Sign In
         </Link>
       </div>
 
       {/* Main Card */}
-      <div className="max-w-md w-full mx-auto px-3 sm:px-4 py-4 sm:py-8">
-        <div className="rounded-2xl border border-ink-800 bg-ink-900/90 backdrop-blur-xl p-4 sm:p-8 shadow-2xl space-y-4 sm:space-y-6">
-          <div className="space-y-1.5 text-center">
-            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">Set New Password</h1>
-            <p className="text-xs text-sardine-muted">
-              Choose a strong, secure password for your account
+      <div className="max-w-md w-full mx-auto px-4 py-4 sm:py-8">
+        <div className="ignara-card p-6 sm:p-8 space-y-5">
+          <div className="space-y-1 text-center">
+            <h1 className="ignara-h1 text-2xl font-semibold">Set New Password</h1>
+            <p className="text-xs text-[var(--mu)]">
+              Choose a strong password to protect your financial predictions and authorization credentials
             </p>
           </div>
 
           {!token && (
-            <div className="p-3 sm:p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start space-x-2.5">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
-              <div className="leading-relaxed break-words flex-1">
+            <div className="p-3.5 rounded-[14px] bg-[var(--y)]/15 border border-[var(--y)]/30 text-[var(--y)] text-xs flex items-start space-x-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="leading-relaxed flex-1">
                 No reset token was found in the URL. If you received an email, please ensure you clicked the full URL.
               </div>
             </div>
           )}
 
           {error && (
-            <div className="p-3 sm:p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start space-x-2.5">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
-              <div className="leading-relaxed break-words flex-1">{error}</div>
+            <div className="p-3.5 rounded-[14px] bg-[var(--r)]/15 border border-[var(--r)]/30 text-[var(--r)] text-xs flex items-start space-x-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="leading-relaxed flex-1">{error}</div>
             </div>
           )}
 
           {success ? (
             <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs space-y-2">
-                <div className="flex items-center space-x-2 font-bold text-sm text-emerald-200">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <div className="p-4 rounded-[14px] bg-[var(--g)]/15 border border-[var(--g)]/30 text-[var(--g)] text-xs space-y-2">
+                <div className="flex items-center space-x-2 font-semibold text-sm">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
                   <span>Password Successfully Updated</span>
                 </div>
-                <p className="leading-relaxed text-slate-300">
+                <p className="leading-relaxed text-[var(--mu)]">
                   Your credentials have been securely updated and all previous sessions have been invalidated.
                 </p>
               </div>
@@ -131,7 +137,7 @@ export const ResetPasswordPage: React.FC = () => {
               <div className="pt-2 text-center">
                 <Link
                   to="/login"
-                  className="w-full py-3 rounded-xl bg-electric hover:bg-electric-600 text-white font-bold text-xs sm:text-sm shadow-glow-electric inline-flex items-center justify-center space-x-2 transition-all min-h-[44px]"
+                  className="ignara-btn-primary w-full py-2.5 text-xs font-semibold"
                 >
                   <span>Sign In with New Password</span>
                   <ArrowRight className="w-4 h-4 shrink-0" />
@@ -141,9 +147,9 @@ export const ResetPasswordPage: React.FC = () => {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1">
-                <label className="block text-xs font-semibold text-slate-300">New Password</label>
+                <label className="block text-xs font-semibold text-[var(--tx)]">New Password</label>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-sardine-muted absolute left-3 top-3.5 pointer-events-none" />
+                  <Lock className="w-4 h-4 text-[var(--dim)] absolute left-3 top-3.5 pointer-events-none" />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={newPassword}
@@ -151,12 +157,12 @@ export const ResetPasswordPage: React.FC = () => {
                     placeholder="Min. 8 characters"
                     required
                     autoFocus
-                    className="w-full pl-9 pr-10 py-2.5 bg-ink-950 border border-ink-700 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-electric transition-colors"
+                    className="ignara-input w-full pl-9 pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2 top-2 p-1.5 text-sardine-muted hover:text-white rounded-md min-w-[36px] min-h-[36px] flex items-center justify-center"
+                    className="absolute right-2 top-2 p-1.5 text-[var(--dim)] hover:text-[var(--tx)] rounded-md min-w-[36px] min-h-[36px] flex items-center justify-center cursor-pointer"
                     aria-label="Toggle password visibility"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -165,21 +171,21 @@ export const ResetPasswordPage: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="block text-xs font-semibold text-slate-300">Confirm New Password</label>
+                <label className="block text-xs font-semibold text-[var(--tx)]">Confirm New Password</label>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-sardine-muted absolute left-3 top-3.5 pointer-events-none" />
+                  <Lock className="w-4 h-4 text-[var(--dim)] absolute left-3 top-3.5 pointer-events-none" />
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Re-enter password"
                     required
-                    className="w-full pl-9 pr-10 py-2.5 bg-ink-950 border border-ink-700 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-electric transition-colors"
+                    className="ignara-input w-full pl-9 pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-2 top-2 p-1.5 text-sardine-muted hover:text-white rounded-md min-w-[36px] min-h-[36px] flex items-center justify-center"
+                    className="absolute right-2 top-2 p-1.5 text-[var(--dim)] hover:text-[var(--tx)] rounded-md min-w-[36px] min-h-[36px] flex items-center justify-center cursor-pointer"
                     aria-label="Toggle confirm password visibility"
                   >
                     {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -190,7 +196,7 @@ export const ResetPasswordPage: React.FC = () => {
               {/* Strength meter */}
               {newPassword && (
                 <div className="space-y-1.5 pt-0.5">
-                  <div className="h-1.5 w-full bg-ink-950 rounded-full overflow-hidden flex">
+                  <div className="h-1.5 w-full bg-[var(--side)] rounded-full overflow-hidden flex">
                     <div
                       className={`h-full transition-all duration-300 ${strengthColor}`}
                       style={{ width: `${Math.min(100, Math.max(15, passwordStrength * 25))}%` }}
@@ -202,7 +208,7 @@ export const ResetPasswordPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading || !token}
-                className="w-full py-3 rounded-xl bg-electric hover:bg-electric-600 text-white font-bold text-xs sm:text-sm shadow-glow-electric transition-all flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer min-h-[44px]"
+                className="ignara-btn-primary w-full py-2.5 text-xs font-semibold"
               >
                 {loading ? (
                   <>
@@ -219,22 +225,21 @@ export const ResetPasswordPage: React.FC = () => {
             </form>
           )}
 
-          <div className="border-t border-ink-800 pt-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-sardine-muted">
+          <div className="border-t border-[var(--line)] pt-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-[var(--mu)]">
             <div className="flex items-center space-x-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+              <ShieldCheck className="w-4 h-4 text-[var(--g)] shrink-0" />
               <span>Token revoked upon use</span>
             </div>
-            <Link to="/login" className="text-electric-300 font-bold hover:underline py-1">
+            <Link to="/login" className="text-[var(--o1)] font-semibold hover:underline py-1">
               Return to Sign In &rarr;
             </Link>
           </div>
         </div>
       </div>
 
-      <div className="py-4 sm:py-6 px-3 text-center text-[11px] text-sardine-muted">
+      <div className="py-6 text-center text-xs text-[var(--dim)]">
         PayPal AI Hackathon 2026 &bull; Strict token invalidation and session purge
       </div>
     </div>
   );
 };
-

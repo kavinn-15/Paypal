@@ -130,3 +130,64 @@ describe('Phone Number & SMS Auth Logic', () => {
     expect(sanitizeNationalNumber('')).toBe('');
   });
 });
+
+describe('Navigation Route Redirection & Aliasing', () => {
+  const isNavPathActive = (itemId: string, pathname: string) => {
+    if (itemId === 'dashboard') {
+      return (
+        pathname === '/' ||
+        pathname === '/dashboard' ||
+        pathname === '/forecast' ||
+        pathname === '/obligations' ||
+        pathname === '/plans'
+      );
+    }
+    if (itemId === 'whatif') {
+      return pathname === '/whatif' || pathname === '/what-if';
+    }
+    if (itemId === 'supervisor') {
+      return pathname === '/supervisor';
+    }
+    if (itemId === 'negotiation') {
+      return pathname === '/negotiation' || pathname === '/negotiations';
+    }
+    if (itemId === 'resilience') {
+      return pathname === '/resilience';
+    }
+    if (itemId === 'timeline') {
+      return pathname === '/timeline';
+    }
+    if (itemId === 'clients') {
+      return pathname === '/clients' || pathname === '/invoices';
+    }
+    if (itemId === 'inbox') {
+      return pathname === '/inbox' || pathname === '/approvals';
+    }
+    if (itemId === 'audit') {
+      return pathname === '/audit';
+    }
+    if (itemId === 'settings') {
+      return pathname === '/settings' || pathname === '/setting';
+    }
+    return false;
+  };
+
+  it('correctly resolves and highlights all core application routes and aliases', () => {
+    expect(isNavPathActive('whatif', '/whatif')).toBe(true);
+    expect(isNavPathActive('whatif', '/what-if')).toBe(true);
+    expect(isNavPathActive('supervisor', '/supervisor')).toBe(true);
+    expect(isNavPathActive('negotiation', '/negotiation')).toBe(true);
+    expect(isNavPathActive('negotiation', '/negotiations')).toBe(true);
+    expect(isNavPathActive('resilience', '/resilience')).toBe(true);
+    expect(isNavPathActive('timeline', '/timeline')).toBe(true);
+    expect(isNavPathActive('clients', '/clients')).toBe(true);
+    expect(isNavPathActive('clients', '/invoices')).toBe(true);
+    expect(isNavPathActive('inbox', '/inbox')).toBe(true);
+    expect(isNavPathActive('inbox', '/approvals')).toBe(true);
+    expect(isNavPathActive('audit', '/audit')).toBe(true);
+    expect(isNavPathActive('settings', '/settings')).toBe(true);
+    expect(isNavPathActive('settings', '/setting')).toBe(true);
+    expect(isNavPathActive('dashboard', '/dashboard')).toBe(true);
+    expect(isNavPathActive('dashboard', '/forecast')).toBe(true);
+  });
+});

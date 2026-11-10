@@ -261,20 +261,22 @@ export const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-4 sm:space-y-6">
+    <div className="space-y-4 w-full overflow-hidden ignara-page-enter">
       {/* Bento Header */}
-      <div className="border-b border-slate-200 pb-4 sm:pb-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-xl sm:text-2xl font-black text-ink tracking-tight font-display">
-            System Settings &amp; Security Controls
-          </h1>
-          <span className="text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full font-bold">
-            Sandbox Guard Active
-          </span>
+      <div className="border-b border-[var(--line)] pb-2 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="ignara-h1 ignara-h1-reveal">
+              Settings &amp; Security
+            </h1>
+            <span className="text-xs bg-[var(--g)]/15 text-[var(--g)] border border-[var(--g)]/30 px-2.5 py-0.5 rounded-full font-semibold">
+              Sandbox Guard Active
+            </span>
+          </div>
+          <p className="text-xs text-[var(--mu)] mt-1">
+            Verify PayPal sandbox connection, multi-channel authentication, deterministic guardrail limits, and AI safety bounds
+          </p>
         </div>
-        <p className="text-xs text-sardine-slate mt-1">
-          Verify PayPal sandbox connection, multi-channel authentication, deterministic guardrail limits, and AI safety bounds
-        </p>
       </div>
 
       {/* Security & Contact Information Card */}

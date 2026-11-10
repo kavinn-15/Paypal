@@ -4,6 +4,7 @@ import { SimulationPreset, WhatIfComparisonResponse } from '../types';
 import { Sliders, AlertTriangle, ArrowRight, TrendingDown, DollarSign, CheckCircle2, RefreshCw, Sparkles, HelpCircle } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
+import { CountUp } from '../components/CountUp';
 
 export const WhatIfPage: React.FC = () => {
   const { formatCurrency, currencySymbol } = useRegionalPreferences();
@@ -58,31 +59,31 @@ export const WhatIfPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-4 sm:space-y-6 w-full overflow-hidden">
+    <div className="space-y-4 w-full overflow-hidden ignara-page-enter">
       {/* Header Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b border-slate-200 pb-4 sm:pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-2 border-b border-[var(--line)]">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-black text-ink tracking-tight font-display">
-              What-If Financial Simulation Studio
+            <h1 className="ignara-h1 ignara-h1-reveal">
+              Simulation Studio
             </h1>
-            <span className="text-[10px] sm:text-xs bg-electric-50 text-electric-700 border border-electric-200 px-2.5 py-0.5 rounded-full font-bold">
+            <span className="text-[11px] bg-[var(--card2)] text-[var(--o1)] border border-[var(--o1)]/30 px-2.5 py-0.5 rounded-full font-semibold">
               In-Memory Isolated
             </span>
           </div>
-          <p className="text-xs text-sardine-slate mt-1">
-            Simulate delays, emergency shocks, and split agreements without altering live records or executing transactions
+          <p className="text-xs text-[var(--mu)] mt-1">
+            Simulate delays, emergency shocks, and split agreements without altering live records
           </p>
         </div>
 
-        <div className="flex items-center space-x-2 bg-emerald-50/80 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl text-xs font-semibold self-start md:self-auto shrink-0">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>Zero Real Transactions Dispatched</span>
+        <div className="flex items-center space-x-2 bg-[var(--g)]/15 border border-[var(--g)]/30 text-[var(--g)] px-3 py-1.5 rounded-[999px] text-xs font-semibold self-start md:self-auto shrink-0">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>Zero Live Dispatches</span>
         </div>
       </div>
 
       {/* Preset Selector Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 ignara-stagger-1">
         {presets.map((preset) => {
           const isSelected = activePreset === preset.scenario_type;
           return (
@@ -90,16 +91,16 @@ export const WhatIfPage: React.FC = () => {
               key={preset.id}
               onClick={() => runScenario(preset.scenario_type, preset.name)}
               disabled={isLoading}
-              className={`p-3 sm:p-3.5 rounded-xl text-left border transition-all min-h-[44px] ${
+              className={`p-3 rounded-[16px] text-left border transition-all min-h-[44px] cursor-pointer ${
                 isSelected
-                  ? 'bg-ink text-white border-slate-800 shadow-md ring-2 ring-electric/40'
-                  : 'bg-white text-ink border-slate-200 hover:border-slate-300 shadow-2xs'
+                  ? 'border-[var(--o1)] bg-[var(--card)] ring-2 ring-[var(--o1)]/20 shadow-md'
+                  : 'bg-[var(--side)] text-[var(--tx)] border-[var(--line)] hover:border-[var(--o1)]/40 hover:bg-[var(--card)]'
               }`}
             >
-              <span className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider block truncate ${isSelected ? 'text-electric-soft' : 'text-sardine-muted'}`}>
+              <span className={`text-[10px] font-semibold uppercase tracking-wider block truncate ${isSelected ? 'text-[var(--o1)]' : 'text-[var(--dim)]'}`}>
                 {preset.impact_hint}
               </span>
-              <span className="font-bold text-xs mt-1 block leading-tight truncate">
+              <span className="font-semibold text-xs mt-1 block leading-tight truncate text-[var(--tx)]">
                 {preset.name}
               </span>
             </button>
@@ -109,68 +110,68 @@ export const WhatIfPage: React.FC = () => {
 
       {/* Comparison Metrics Grid */}
       {comparison && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <div className="bento-card p-4 space-y-1">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Projected Shortfall</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 ignara-stagger-2">
+          <div className="ignara-card p-4 space-y-1 ignara-card-hover">
+            <span className="text-[10.5px] uppercase font-semibold tracking-wider text-[var(--dim)] block">Projected Shortfall</span>
             <div className="flex items-baseline space-x-2">
-              <span className="font-mono font-black text-xl text-ink">
-                {formatCurrency(comparison.simulated.shortfall_amount)}
+              <span className="ignara-num-big text-xl text-[var(--tx)]">
+                <CountUp value={comparison.simulated.shortfall_amount} formatFn={(v) => formatCurrency(v)} />
               </span>
-              <span className={`text-xs font-bold ${comparison.delta.shortfall_change > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+              <span className={`text-xs font-semibold ${comparison.delta.shortfall_change > 0 ? 'text-[var(--r)]' : 'text-[var(--g)]'}`}>
                 {formatDelta(comparison.delta.shortfall_change)}
               </span>
             </div>
-            <span className="text-[11px] text-sardine-slate block">Baseline: {formatCurrency(comparison.baseline.shortfall_amount)}</span>
+            <span className="text-[11px] text-[var(--mu)] block">Baseline: {formatCurrency(comparison.baseline.shortfall_amount)}</span>
           </div>
 
-          <div className="bento-card p-4 space-y-1">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Shortfall Probability</span>
+          <div className="ignara-card p-4 space-y-1 ignara-card-hover">
+            <span className="text-[10.5px] uppercase font-semibold tracking-wider text-[var(--dim)] block">Shortfall Probability</span>
             <div className="flex items-baseline space-x-2">
-              <span className="font-mono font-black text-xl text-ink">
-                {(comparison.simulated.p_shortfall * 100).toFixed(0)}%
+              <span className="ignara-num-big text-xl text-[var(--tx)]">
+                <CountUp value={comparison.simulated.p_shortfall * 100} prefix="" suffix="%" decimals={0} />
               </span>
-              <span className={`text-xs font-bold ${comparison.delta.p_shortfall_change > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+              <span className={`text-xs font-semibold ${comparison.delta.p_shortfall_change > 0 ? 'text-[var(--r)]' : 'text-[var(--g)]'}`}>
                 {comparison.delta.p_shortfall_change > 0 ? `+${(comparison.delta.p_shortfall_change * 100).toFixed(0)}%` : `${(comparison.delta.p_shortfall_change * 100).toFixed(0)}%`}
               </span>
             </div>
-            <span className="text-[11px] text-sardine-slate block">Baseline: {(comparison.baseline.p_shortfall * 100).toFixed(0)}%</span>
+            <span className="text-[11px] text-[var(--mu)] block">Baseline: {(comparison.baseline.p_shortfall * 100).toFixed(0)}%</span>
           </div>
 
-          <div className="bento-card p-4 space-y-1">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Min Projected Balance</span>
+          <div className="ignara-card p-4 space-y-1 ignara-card-hover">
+            <span className="text-[10.5px] uppercase font-semibold tracking-wider text-[var(--dim)] block">Min Projected Balance</span>
             <div className="flex items-baseline space-x-2">
-              <span className={`font-mono font-black text-xl ${comparison.simulated.min_projected_balance < 0 ? 'text-rose-600' : 'text-ink'}`}>
-                {formatCurrency(comparison.simulated.min_projected_balance)}
+              <span className={`ignara-num-big text-xl ${comparison.simulated.min_projected_balance < 0 ? 'text-[var(--r)]' : 'text-[var(--tx)]'}`}>
+                <CountUp value={comparison.simulated.min_projected_balance} formatFn={(v) => formatCurrency(v)} />
               </span>
-              <span className={`text-xs font-bold ${comparison.delta.min_balance_change < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+              <span className={`text-xs font-semibold ${comparison.delta.min_balance_change < 0 ? 'text-[var(--r)]' : 'text-[var(--g)]'}`}>
                 {formatDelta(comparison.delta.min_balance_change)}
               </span>
             </div>
-            <span className="text-[11px] text-sardine-slate block">Baseline: {formatCurrency(comparison.baseline.min_projected_balance)}</span>
+            <span className="text-[11px] text-[var(--mu)] block">Baseline: {formatCurrency(comparison.baseline.min_projected_balance)}</span>
           </div>
 
-          <div className="bento-card p-4 space-y-1">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Additional Cash Needed</span>
+          <div className="ignara-card p-4 space-y-1 ignara-card-hover">
+            <span className="text-[10.5px] uppercase font-semibold tracking-wider text-[var(--dim)] block">Additional Cash Needed</span>
             <div className="flex items-baseline space-x-2">
-              <span className="font-mono font-black text-xl text-electric">
-                {formatCurrency(comparison.delta.additional_capital_needed)}
+              <span className="ignara-num-big text-xl text-[var(--o1)]">
+                <CountUp value={comparison.delta.additional_capital_needed} formatFn={(v) => formatCurrency(v)} />
               </span>
             </div>
-            <span className="text-[11px] text-sardine-slate block">To keep balance non-negative</span>
+            <span className="text-[11px] text-[var(--mu)] block">To maintain positive liquidity</span>
           </div>
         </div>
       )}
 
       {/* Interactive Trajectory Chart */}
-      <div className="bento-card p-4 sm:p-6 space-y-4 w-full overflow-hidden">
+      <div className="ignara-card p-5 sm:p-6 space-y-4 w-full overflow-hidden ignara-stagger-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 className="font-black text-sm sm:text-base text-ink tracking-tight">14-Day Trajectory Comparison</h3>
-            <p className="text-xs text-sardine-slate">Solid blue is baseline forecast; dotted purple is simulated outcome</p>
+            <h3 className="ignara-h3">14-Day Trajectory Comparison</h3>
+            <p className="text-xs text-[var(--mu)]">Solid line is baseline forecast; dashed line is simulated outcome</p>
           </div>
           {comparison && (
-            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:max-w-md text-sardine-slate">
-              <span className="font-bold text-ink">Scenario Effect: </span>
+            <div className="p-3 bg-[var(--card2)] border border-[var(--line)] rounded-[14px] text-xs w-full sm:max-w-md text-[var(--mu)]">
+              <span className="font-semibold text-[var(--tx)]">Scenario Effect: </span>
               {comparison.explanation}
             </div>
           )}
@@ -181,20 +182,27 @@ export const WhatIfPage: React.FC = () => {
             <AreaChart data={chartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
               <defs>
                 <linearGradient id="simGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#4b5bfc" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#4b5bfc" stopOpacity={0.0} />
+                  <stop offset="5%" stopColor="var(--o1)" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="var(--o1)" stopOpacity={0.0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-              <XAxis dataKey="date" stroke="#6b7c99" fontSize={10} tickLine={false} />
-              <YAxis stroke="#6b7c99" fontSize={10} tickLine={false} tickFormatter={(v) => `${currencySymbol}${v}`} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--line)" opacity={0.6} />
+              <XAxis dataKey="date" stroke="var(--mu)" fontSize={11} tickLine={false} fontFamily="Outfit, sans-serif" />
+              <YAxis stroke="var(--mu)" fontSize={11} tickLine={false} tickFormatter={(v) => `${currencySymbol}${v}`} fontFamily="Outfit, sans-serif" />
               <Tooltip
                 formatter={(val: number) => [formatCurrency(val), 'Balance']}
-                contentStyle={{ backgroundColor: '#081026', borderColor: '#1E293B', borderRadius: '12px', color: '#fff' }}
+                contentStyle={{
+                  backgroundColor: 'var(--inv)',
+                  borderColor: 'var(--line)',
+                  borderRadius: '12px',
+                  color: 'var(--invt)',
+                  fontSize: '12px',
+                  fontFamily: 'Outfit, sans-serif'
+                }}
               />
-              <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-              <Area type="monotone" dataKey="Baseline" stroke="#4b5bfc" strokeWidth={2.5} fill="url(#simGrad)" />
-              <Area type="monotone" dataKey="Simulated" stroke="#9333ea" strokeWidth={2.5} strokeDasharray="4 4" fill="none" />
+              <Legend wrapperStyle={{ fontSize: '11.5px', paddingTop: '8px', color: 'var(--mu)', fontFamily: 'Outfit, sans-serif' }} />
+              <Area type="monotone" dataKey="Baseline" stroke="var(--tx)" strokeWidth={2.5} fill="url(#simGrad)" />
+              <Area type="monotone" dataKey="Simulated" stroke="var(--o1)" strokeWidth={2.5} strokeDasharray="4 4" fill="none" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
