@@ -7,8 +7,10 @@ import { DriverExplanationCard } from '../components/DriverExplanationCard';
 import { RescuePlanCard } from '../components/RescuePlanCard';
 import { ActionTimeline } from '../components/ActionTimeline';
 import { Zap, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
+import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 
 export const DashboardPage: React.FC = () => {
+  const { formatCurrency } = useRegionalPreferences();
   const [data, setData] = useState<PlansComparisonResponse | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<RescuePlan | null>(null);
   const [activeAction, setActiveAction] = useState<Action | null>(null);
@@ -221,7 +223,7 @@ export const DashboardPage: React.FC = () => {
             className="w-full sm:w-auto flex items-center justify-center space-x-2 px-5 py-3 bg-electric hover:bg-electric-600 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-glow-electric transition-all disabled:opacity-50 shrink-0 min-h-[44px]"
           >
             <Zap className={`w-4 h-4 text-white ${isSimulating ? 'animate-bounce' : ''}`} />
-            <span>{isSimulating ? 'Processing Webhook...' : 'Simulate Client Payment ($2,000)'}</span>
+            <span>{isSimulating ? 'Processing Webhook...' : `Simulate Client Payment (${formatCurrency(2000)})`}</span>
           </button>
         </div>
       </div>

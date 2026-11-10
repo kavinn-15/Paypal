@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { SupervisorRunResponse, AgentTraceStep } from '../types';
 import { Bot, CheckCircle2, AlertTriangle, ArrowRight, Sparkles, RefreshCw, Layers, ShieldCheck, Compass } from 'lucide-react';
+import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 
 export const SupervisorPage: React.FC = () => {
+  const { formatCurrency } = useRegionalPreferences();
   const [runData, setRunData] = useState<SupervisorRunResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -70,7 +72,7 @@ export const SupervisorPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3">
               <h2 className="text-lg sm:text-xl font-black text-white">Recommended Strategy: Plan {runData.recommended_plan}</h2>
               <span className="text-xs text-sardine-muted">
-                Targeting: {runData.obligation_evaluated} (${runData.shortfall_amount.toLocaleString()} shortfall)
+                Targeting: {runData.obligation_evaluated} ({formatCurrency(runData.shortfall_amount)} shortfall)
               </span>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed max-w-3xl">

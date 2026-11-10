@@ -22,6 +22,10 @@ class ResilienceService:
         tot_invoices = sum(float(i.amount) for i in invoices)
         tot_obligations = sum(float(o.amount) for o in obligations)
 
+        from backend.app.services.region_service import CURRENCIES_DB
+        owner_curr = (owner.preferred_currency or owner.currency or "USD").upper()
+        curr_sym = CURRENCIES_DB.get(owner_curr, {}).get("symbol", "$")
+
         # 1. Cash Reserve Coverage (Weight: 20%)
         # Runway in days assuming 30-day burn rate from obligations
         daily_burn = max(tot_obligations / 30.0, 50.0)
@@ -90,22 +94,22 @@ class ResilienceService:
             category = "Critical"
 
         improving = [
-            f"Active confirmed cash balance of ${starting_balance:,.2f} provides {runway_days:.0f} days baseline runway.",
+            f"Active confirmed cash balance of {curr_sym}{starting_balance:,.2f} provides {runway_days:.0f} days baseline runway.",
             "Client base has zero total defaults over 12-month sandbox history."
         ]
         if score_concentration > 60:
             improving.append("Invoices distributed across multiple client accounts.")
 
         reducing = [
-            f"Apex Design Studio exhibits a 92% late-payment probability, locking up $2,000 in receivables.",
-            f"Upcoming contractor payout (${tot_obligations:,.2f}) exceeds current cash balance by ${tot_obligations - starting_balance:,.2f}.",
+            f"Apex Design Studio exhibits a 92% late-payment probability, locking up {curr_sym}2,000 in receivables.",
+            f"Upcoming contractor payout ({curr_sym}{tot_obligations:,.2f}) exceeds current cash balance by {curr_sym}{tot_obligations - starting_balance:,.2f}.",
             f"Receivables concentration: top 2 clients represent {min(100, int((4000/max(tot_invoices,1))*100))}% of total pending revenue."
         ]
 
         recommendations = [
-            "Execute Rescue Plan B: apply 3% early-pay discount to Horizon Dynamics to unlock $1,940 within 48h.",
+            f"Execute Rescue Plan B: apply 3% early-pay discount to Horizon Dynamics to unlock {curr_sym}1,940 within 48h.",
             "Enable split payment arrangement on Marcus Sterling's payout (50% on Friday, 50% in 14 days).",
-            "Establish an automated 1-month emergency cash buffer of $3,000 for recurring contractor commitments."
+            f"Establish an automated 1-month emergency cash buffer of {curr_sym}3,000 for recurring contractor commitments."
         ]
 
         factors = [
@@ -130,7 +134,7 @@ class ResilienceService:
                 score=round(score_obligations, 1),
                 weight=0.20,
                 status="at_risk" if score_obligations < 50 else "neutral",
-                detail=f"${tot_obligations:,.2f} in fixed obligations due against ${starting_balance:,.2f} starting cash.",
+                detail=f"{curr_sym}{tot_obligations:,.2f} in fixed obligations due against {curr_sym}{starting_balance:,.2f} starting cash.",
                 impact="negative"
             ),
             ResilienceFactor(

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api/client';
 import { UserProfile } from '../types';
+import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 
 interface OnboardingModalProps {
   isOpen: boolean;
@@ -29,6 +30,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   currentUser,
   onCompleted,
 }) => {
+  const { updatePreferences } = useRegionalPreferences();
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [businessName, setBusinessName] = useState(currentUser?.name || '');
   const [currency, setCurrency] = useState(currentUser?.preferred_currency || currentUser?.currency || 'USD');
@@ -253,10 +255,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                     type="button"
                     onClick={() => {
                       setCurrency(cur.code);
-                      api.updateRegionalPreferences({
-                        preferred_currency: cur.code,
-                        currency: cur.code
-                      }).catch(() => {});
+                      updatePreferences(currentUser?.country || 'US', cur.code).catch(() => {});
                     }}
                     className={`p-2.5 rounded-xl border text-left flex flex-col justify-between text-xs transition-all ${
                       currency === cur.code

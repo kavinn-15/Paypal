@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShieldAlert, CheckCircle2, ArrowUpRight, Clock, AlertTriangle } from 'lucide-react';
 import { Obligation } from '../types';
+import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 
 interface AtRiskBannerProps {
   obligation?: Obligation;
@@ -17,13 +18,16 @@ export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
   startingBalance,
   isCovered = false,
 }) => {
+  const { formatCurrency, formatDate } = useRegionalPreferences();
   if (!obligation) return null;
 
-  const dueFormatted = new Date(obligation.due_date).toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-  });
+  const dueFormatted = obligation.due_date
+    ? formatDate(obligation.due_date, {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+      })
+    : 'upcoming';
 
   return (
     <div
@@ -58,7 +62,7 @@ export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
               <span>
                 Projected Shortfall of{' '}
                 <span className="text-rose-600 font-mono">
-                  ${shortfallAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  {formatCurrency(shortfallAmount)}
                 </span>{' '}
                 before Friday
               </span>
@@ -67,8 +71,8 @@ export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
 
           <p className="text-xs sm:text-sm text-sardine-slate leading-relaxed">
             {isCovered
-              ? `PayPal Sandbox webhook verified payment. Your available balance now comfortably covers Friday's $${obligation.amount.toLocaleString()} contractor obligation.`
-              : `Current PayPal balance is $${startingBalance.toLocaleString()} today. Due to predictable client payment lags, your balance cannot cover the $${obligation.amount.toLocaleString()} contractor payout to ${obligation.payee_name} due ${dueFormatted}.`}
+              ? `PayPal Sandbox webhook verified payment. Your available balance now comfortably covers Friday's ${formatCurrency(obligation.amount, { currency: obligation.currency })} contractor obligation.`
+              : `Current PayPal balance is ${formatCurrency(startingBalance)} today. Due to predictable client payment lags, your balance cannot cover the ${formatCurrency(obligation.amount, { currency: obligation.currency })} contractor payout to ${obligation.payee_name} due ${dueFormatted}.`}
           </p>
         </div>
 
@@ -78,7 +82,7 @@ export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
             <div>
               <span className="text-[10px] font-bold uppercase text-sardine-slate block tracking-wider">Balance Today</span>
               <span className="text-base sm:text-lg font-bold font-mono text-ink">
-                ${startingBalance.toLocaleString('en-US', { minimumFractionDigits: 0 })}
+                {formatCurrency(startingBalance)}
               </span>
             </div>
             <span className="text-[10px] text-emerald-600 font-medium block">Healthy initial</span>
@@ -88,7 +92,7 @@ export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
             <div>
               <span className="text-[10px] font-bold uppercase text-sardine-slate block tracking-wider">Due Friday</span>
               <span className="text-base sm:text-lg font-bold font-mono text-rose-600">
-                ${obligation.amount.toLocaleString('en-US', { minimumFractionDigits: 0 })}
+                {formatCurrency(obligation.amount, { currency: obligation.currency })}
               </span>
             </div>
             <span className="text-[10px] text-sardine-slate font-medium block">Contractor</span>
@@ -98,7 +102,7 @@ export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
             <div>
               <span className="text-[10px] font-bold uppercase text-sardine-slate block tracking-wider">Protection Gap</span>
               <span className={`text-base sm:text-lg font-extrabold font-mono ${isCovered ? 'text-emerald-600' : 'text-rose-600'}`}>
-                {isCovered ? '$0.00' : `$${shortfallAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}`}
+                {isCovered ? formatCurrency(0) : formatCurrency(shortfallAmount)}
               </span>
             </div>
             <span className="text-[10px] text-sardine-slate font-medium block">

@@ -76,7 +76,7 @@ def get_simulation_presets():
         },
         {
             "id": "emergency_expense",
-            "name": "Emergency Tool/Hardware Shock ($500)",
+            "name": "Emergency Tool/Hardware Shock",
             "scenario_type": "emergency_expense",
             "description": "Unexpected critical equipment repair or software renewal.",
             "impact_hint": "Eats into cash buffer"

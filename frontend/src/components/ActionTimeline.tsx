@@ -1,12 +1,14 @@
 import React from 'react';
 import { Action } from '../types';
 import { Check } from 'lucide-react';
+import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 
 interface ActionTimelineProps {
   action?: Action;
 }
 
 export const ActionTimeline: React.FC<ActionTimelineProps> = ({ action }) => {
+  const { formatCurrency } = useRegionalPreferences();
   if (!action) return null;
 
   const states = [
@@ -101,7 +103,7 @@ export const ActionTimeline: React.FC<ActionTimelineProps> = ({ action }) => {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span>Type: <strong className="text-ink">{action.action_type}</strong></span>
           <span>Target: <strong className="text-ink truncate max-w-[150px] inline-block align-bottom">{action.recipient}</strong></span>
-          <span>Amount: <strong className="text-ink">${action.amount.toFixed(2)} USD</strong></span>
+          <span>Amount: <strong className="text-ink">{formatCurrency(action.amount, { currency: action.currency })}</strong></span>
         </div>
 
         {action.paypal_ref && (

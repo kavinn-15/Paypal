@@ -32,12 +32,15 @@ class LLMService:
         contractor_name: str,
         top_client_name: str,
         top_client_delay: int,
-        p_shortfall: float
+        p_shortfall: float,
+        currency: str = "USD",
+        currency_symbol: str = "$"
     ) -> str:
         """Generates plain-language explanation of the primary cashflow shortfall driver."""
+        sym = currency_symbol or "$"
         template_fallback = (
             f"If your largest client ({top_client_name}) pays {top_client_delay} days late as historically "
-            f"observed, you will be short by ${shortfall_amount:,.2f} before your contractor payout to "
+            f"observed, you will be short by {sym}{shortfall_amount:,.2f} before your contractor payout to "
             f"{contractor_name} on {target_date_str} (shortfall risk: {p_shortfall*100:.0f}%)."
         )
 
@@ -46,11 +49,11 @@ class LLMService:
 
         prompt = (
             f"Write a concise, natural 1-sentence explanation for a freelancer's cashflow dashboard. "
-            f"Computed facts: Starting balance is ${starting_balance:,.2f}. Shortfall amount is ${shortfall_amount:,.2f}. "
+            f"Computed facts: Starting balance is {sym}{starting_balance:,.2f}. Shortfall amount is {sym}{shortfall_amount:,.2f}. "
             f"Contractor payout to {contractor_name} is due on {target_date_str}. "
             f"Top late client is {top_client_name} who typically pays {top_client_delay} days late. "
             f"Shortfall risk is {p_shortfall*100:.0f}%. "
-            f"Rules: Quote exact dollar amounts (${shortfall_amount:,.2f}) and names. Do not invent any numbers."
+            f"Rules: Quote exact amounts ({sym}{shortfall_amount:,.2f}) and names. Do not invent any numbers."
         )
 
         try:
@@ -73,13 +76,16 @@ class LLMService:
         contractor_name: str,
         plan_a_risk: str,
         plan_b_risk: str,
-        plan_c_risk: str
+        plan_c_risk: str,
+        currency: str = "USD",
+        currency_symbol: str = "$"
     ) -> str:
         """Generates plain-language comparison of the three Rescue Plans."""
+        sym = currency_symbol or "$"
         template_fallback = (
-            f"Plan A incurs $0.00 cost but leaves payment timing uncertain if clients remain late. "
-            f"Plan B plausibly accelerates cash flow at an early-pay concession cost of ${plan_b_discount_cost:,.2f}. "
-            f"Plan C protects your Friday balance with $0.00 cash cost by splitting the {contractor_name} "
+            f"Plan A incurs {sym}0.00 cost but leaves payment timing uncertain if clients remain late. "
+            f"Plan B plausibly accelerates cash flow at an early-pay concession cost of {sym}{plan_b_discount_cost:,.2f}. "
+            f"Plan C protects your Friday balance with {sym}0.00 cash cost by splitting the {contractor_name} "
             f"payout, requiring mutual contractor consent."
         )
 
@@ -87,12 +93,12 @@ class LLMService:
             return template_fallback
 
         prompt = (
-            f"Summarize the trade-offs between three rescue plans for a ${shortfall_amount:,.2f} shortfall: "
-            f"Plan A: Collect without concessions (Cost: $0.00, Risk: {plan_a_risk}). "
-            f"Plan B: Limited early-pay discount (Cost: ${plan_b_discount_cost:,.2f}, Risk: {plan_b_risk}). "
-            f"Plan C: Collect + agreed contractor split with {contractor_name} (Cost: $0.00, Risk: {plan_c_risk}). "
+            f"Summarize the trade-offs between three rescue plans for a {sym}{shortfall_amount:,.2f} shortfall: "
+            f"Plan A: Collect without concessions (Cost: {sym}0.00, Risk: {plan_a_risk}). "
+            f"Plan B: Limited early-pay discount (Cost: {sym}{plan_b_discount_cost:,.2f}, Risk: {plan_b_risk}). "
+            f"Plan C: Collect + agreed contractor split with {contractor_name} (Cost: {sym}0.00, Risk: {plan_c_risk}). "
             f"Write a neutral 2-sentence trade-off comparison. Must use 'plausibly protects' instead of 'guarantees'. "
-            f"Never alter the figures: $0.00 and ${plan_b_discount_cost:,.2f}."
+            f"Never alter the figures: {sym}0.00 and {sym}{plan_b_discount_cost:,.2f}."
         )
 
         try:
@@ -112,13 +118,17 @@ class LLMService:
         invoice_id: str,
         amount: float,
         due_date_str: str,
-        pay_link: Optional[str] = None
+        pay_link: Optional[str] = None,
+        currency: str = "USD",
+        currency_symbol: str = "$"
     ) -> str:
         """Drafts polite payment reminder with live PayPal payment link."""
+        sym = currency_symbol or "$"
+        curr = currency or "USD"
         link_str = f" Pay securely via PayPal: {pay_link}" if pay_link else ""
         return (
             f"Hi {client_name}, this is a gentle reminder regarding invoice #{invoice_id} "
-            f"for ${amount:,.2f} USD due on {due_date_str}.{link_str} "
+            f"for {sym}{amount:,.2f} {curr} due on {due_date_str}.{link_str} "
             f"Thank you for your business!"
         )
 
@@ -130,14 +140,18 @@ class LLMService:
         discount_pct: float,
         discounted_amount: float,
         deadline_str: str,
-        pay_link: Optional[str] = None
+        pay_link: Optional[str] = None,
+        currency: str = "USD",
+        currency_symbol: str = "$"
     ) -> str:
         """Drafts early settlement incentive message."""
+        sym = currency_symbol or "$"
+        curr = currency or "USD"
         link_str = f" Pay here: {pay_link}" if pay_link else ""
         return (
             f"Hi {client_name}, we are pleased to offer a {discount_pct:.0f}% early payment discount on "
             f"invoice #{invoice_id}. If settled by {deadline_str}, the revised amount is "
-            f"${discounted_amount:,.2f} USD (saving ${original_amount - discounted_amount:,.2f}).{link_str} "
+            f"{sym}{discounted_amount:,.2f} {curr} (saving {sym}{original_amount - discounted_amount:,.2f}).{link_str} "
             f"Let us know if you'd like to take advantage of this concession!"
         )
 
@@ -148,13 +162,16 @@ class LLMService:
         first_installment: float,
         first_date_str: str,
         second_installment: float,
-        second_date_str: str
+        second_date_str: str,
+        currency: str = "USD",
+        currency_symbol: str = "$"
     ) -> str:
         """Drafts polite installment agreement message for contractor payout."""
+        sym = currency_symbol or "$"
         return (
             f"Hi {contractor_name}, thank you for your continued great work. To align with our client payment "
-            f"cycles, we propose splitting your ${total_amount:,.2f} payout into two installments: "
-            f"${first_installment:,.2f} on {first_date_str}, and the remaining ${second_installment:,.2f} "
+            f"cycles, we propose splitting your {sym}{total_amount:,.2f} payout into two installments: "
+            f"{sym}{first_installment:,.2f} on {first_date_str}, and the remaining {sym}{second_installment:,.2f} "
             f"on {second_date_str}. Please let us know if this arrangement works for you."
         )
 

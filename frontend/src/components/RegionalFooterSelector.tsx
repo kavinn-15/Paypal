@@ -10,6 +10,7 @@ import {
   StoredRegionalPreference
 } from '../utils/currency';
 import { useAuth } from '../context/AuthContext';
+import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 
 interface RegionalFooterSelectorProps {
   className?: string;
@@ -21,6 +22,7 @@ export const RegionalFooterSelector: React.FC<RegionalFooterSelectorProps> = ({
   variant = 'footer'
 }) => {
   const { currentUser, refreshUser } = useAuth();
+  const regionalPrefs = useRegionalPreferences();
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'country' | 'currency'>('country');
 
@@ -30,11 +32,20 @@ export const RegionalFooterSelector: React.FC<RegionalFooterSelectorProps> = ({
   const [isLoadingCatalogs, setIsLoadingCatalogs] = useState(false);
 
   // Current active selections
-  const [selectedCountry, setSelectedCountry] = useState<string>('US');
-  const [selectedCountryName, setSelectedCountryName] = useState<string>('United States');
-  const [selectedFlag, setSelectedFlag] = useState<string>('🇺🇸');
-  const [selectedCurrency, setSelectedCurrency] = useState<string>('USD');
-  const [selectedSymbol, setSelectedSymbol] = useState<string>('$');
+  const [selectedCountry, setSelectedCountry] = useState<string>(regionalPrefs.country || 'US');
+  const [selectedCountryName, setSelectedCountryName] = useState<string>(regionalPrefs.countryName || 'United States');
+  const [selectedFlag, setSelectedFlag] = useState<string>(regionalPrefs.flag || '🇺🇸');
+  const [selectedCurrency, setSelectedCurrency] = useState<string>(regionalPrefs.currency || 'USD');
+  const [selectedSymbol, setSelectedSymbol] = useState<string>(regionalPrefs.currencySymbol || '$');
+
+  // Sync state when regionalPrefs updates
+  useEffect(() => {
+    setSelectedCountry(regionalPrefs.country);
+    setSelectedCountryName(regionalPrefs.countryName);
+    setSelectedFlag(regionalPrefs.flag);
+    setSelectedCurrency(regionalPrefs.currency);
+    setSelectedSymbol(regionalPrefs.currencySymbol);
+  }, [regionalPrefs.country, regionalPrefs.countryName, regionalPrefs.flag, regionalPrefs.currency, regionalPrefs.currencySymbol]);
 
   // Search & detection states
   const [searchQuery, setSearchQuery] = useState('');
@@ -226,27 +237,7 @@ export const RegionalFooterSelector: React.FC<RegionalFooterSelectorProps> = ({
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const prefData: StoredRegionalPreference = {
-        country: selectedCountry,
-        countryName: selectedCountryName,
-        currency: selectedCurrency,
-        flag: selectedFlag,
-        symbol: selectedSymbol,
-        source: 'manual',
-        updatedAt: new Date().toISOString()
-      };
-
-      setStoredManualPreference(prefData);
-
-      // If user is authenticated, save directly to their profile
-      if (currentUser && refreshUser) {
-        await api.updateRegionalPreferences({
-          country: selectedCountry,
-          preferred_currency: selectedCurrency
-        });
-        await refreshUser();
-      }
-
+      await regionalPrefs.updatePreferences(selectedCountry, selectedCurrency);
       setIsOpen(false);
     } catch (err) {
       console.error('Failed to save preferences:', err);

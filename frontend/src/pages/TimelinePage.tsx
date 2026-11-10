@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { TimelineEntry, FinancialSummaryResponse } from '../types';
 import { Clock, ArrowDownLeft, ArrowUpRight, DollarSign, Shield, CheckCircle2, Calendar, FileText } from 'lucide-react';
+import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 
 export const TimelinePage: React.FC = () => {
+  const { formatCurrency } = useRegionalPreferences();
   const [summary, setSummary] = useState<FinancialSummaryResponse | null>(null);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,7 +70,7 @@ export const TimelinePage: React.FC = () => {
           <div className="bento-card p-4 sm:p-5 space-y-1">
             <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Confirmed Available Cash</span>
             <span className="font-mono font-black text-xl sm:text-2xl text-ink block">
-              ${summary.current_confirmed_balance.toLocaleString()} {summary.currency}
+              {formatCurrency(summary.current_confirmed_balance)}
             </span>
             <span className="text-[11px] text-emerald-700 font-semibold block">Authoritative Liquid Balance</span>
           </div>
@@ -76,7 +78,7 @@ export const TimelinePage: React.FC = () => {
           <div className="bento-card p-4 sm:p-5 space-y-1">
             <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Expected Inflows (30d)</span>
             <span className="font-mono font-black text-xl sm:text-2xl text-emerald-600 block">
-              +${summary.expected_inflows_30d.toLocaleString()} {summary.currency}
+              +{formatCurrency(summary.expected_inflows_30d)}
             </span>
             <span className="text-[11px] text-sardine-slate block">{summary.expected_inflows_count} pending receivables</span>
           </div>
@@ -84,7 +86,7 @@ export const TimelinePage: React.FC = () => {
           <div className="bento-card p-4 sm:p-5 space-y-1">
             <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Expected Outflows (30d)</span>
             <span className="font-mono font-black text-xl sm:text-2xl text-rose-600 block">
-              -${summary.expected_outflows_30d.toLocaleString()} {summary.currency}
+              -{formatCurrency(summary.expected_outflows_30d)}
             </span>
             <span className="text-[11px] text-sardine-slate block">{summary.pending_obligations_count} commitments</span>
           </div>
@@ -94,7 +96,7 @@ export const TimelinePage: React.FC = () => {
             <span className="font-mono font-black text-xl sm:text-2xl text-ink block">
               {(summary.reserve_coverage_ratio * 100).toFixed(0)}%
             </span>
-            <span className="text-[11px] text-sardine-slate block">Target: ${summary.emergency_reserve_target.toLocaleString()}</span>
+            <span className="text-[11px] text-sardine-slate block">Target: {formatCurrency(summary.emergency_reserve_target)}</span>
           </div>
         </div>
       )}
@@ -117,7 +119,7 @@ export const TimelinePage: React.FC = () => {
                 <span className={`font-mono font-black text-sm shrink-0 ${
                   item.direction === 'inflow' ? 'text-emerald-700' : 'text-slate-900'
                 }`}>
-                  {item.direction === 'inflow' ? '+' : '-'}${item.amount.toLocaleString()} {item.currency}
+                  {item.direction === 'inflow' ? '+' : '-'}{formatCurrency(item.amount, { currency: item.currency })}
                 </span>
               </div>
 
@@ -178,7 +180,7 @@ export const TimelinePage: React.FC = () => {
                   <td className={`px-5 py-3.5 font-mono font-black text-sm text-right whitespace-nowrap ${
                     item.direction === 'inflow' ? 'text-emerald-700' : 'text-slate-900'
                   }`}>
-                    {item.direction === 'inflow' ? '+' : '-'}${item.amount.toLocaleString()} {item.currency}
+                    {item.direction === 'inflow' ? '+' : '-'}{formatCurrency(item.amount, { currency: item.currency })}
                   </td>
                   <td className="px-5 py-3.5 font-mono text-[11px] text-sardine-muted truncate max-w-[140px]">
                     {item.reference_id || item.data_source}

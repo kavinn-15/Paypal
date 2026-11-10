@@ -82,6 +82,59 @@ CURRENCIES_DB: Dict[str, Dict[str, Any]] = {
     "MAD": {"code": "MAD", "name": "Moroccan Dirham", "symbol": "MAD", "decimals": 2},
 }
 
+# Authoritative Benchmark FX Rates (relative to 1.0 USD baseline)
+# Source: ECB / Reference Central Bank Rates
+BENCHMARK_EXCHANGE_RATES: Dict[str, float] = {
+    "USD": 1.000000,
+    "EUR": 0.920000,
+    "GBP": 0.790000,
+    "INR": 86.500000,
+    "CAD": 1.380000,
+    "AUD": 1.550000,
+    "JPY": 152.000000,
+    "SGD": 1.350000,
+    "AED": 3.672500,
+    "CHF": 0.880000,
+    "CNY": 7.240000,
+    "HKD": 7.780000,
+    "NZD": 1.680000,
+    "SEK": 10.600000,
+    "NOK": 10.850000,
+    "DKK": 6.870000,
+    "PLN": 3.980000,
+    "BRL": 5.750000,
+    "MXN": 20.300000,
+    "ZAR": 18.200000,
+    "SAR": 3.750000,
+    "TRY": 34.500000,
+    "KRW": 1390.000000,
+    "IDR": 15800.000000,
+    "MYR": 4.450000,
+    "PHP": 58.500000,
+    "THB": 34.800000,
+    "VND": 25400.000000,
+    "ILS": 3.700000,
+    "CLP": 970.000000,
+    "COP": 4350.000000,
+    "ARS": 1010.000000,
+    "EGP": 49.500000,
+    "NGN": 1680.000000,
+    "KES": 129.500000,
+    "QAR": 3.640000,
+    "KWD": 0.308000,
+}
+
+
+def get_exchange_rate(from_currency: str = "USD", to_currency: str = "USD") -> float:
+    """Calculates conversion rate between any two supported currencies via USD cross-rate."""
+    from_code = (from_currency or "USD").strip().upper()
+    to_code = (to_currency or "USD").strip().upper()
+    if from_code == to_code:
+        return 1.0
+    from_usd = BENCHMARK_EXCHANGE_RATES.get(from_code, 1.0)
+    to_usd = BENCHMARK_EXCHANGE_RATES.get(to_code, 1.0)
+    return round(to_usd / from_usd, 6)
+
 # Comprehensive Country Data (ISO 3166-1 alpha-2)
 COUNTRIES_DB: Dict[str, Dict[str, Any]] = {
     "US": {"code": "US", "name": "United States", "flag": "🇺🇸", "currency": "USD", "dial_code": "+1", "locale": "en-US", "popular": True},

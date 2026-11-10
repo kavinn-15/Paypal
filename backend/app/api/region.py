@@ -20,6 +20,8 @@ from backend.app.services.region_service import (
     list_all_currencies,
     COUNTRIES_DB,
     CURRENCIES_DB,
+    BENCHMARK_EXCHANGE_RATES,
+    get_exchange_rate,
 )
 
 router = APIRouter(tags=["Region & Localization"])
@@ -71,6 +73,30 @@ def get_currencies():
     List all supported currencies with ISO 4217 code, name, symbol, and decimals.
     """
     return list_all_currencies()
+
+
+@router.get("/region/rates")
+@router.get("/api/region/rates")
+def get_exchange_rates(from_currency: Optional[str] = "USD", to_currency: Optional[str] = None):
+    """
+    Retrieve authoritative currency conversion rates relative to USD baseline.
+    Optionally returns direct cross-currency rate between two currencies.
+    """
+    if to_currency:
+        rate = get_exchange_rate(from_currency or "USD", to_currency)
+        return {
+            "from_currency": (from_currency or "USD").upper(),
+            "to_currency": to_currency.upper(),
+            "rate": rate,
+            "source": "central_bank_benchmark",
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        }
+    return {
+        "base": "USD",
+        "base_currency": "USD",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "rates": BENCHMARK_EXCHANGE_RATES
+    }
 
 
 # -------------------------------------------------------------

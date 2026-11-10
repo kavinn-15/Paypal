@@ -297,3 +297,107 @@ def test_provider_failure_returns_graceful_unavailable(client, monkeypatch):
     data = res.json()
     assert data["detected"] is False
     assert data["status"] == "unavailable"
+
+
+def test_get_exchange_rates_endpoint(client):
+    """GET /api/region/rates returns benchmark exchange rates and cross conversions."""
+    res = client.get("/api/region/rates")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["base_currency"] == "USD"
+    rates = data["rates"]
+    assert "INR" in rates
+    assert "EUR" in rates
+    assert "GBP" in rates
+    assert "JPY" in rates
+    assert rates["USD"] == 1.0
+    assert rates["INR"] == 86.50
+
+    # Cross currency rate query
+    res_cross = client.get("/api/region/rates?from_currency=USD&to_currency=INR")
+    assert res_cross.status_code == 200
+    data_cross = res_cross.json()
+    assert data_cross["from_currency"] == "USD"
+    assert data_cross["to_currency"] == "INR"
+    assert data_cross["rate"] == 86.50
+
+
+def test_multi_user_regional_preference_isolation(client):
+    """User preferences are strictly isolated per account and never leak across users."""
+    db: Session = SessionLocal()
+    # Create or reset User Alpha (INR preference)
+    user_alpha = db.query(Owner).filter(Owner.email == "alpha.user@fintech.test").first()
+    if not user_alpha:
+        user_alpha = Owner(
+            name="User Alpha",
+            email="alpha.user@fintech.test",
+            currency="USD",
+            preferred_currency="INR",
+            country="IN",
+            locale="en-IN",
+            is_active=True,
+            email_verified=True,
+        )
+        db.add(user_alpha)
+    else:
+        user_alpha.preferred_currency = "INR"
+        user_alpha.country = "IN"
+        user_alpha.locale = "en-IN"
+    db.commit()
+    db.refresh(user_alpha)
+
+    # Create or reset User Beta (EUR preference)
+    user_beta = db.query(Owner).filter(Owner.email == "beta.user@fintech.test").first()
+    if not user_beta:
+        user_beta = Owner(
+            name="User Beta",
+            email="beta.user@fintech.test",
+            currency="USD",
+            preferred_currency="EUR",
+            country="DE",
+            locale="de-DE",
+            is_active=True,
+            email_verified=True,
+        )
+        db.add(user_beta)
+    else:
+        user_beta.preferred_currency = "EUR"
+        user_beta.country = "DE"
+        user_beta.locale = "de-DE"
+    db.commit()
+    db.refresh(user_beta)
+
+    token_alpha = create_access_token({"sub": user_alpha.id, "email": user_alpha.email, "email_verified": True})
+    token_beta = create_access_token({"sub": user_beta.id, "email": user_beta.email, "email_verified": True})
+
+    # Fetch preferences for Alpha
+    res_a = client.get("/api/profile/regional-preferences", headers={"Authorization": f"Bearer {token_alpha}"})
+    assert res_a.status_code == 200
+    assert res_a.json()["preferred_currency"] == "INR"
+    assert res_a.json()["country"] == "IN"
+    assert res_a.json()["currency_symbol"] == "₹"
+
+    # Fetch preferences for Beta
+    res_b = client.get("/api/profile/regional-preferences", headers={"Authorization": f"Bearer {token_beta}"})
+    assert res_b.status_code == 200
+    assert res_b.json()["preferred_currency"] == "EUR"
+    assert res_b.json()["country"] == "DE"
+    assert res_b.json()["currency_symbol"] == "€"
+
+    # Changing Alpha to JPY must not alter Beta
+    res_update = client.put(
+        "/api/profile/regional-preferences",
+        headers={"Authorization": f"Bearer {token_alpha}"},
+        json={"country": "JP", "preferred_currency": "JPY"}
+    )
+    assert res_update.status_code == 200
+    assert res_update.json()["preferred_currency"] == "JPY"
+
+    # Verify Beta is still EUR
+    res_b_after = client.get("/api/profile/regional-preferences", headers={"Authorization": f"Bearer {token_beta}"})
+    assert res_b_after.status_code == 200
+    assert res_b_after.json()["preferred_currency"] == "EUR"
+    assert res_b_after.json()["country"] == "DE"
+
+    db.close()
+

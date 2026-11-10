@@ -21,9 +21,11 @@ import {
   Play
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 import { RegionalFooterSelector } from '../components/RegionalFooterSelector';
 
 export const LandingPage: React.FC = () => {
+  const { formatCurrency } = useRegionalPreferences();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [demoLoading, setDemoLoading] = useState(false);
@@ -282,7 +284,7 @@ export const LandingPage: React.FC = () => {
                   <div className="text-[11px] font-mono text-sardine-muted uppercase tracking-wider">
                     Available Balance
                   </div>
-                  <div className="text-2xl font-black text-white mt-1">$1,800.00</div>
+                  <div className="text-2xl font-black text-white mt-1">{formatCurrency(1800)}</div>
                   <div className="text-[10px] text-emerald-400 mt-1 flex items-center space-x-1">
                     <CheckCircle2 className="w-3 h-3" />
                     <span>PayPal Sandbox Confirmed</span>
@@ -293,7 +295,7 @@ export const LandingPage: React.FC = () => {
                   <div className="text-[11px] font-mono text-sardine-muted uppercase tracking-wider">
                     Target Obligation
                   </div>
-                  <div className="text-2xl font-black text-slate-100 mt-1">$2,200.00</div>
+                  <div className="text-2xl font-black text-slate-100 mt-1">{formatCurrency(2200)}</div>
                   <div className="text-[10px] text-amber-400 mt-1 flex items-center space-x-1">
                     <Clock className="w-3 h-3" />
                     <span>Contractor due Friday Nov 14</span>
@@ -305,7 +307,7 @@ export const LandingPage: React.FC = () => {
                     <AlertTriangle className="w-3 h-3" />
                     <span>Projected Shortfall</span>
                   </div>
-                  <div className="text-2xl font-black text-red-400 mt-1">-$400.00</div>
+                  <div className="text-2xl font-black text-red-400 mt-1">-{formatCurrency(400)}</div>
                   <div className="text-[10px] text-red-300 mt-1">
                     Apex Labs invoice likely 5 days late
                   </div>
@@ -331,7 +333,7 @@ export const LandingPage: React.FC = () => {
                       Forecaster Agent Alert
                     </span>
                     <h3 className="text-base font-bold text-white mt-0.5">
-                      Shortfall Alert: $2,200 Contractor Payout at Risk on Friday
+                      Shortfall Alert: {formatCurrency(2200)} Contractor Payout at Risk on Friday
                     </h3>
                   </div>
                   <span className="inline-flex items-center text-xs px-2.5 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 font-mono">
@@ -348,11 +350,11 @@ export const LandingPage: React.FC = () => {
                     </div>
                     <div className="font-bold text-sm text-white">Plan A: 3% Client Early-Payment Discount</div>
                     <p className="text-xs text-sardine-muted mt-1">
-                      Offer Apex Labs a 3% discount ($90 savings) to settle their $3,000 invoice 5 days early via PayPal.
+                      Offer Apex Labs a 3% discount ({formatCurrency(90)} savings) to settle their {formatCurrency(3000)} invoice 5 days early via PayPal.
                     </p>
                     <div className="mt-3 pt-3 border-t border-ink-800 flex items-center justify-between text-xs">
                       <span className="text-slate-400">Total Net Cost:</span>
-                      <span className="font-mono font-bold text-emerald-400">$90.00 (vs $180 interest)</span>
+                      <span className="font-mono font-bold text-emerald-400">{formatCurrency(90)} (vs {formatCurrency(180)} interest)</span>
                     </div>
                   </div>
 
@@ -360,11 +362,11 @@ export const LandingPage: React.FC = () => {
                   <div className="rounded-xl border border-ink-800 bg-ink-900/50 p-4">
                     <div className="font-bold text-sm text-white">Plan B: Contractor Payout Split</div>
                     <p className="text-xs text-sardine-muted mt-1">
-                      Pay $1,500 on Friday Nov 14 and stage the remaining $700 for Tuesday Nov 18 upon client receipt.
+                      Pay {formatCurrency(1500)} on Friday Nov 14 and stage the remaining {formatCurrency(700)} for Tuesday Nov 18 upon client receipt.
                     </p>
                     <div className="mt-3 pt-3 border-t border-ink-800 flex items-center justify-between text-xs">
                       <span className="text-slate-400">Total Net Cost:</span>
-                      <span className="font-mono font-bold text-slate-200">$0.00 (Preserves cash buffer)</span>
+                      <span className="font-mono font-bold text-slate-200">{formatCurrency(0)} (Preserves cash buffer)</span>
                     </div>
                   </div>
                 </div>

@@ -87,6 +87,10 @@ def get_latest_forecast(
     ).all()
     plans_out = []
 
+    from backend.app.services.region_service import CURRENCIES_DB
+    user_curr = (current_user.preferred_currency or current_user.currency or "USD").upper()
+    user_sym = CURRENCIES_DB.get(user_curr, {}).get("symbol", "$")
+
     for p in plans_models:
         primary_action = p.actions[0] if p.actions else None
         if not primary_action:
@@ -96,13 +100,13 @@ def get_latest_forecast(
         cost_desc = ""
         if p.plan_type == "A":
             desc = "Send official PayPal payment reminder with live pay link to top reliable client."
-            cost_desc = "$0.00 concession cost. Zero revenue lost."
+            cost_desc = f"{user_sym}0.00 concession cost. Zero revenue lost."
         elif p.plan_type == "B":
             desc = "Apply limited early-pay discount to accelerate settlement before Friday."
-            cost_desc = f"${float(p.cost):,.2f} discount cost."
+            cost_desc = f"{user_sym}{float(p.cost):,.2f} discount cost."
         elif p.plan_type == "C":
             desc = f"Send reminder to client and split {obligation.payee_name}'s payout into two installments."
-            cost_desc = "$0.00 cash cost (goodwill proxy)."
+            cost_desc = f"{user_sym}0.00 cash cost (goodwill proxy)."
 
         plans_out.append(RescuePlanOut(
             id=p.id,

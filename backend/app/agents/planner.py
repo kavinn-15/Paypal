@@ -46,6 +46,11 @@ class RescuePlanEngine:
         first_shortfall_date = forecast_response.first_shortfall_date
         starting_balance = forecast_response.starting_balance
         obligation_obj = self.db.query(Obligation).filter(Obligation.id == forecast_response.obligation.id).first()
+        from backend.app.models import Owner
+        from backend.app.services.region_service import CURRENCIES_DB
+        owner = self.db.query(Owner).filter(Owner.id == obligation_obj.owner_id).first() if obligation_obj else None
+        owner_curr = (owner.preferred_currency or owner.currency or "USD") if owner else "USD"
+        owner_sym = CURRENCIES_DB.get(owner_curr, {}).get("symbol", "$")
 
         start_time = to_naive(forecast_response.created_at)
         obl_due = to_naive(obligation_obj.due_date)
@@ -317,7 +322,7 @@ class RescuePlanEngine:
             name="Plan B: Limited Early-Pay Discount",
             description=f"Apply {discount_pct:.1f}% discount to {disc_client_name}'s invoice in exchange for settlement by Friday.",
             cost=disc_cost,
-            cost_description=f"${disc_cost:,.2f} discount cost ({discount_pct:.1f}% concession).",
+            cost_description=f"{owner_sym}{disc_cost:,.2f} discount cost ({discount_pct:.1f}% concession).",
             incoming_needed=shortfall,
             selected_clients=[discount_cand] if discount_cand else [],
             rationale=plan_b_rationale,
@@ -358,8 +363,8 @@ class RescuePlanEngine:
             if consent_is_sim:
                 plan_c_risk += " [SIMULATED CONSENT — DEMO ONLY: Genuine payout execution disabled]"
             plan_c_rationale = (
-                f"Pays contractor {obligation_obj.payee_name} ${plan_c_inst1:,.2f} on Friday (fully covered by current "
-                f"balance) and proposes deferring ${plan_c_inst2:,.2f} to {inst2_date_str} when client funds arrive."
+                f"Pays contractor {obligation_obj.payee_name} {owner_sym}{plan_c_inst1:,.2f} on Friday (fully covered by current "
+                f"balance) and proposes deferring {owner_sym}{plan_c_inst2:,.2f} to {inst2_date_str} when client funds arrive."
             )
             if consent_is_sim:
                 plan_c_rationale += " (SIMULATED CONSENT — DEMO ONLY)"
@@ -377,10 +382,11 @@ class RescuePlanEngine:
             )
 
             plan_c_idempotency = f"act_split_{obligation_obj.id}_{uuid.uuid4().hex[:8]}"
+            plan_c_currency = obligation_obj.currency or owner_curr
             plan_c_hash = generate_approval_hash(
                 recipient=obligation_obj.payee_name,
                 amount=plan_c_inst1,
-                currency="USD",
+                currency=plan_c_currency,
                 action_type="SCHEDULE_PAYOUT_SPLIT",
                 idempotency_key=plan_c_idempotency,
                 obligation_id=obligation_obj.id,
@@ -394,7 +400,9 @@ class RescuePlanEngine:
                 first_installment=plan_c_inst1,
                 first_date_str=obligation_obj.due_date.strftime("%b %d"),
                 second_installment=plan_c_inst2,
-                second_date_str=inst2_date_str
+                second_date_str=inst2_date_str,
+                currency=plan_c_currency,
+                currency_symbol=owner_sym
             )
 
             plan_c_db = RescuePlan(
@@ -435,7 +443,7 @@ class RescuePlanEngine:
                 action_type="SCHEDULE_PAYOUT_SPLIT",
                 recipient=obligation_obj.payee_name,
                 amount=plan_c_inst1,
-                currency="USD",
+                currency=plan_c_currency,
                 state="proposed",
                 idempotency_key=plan_c_idempotency,
                 approval_hash=plan_c_hash,
@@ -472,7 +480,7 @@ class RescuePlanEngine:
                 name="Plan C: Collect Plus Agreed Contractor Split",
                 description=f"Send reminder to client and split {obligation_obj.payee_name}'s payout into two installments (inst 2 proposed for manual disbursement).",
                 cost=0.0,
-                cost_description="$0.00 cash cost (possible contractor goodwill impact).",
+                cost_description=f"{owner_sym}0.00 cash cost (possible contractor goodwill impact).",
                 incoming_needed=0.0,
                 selected_clients=scored_targets[:1],
                 rationale=plan_c_rationale,
@@ -495,7 +503,9 @@ class RescuePlanEngine:
             contractor_name=obligation_obj.payee_name,
             plan_a_risk=plan_a_risk,
             plan_b_risk=plan_b_risk,
-            plan_c_risk=plan_c_risk
+            plan_c_risk=plan_c_risk,
+            currency=owner_curr,
+            currency_symbol=owner_sym
         )
 
         return PlansComparisonResponse(

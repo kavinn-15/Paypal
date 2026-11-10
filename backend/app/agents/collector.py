@@ -19,12 +19,16 @@ class CollectorAgent:
         """
         Ranks and selects clients whose payment plausibly covers the shortfall.
         """
+        from backend.app.services.region_service import CURRENCIES_DB
+
         scored = []
         for inv in open_invoices:
             amount = inv["amount"]
             p_late = inv.get("p_late", 0.5)
             rel_weight = inv.get("relationship_weight", 1.0)
             p_on_time = max(1.0 - p_late, 0.05)
+            inv_curr = inv.get("currency", "USD")
+            curr_sym = CURRENCIES_DB.get(inv_curr, {}).get("symbol", "$")
 
             # Score prioritizes invoices that cover a large fraction of the gap and have high reliability
             coverage_ratio = min(amount / max(shortfall_amount, 1.0), 1.5)
@@ -32,7 +36,7 @@ class CollectorAgent:
 
             coverage_pct = min(amount / max(shortfall_amount, 1.0) * 100, 100) if shortfall_amount > 0 else 100
             why_selected = (
-                f"Invoice of ${amount:,.2f} covers {coverage_pct:.0f}% of the shortfall. "
+                f"Invoice of {curr_sym}{amount:,.2f} covers {coverage_pct:.0f}% of the shortfall. "
                 f"Client has an estimated {p_on_time*100:.0f}% probability of timely settlement with relationship weight {rel_weight:.2f}."
             )
 
@@ -62,11 +66,15 @@ class CollectorAgent:
         Prioritizes larger invoices that are historically delayed (high elasticity to financial incentives).
         """
         candidates = []
+        from backend.app.services.region_service import CURRENCIES_DB
+
         for inv in open_invoices:
             amount = inv["amount"]
             p_late = inv.get("p_late", 0.5)
             discount_amount = round(amount * (discount_pct / 100.0), 2)
             net_proceeds = amount - discount_amount
+            inv_curr = inv.get("currency", "USD")
+            curr_sym = CURRENCIES_DB.get(inv_curr, {}).get("symbol", "$")
 
             # Best discount candidate has high amount, high delay, and net proceeds cover the shortfall
             incentive_fit = (amount / max(shortfall_amount, 1.0)) * (0.5 + p_late)
@@ -83,9 +91,9 @@ class CollectorAgent:
                 "net_proceeds": net_proceeds,
                 "score": incentive_fit,
                 "why_selected": (
-                    f"Selected {inv['client_name']}'s ${amount:,.2f} invoice because early cash acceleration "
-                    f"yields ${net_proceeds:,.2f} net (covering {disc_coverage_pct:.0f}% "
-                    f"of shortfall) at an affordable {discount_pct:.1f}% discount cost of ${discount_amount:,.2f}."
+                    f"Selected {inv['client_name']}'s {curr_sym}{amount:,.2f} invoice because early cash acceleration "
+                    f"yields {curr_sym}{net_proceeds:,.2f} net (covering {disc_coverage_pct:.0f}% "
+                    f"of shortfall) at an affordable {discount_pct:.1f}% discount cost of {curr_sym}{discount_amount:,.2f}."
                 ),
                 "pay_link": inv.get("pay_link")
             })

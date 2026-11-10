@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { RegionalPreferencesProvider } from './context/RegionalPreferencesContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { PublicRoute } from './components/PublicRoute';
 import { Navbar } from './components/Navbar';
@@ -106,85 +107,87 @@ const AuthenticatedLayout: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          {/* Public Landing Page */}
-          <Route path="/" element={<LandingPage />} />
+      <RegionalPreferencesProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Public Landing Page */}
+            <Route path="/" element={<LandingPage />} />
 
-          {/* Authentication Pages (redirect if already logged in) */}
-          <Route
-            path="/login"
-            element={
-              <PublicRoute>
-                <LoginPage />
-              </PublicRoute>
-            }
-          />
-          <Route
-            path="/register"
-            element={
-              <PublicRoute>
-                <RegisterPage />
-              </PublicRoute>
-            }
-          />
-          <Route
-            path="/forgot-password"
-            element={
-              <PublicRoute>
-                <ForgotPasswordPage />
-              </PublicRoute>
-            }
-          />
-          <Route
-            path="/verify-otp"
-            element={
-              <PublicRoute>
-                <VerifyOtpPage />
-              </PublicRoute>
-            }
-          />
-          <Route
-            path="/reset-password"
-            element={
-              <PublicRoute>
-                <ResetPasswordPage />
-              </PublicRoute>
-            }
-          />
-          <Route path="/verify-email" element={<EmailVerificationPage />} />
-          <Route path="/verify-phone" element={<PhoneVerificationPage />} />
-          <Route path="/auth/callback/google" element={<GoogleCallbackPage />} />
+            {/* Authentication Pages (redirect if already logged in) */}
+            <Route
+              path="/login"
+              element={
+                <PublicRoute>
+                  <LoginPage />
+                </PublicRoute>
+              }
+            />
+            <Route
+              path="/register"
+              element={
+                <PublicRoute>
+                  <RegisterPage />
+                </PublicRoute>
+              }
+            />
+            <Route
+              path="/forgot-password"
+              element={
+                <PublicRoute>
+                  <ForgotPasswordPage />
+                </PublicRoute>
+              }
+            />
+            <Route
+              path="/verify-otp"
+              element={
+                <PublicRoute>
+                  <VerifyOtpPage />
+                </PublicRoute>
+              }
+            />
+            <Route
+              path="/reset-password"
+              element={
+                <PublicRoute>
+                  <ResetPasswordPage />
+                </PublicRoute>
+              }
+            />
+            <Route path="/verify-email" element={<EmailVerificationPage />} />
+            <Route path="/verify-phone" element={<PhoneVerificationPage />} />
+            <Route path="/auth/callback/google" element={<GoogleCallbackPage />} />
 
-          {/* Protected Financial Routes */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <AuthenticatedLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/whatif" element={<WhatIfPage />} />
-            <Route path="/supervisor" element={<SupervisorPage />} />
-            <Route path="/negotiation" element={<NegotiationPage />} />
-            <Route path="/resilience" element={<ResiliencePage />} />
-            <Route path="/timeline" element={<TimelinePage />} />
-            <Route path="/clients" element={<ClientsPage />} />
-            <Route path="/invoices" element={<ClientsPage />} />
-            <Route path="/obligations" element={<DashboardPage />} />
-            <Route path="/forecast" element={<DashboardPage />} />
-            <Route path="/plans" element={<DashboardPage />} />
-            <Route path="/inbox" element={<ApprovalInboxPage />} />
-            <Route path="/approvals" element={<ApprovalInboxPage />} />
-            <Route path="/audit" element={<AuditPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Route>
+            {/* Protected Financial Routes */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AuthenticatedLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/whatif" element={<WhatIfPage />} />
+              <Route path="/supervisor" element={<SupervisorPage />} />
+              <Route path="/negotiation" element={<NegotiationPage />} />
+              <Route path="/resilience" element={<ResiliencePage />} />
+              <Route path="/timeline" element={<TimelinePage />} />
+              <Route path="/clients" element={<ClientsPage />} />
+              <Route path="/invoices" element={<ClientsPage />} />
+              <Route path="/obligations" element={<DashboardPage />} />
+              <Route path="/forecast" element={<DashboardPage />} />
+              <Route path="/plans" element={<DashboardPage />} />
+              <Route path="/inbox" element={<ApprovalInboxPage />} />
+              <Route path="/approvals" element={<ApprovalInboxPage />} />
+              <Route path="/audit" element={<AuditPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Route>
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </RegionalPreferencesProvider>
     </AuthProvider>
   );
 };

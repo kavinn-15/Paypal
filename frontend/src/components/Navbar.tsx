@@ -20,6 +20,7 @@ import {
   X,
   ChevronRight
 } from 'lucide-react';
+import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 
 interface NavbarProps {
   currentTab?: string;
@@ -43,6 +44,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { country, currency, currencySymbol, countryName, flag } = useRegionalPreferences();
 
   const navItems = [
     { id: 'dashboard', path: '/dashboard', label: 'Forecast', icon: Activity },
@@ -156,12 +158,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-lg text-ink text-xs font-semibold">
                     <UserCheck className="w-3.5 h-3.5 text-electric" />
                     <span className="max-w-[120px] truncate">{currentUser.name || currentUser.email}</span>
-                    {currentUser.is_demo ? (
+                    <Link
+                      to="/settings"
+                      className="inline-flex items-center space-x-1 text-[10px] bg-slate-200/80 hover:bg-slate-300 text-slate-800 font-bold px-1.5 py-0.5 rounded transition-colors"
+                      title={`Country: ${countryName} (${country}), Preferred Currency: ${currency} (${currencySymbol})`}
+                    >
+                      <span>{flag}</span>
+                      <span>{currency}</span>
+                    </Link>
+                    {currentUser.is_demo && (
                       <span className="text-[9px] bg-electric/10 text-electric font-bold px-1 rounded-sm">DEMO</span>
-                    ) : (
-                      <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1 rounded-sm">
-                        {currentUser.currency || 'USD'}
-                      </span>
                     )}
                   </div>
 
@@ -266,13 +272,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {currentUser.name || currentUser.email}
                   </span>
                   <div className="flex items-center space-x-1.5 mt-0.5">
-                    {currentUser.is_demo ? (
-                      <span className="text-[9px] bg-electric/10 text-electric font-bold px-1.5 py-0.2 rounded">
+                    <Link
+                      to="/settings"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="inline-flex items-center space-x-1 text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-1.5 py-0.5 rounded transition-colors w-fit"
+                      title={`Country: ${countryName} (${country}), Preferred Currency: ${currency} (${currencySymbol})`}
+                    >
+                      <span>{flag}</span>
+                      <span>{currency} ({currencySymbol})</span>
+                    </Link>
+                    {currentUser.is_demo && (
+                      <span className="text-[9px] bg-electric/10 text-electric font-bold px-1.5 py-0.5 rounded w-fit">
                         DEMO PERSONA
-                      </span>
-                    ) : (
-                      <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded">
-                        {currentUser.currency || 'USD'}
                       </span>
                     )}
                     <span className="text-[10px] text-sardine-slate truncate">

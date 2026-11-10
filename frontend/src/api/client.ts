@@ -478,4 +478,7 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+
+  getExchangeRates: () =>
+    request<{ base_currency: string; rates: Record<string, number>; timestamp: string }>('/region/rates'),
 };

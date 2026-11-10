@@ -236,6 +236,10 @@ class ForecasterAgent:
         top_driver_delay = int(round(driver_rankings[0].expected_days_late)) if driver_rankings else 5
         target_day = obligation.due_date.strftime("%A, %b %d")
 
+        from backend.app.services.region_service import CURRENCIES_DB
+        owner_curr = (owner.preferred_currency or owner.currency or "USD") if owner else "USD"
+        owner_sym = CURRENCIES_DB.get(owner_curr, {}).get("symbol", "$")
+
         driver_explanation = llm_service.generate_driver_explanation(
             starting_balance=starting_balance,
             shortfall_amount=shortfall_amount,
@@ -243,7 +247,9 @@ class ForecasterAgent:
             contractor_name=obligation.payee_name,
             top_client_name=top_driver_name,
             top_client_delay=top_driver_delay,
-            p_shortfall=p_shortfall
+            p_shortfall=p_shortfall,
+            currency=owner_curr,
+            currency_symbol=owner_sym
         )
 
         # 8. Persist Forecast Run

@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { ClientData } from '../types';
 import { Users, ExternalLink, Calendar, Database, CheckCircle, Clock, AlertTriangle, Sparkles, DollarSign } from 'lucide-react';
+import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 
 export const ClientsPage: React.FC = () => {
+  const { formatCurrency } = useRegionalPreferences();
   const [clients, setClients] = useState<ClientData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -78,7 +80,7 @@ export const ClientsPage: React.FC = () => {
             <div className="text-left">
               <span className="text-[10px] uppercase font-bold text-sardine-muted block leading-tight">Total Open</span>
               <span className="font-mono font-black text-sm text-ink leading-tight">
-                ${totalOpenInvoiced.toLocaleString()} USD
+                {formatCurrency(totalOpenInvoiced)}
               </span>
             </div>
           </div>
@@ -164,7 +166,7 @@ export const ClientsPage: React.FC = () => {
                   </span>
                   {c.open_invoices.length > 0 && (
                     <span className="font-mono text-xs font-bold text-electric">
-                      ${c.open_invoices.reduce((a, b) => a + b.amount, 0).toLocaleString()} USD
+                      {formatCurrency(c.open_invoices.reduce((a, b) => a + b.amount, 0))}
                     </span>
                   )}
                 </div>
@@ -181,7 +183,7 @@ export const ClientsPage: React.FC = () => {
                     >
                       <div className="min-w-0">
                         <div className="font-black text-ink font-mono text-sm">
-                          ${inv.amount.toLocaleString()} <span className="text-[11px] font-sans font-semibold text-sardine-slate">{inv.currency}</span>
+                          {formatCurrency(inv.amount, { currency: inv.currency, showCode: true })}
                         </div>
                         <div className="text-[11px] text-sardine-slate truncate">
                           Due: <span className="font-semibold text-slate-700">{inv.due_date}</span> &bull; #{inv.paypal_invoice_id}

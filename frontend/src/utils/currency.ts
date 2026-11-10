@@ -101,6 +101,95 @@ export function getCurrencySymbol(currencyCode: string = 'USD', locale: string =
 }
 
 /**
+ * Default fallback benchmark exchange rates (units per 1 USD)
+ */
+export const DEFAULT_EXCHANGE_RATES: Record<string, number> = {
+  USD: 1.0,
+  EUR: 0.92,
+  GBP: 0.79,
+  INR: 83.50,
+  CAD: 1.36,
+  AUD: 1.52,
+  JPY: 155.0,
+  SGD: 1.35,
+  AED: 3.67,
+  CHF: 0.91,
+  CNY: 7.23,
+  BRL: 5.15,
+  MXN: 16.85,
+  NZD: 1.66,
+  SEK: 10.82,
+};
+
+/**
+ * Converts an amount from one currency to another using exchange rates normalized to USD.
+ */
+export function convertAmount(
+  amount: number | string | null | undefined,
+  fromCurrency: string = 'USD',
+  toCurrency: string = 'USD',
+  rates: Record<string, number> = DEFAULT_EXCHANGE_RATES
+): number {
+  if (amount === null || amount === undefined || isNaN(Number(amount))) return 0;
+  const num = typeof amount === 'number' ? amount : parseFloat(amount);
+  const fromCode = (fromCurrency || 'USD').toUpperCase();
+  const toCode = (toCurrency || 'USD').toUpperCase();
+
+  if (fromCode === toCode) return num;
+
+  const fromRate = rates[fromCode] ?? (fromCode === 'USD' ? 1.0 : undefined);
+  const toRate = rates[toCode] ?? (toCode === 'USD' ? 1.0 : undefined);
+
+  if (!fromRate || !toRate) {
+    return num; // Graceful fallback: return original amount if rate unknown
+  }
+
+  // Convert from origin to USD baseline, then from USD to target
+  const inUSD = num / fromRate;
+  return inUSD * toRate;
+}
+
+/**
+ * Formats a generic number using standard Intl.NumberFormat according to locale.
+ */
+export function formatNumber(
+  value: number | string | null | undefined,
+  locale: string = 'en-US',
+  options?: Intl.NumberFormatOptions
+): string {
+  if (value === null || value === undefined || isNaN(Number(value))) return '—';
+  const num = typeof value === 'number' ? value : parseFloat(value);
+  try {
+    return new Intl.NumberFormat(locale || 'en-US', options).format(num);
+  } catch {
+    return num.toLocaleString();
+  }
+}
+
+/**
+ * Formats a date using standard Intl.DateTimeFormat according to locale.
+ */
+export function formatDate(
+  date: Date | string | number | null | undefined,
+  locale: string = 'en-US',
+  options?: Intl.DateTimeFormatOptions
+): string {
+  if (!date) return '—';
+  try {
+    const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
+    if (isNaN(d.getTime())) return '—';
+    const defaultOptions: Intl.DateTimeFormatOptions = options || {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    };
+    return new Intl.DateTimeFormat(locale || 'en-US', defaultOptions).format(d);
+  } catch {
+    return String(date);
+  }
+}
+
+/**
  * Read explicit manual regional preference from localStorage.
  * Stale or detected entries residing under the manual key are evicted.
  */

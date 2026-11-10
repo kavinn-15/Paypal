@@ -26,6 +26,10 @@ def get_plan(
     if not action:
         raise HTTPException(status_code=400, detail="Plan has no primary action attached.")
 
+    from backend.app.services.region_service import CURRENCIES_DB
+    user_curr = (current_user.preferred_currency or current_user.currency or "USD").upper()
+    user_sym = CURRENCIES_DB.get(user_curr, {}).get("symbol", "$")
+
     return RescuePlanOut(
         id=plan.id,
         run_id=plan.run_id,
@@ -33,7 +37,7 @@ def get_plan(
         name=f"Plan {plan.plan_type}",
         description="Rescue plan option",
         cost=float(plan.cost),
-        cost_description=f"${float(plan.cost):,.2f}",
+        cost_description=f"{user_sym}{float(plan.cost):,.2f}",
         incoming_needed=float(plan.incoming_needed),
         selected_clients=plan.selected_clients,
         rationale=plan.rationale,

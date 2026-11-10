@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 import { PayPalConnectionStatus, CountryItem, CurrencyItem } from '../types';
 import { PhoneInput } from '../components/PhoneInput';
 import {
@@ -27,6 +28,7 @@ import {
 
 export const SettingsPage: React.FC = () => {
   const { currentUser, refreshUser } = useAuth();
+  const { updatePreferences } = useRegionalPreferences();
   const [status, setStatus] = useState<PayPalConnectionStatus | null>(null);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; token_preview?: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
@@ -98,15 +100,14 @@ export const SettingsPage: React.FC = () => {
     setRegionalSuccess(null);
     setRegionalError(null);
     try {
-      const res = await api.updateRegionalPreferences({
-        country: selectedCountry,
-        preferred_currency: selectedDisplayCurrency,
-        region_detection_enabled: autoDetectEnabled
+      await updatePreferences(selectedCountry, selectedDisplayCurrency, {
+        region_detection_enabled: autoDetectEnabled,
       });
-      setPreferenceSource(res.region_preference_source);
-      if (res.updated_at) setPreferencesUpdatedAt(res.updated_at);
-      setRegionalSuccess('Regional preferences saved successfully. Dashboard and forecasting will use these settings.');
-      await refreshUser();
+      setPreferenceSource('manual');
+      setPreferencesUpdatedAt(new Date().toISOString());
+      setRegionalSuccess(
+        'Regional preferences saved successfully! All dashboards, cards, tables, and AI agents are immediately synchronized.'
+      );
     } catch (err: any) {
       setRegionalError(err.message || 'Failed to update regional preferences.');
     } finally {

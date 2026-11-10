@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { DailyProjection, RescuePlan } from '../types';
 import { ShieldCheck, Activity } from 'lucide-react';
+import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 
 interface ForecastChartProps {
   projections: DailyProjection[];
@@ -28,6 +29,7 @@ export const ForecastChart: React.FC<ForecastChartProps> = ({
   obligationAmount,
 }) => {
   const [showUncertaintyBand, setShowUncertaintyBand] = useState(true);
+  const { currencySymbol, formatCurrency } = useRegionalPreferences();
 
   const chartData = projections.map((p, idx) => {
     const planP = selectedPlan?.forecast_with_plan?.[idx];
@@ -69,28 +71,28 @@ export const ForecastChart: React.FC<ForecastChartProps> = ({
             <div className="flex justify-between items-center space-x-3">
               <span className="text-sardine-muted font-sans">Baseline:</span>
               <span className={`font-bold ${data.baselineBalance < 0 ? 'text-rose-400' : 'text-slate-100'}`}>
-                ${data.baselineBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                {formatCurrency(data.baselineBalance)}
               </span>
             </div>
 
             {data.planBalance !== undefined && (
               <div className="flex justify-between items-center space-x-3 text-electric-300 font-bold">
                 <span className="font-sans text-electric-200">With {selectedPlan?.name?.split(':')[0]}:</span>
-                <span>${data.planBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                <span>{formatCurrency(data.planBalance)}</span>
               </div>
             )}
 
             {data.inflows > 0 && (
               <div className="flex justify-between items-center space-x-3 text-emerald-400">
                 <span className="font-sans text-slate-400">Inflows:</span>
-                <span>+${data.inflows.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                <span>+{formatCurrency(data.inflows)}</span>
               </div>
             )}
 
             {data.outflows > 0 && (
               <div className="flex justify-between items-center space-x-3 text-rose-300">
                 <span className="font-sans text-slate-400">Outflows:</span>
-                <span>-${data.outflows.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                <span>-{formatCurrency(data.outflows)}</span>
               </div>
             )}
 
@@ -98,7 +100,7 @@ export const ForecastChart: React.FC<ForecastChartProps> = ({
               <div className="flex justify-between items-center space-x-3 text-sardine-muted pt-1 border-t border-slate-800 text-[10px]">
                 <span className="font-sans">Monte Carlo 80% CI:</span>
                 <span>
-                  ${Math.round(data.ciLow)} &rarr; ${Math.round(data.ciHigh)}
+                  {formatCurrency(Math.round(data.ciLow))} &rarr; {formatCurrency(Math.round(data.ciHigh))}
                 </span>
               </div>
             )}
@@ -153,7 +155,7 @@ export const ForecastChart: React.FC<ForecastChartProps> = ({
               tick={{ fontSize: 10, fill: '#6b7c99' }}
               tickLine={false}
               axisLine={{ stroke: '#CBD5E1' }}
-              tickFormatter={(v) => `$${v}`}
+              tickFormatter={(v) => `${currencySymbol}${v}`}
             />
             <Tooltip content={<CustomTooltip />} />
             <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '11px' }} />
@@ -215,7 +217,7 @@ export const ForecastChart: React.FC<ForecastChartProps> = ({
       <div className="mt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px] text-sardine-slate border-t border-slate-100 pt-3">
         <div className="flex items-center space-x-2">
           <span className="w-2 h-2 rounded-full bg-ink shrink-0"></span>
-          <span>Baseline drops into negative balance ($1,400 shortfall) on Friday</span>
+          <span>Baseline drops into negative balance ({formatCurrency(obligationAmount || 1400)} shortfall) on Friday</span>
         </div>
         <div className="flex items-center space-x-1.5 font-medium text-electric">
           <ShieldCheck className="w-3.5 h-3.5 shrink-0" />

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Brain, Sparkles, Database } from 'lucide-react';
 import { DriverContribution } from '../types';
+import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 
 interface DriverExplanationCardProps {
   explanationText: string;
@@ -13,6 +14,7 @@ export const DriverExplanationCard: React.FC<DriverExplanationCardProps> = ({
   driverRankings = [],
   isSourceSeeded = true,
 }) => {
+  const { formatCurrency } = useRegionalPreferences();
   return (
     <div className="bento-ink p-4 sm:p-6 space-y-4 shadow-bento h-full flex flex-col justify-between w-full overflow-hidden">
       <div className="space-y-4">
@@ -72,14 +74,14 @@ export const DriverExplanationCard: React.FC<DriverExplanationCardProps> = ({
                     <div className="min-w-0">
                       <span className="font-bold text-white block text-xs truncate">{driver.client_name}</span>
                       <span className="text-[10px] text-sardine-muted block truncate">
-                        ~{driver.expected_days_late.toFixed(0)}d delay on ${driver.invoice_amount.toLocaleString()} invoice
+                        ~{driver.expected_days_late.toFixed(0)}d delay on {formatCurrency(driver.invoice_amount)} invoice
                       </span>
                     </div>
                   </div>
 
                   <div className="text-right shrink-0">
                     <span className="font-mono font-bold text-xs text-rose-400 block">
-                      +${(driver.marginal_shortfall_delta ?? driver.marginal_shortfall_impact ?? 0).toFixed(0)}
+                      +{formatCurrency(driver.marginal_shortfall_delta ?? driver.marginal_shortfall_impact ?? 0)}
                     </span>
                     <span className="text-[9px] text-sardine-muted uppercase tracking-wider">Impact</span>
                   </div>

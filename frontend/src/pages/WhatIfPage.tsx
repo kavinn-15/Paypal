@@ -3,8 +3,10 @@ import { api } from '../api/client';
 import { SimulationPreset, WhatIfComparisonResponse } from '../types';
 import { Sliders, AlertTriangle, ArrowRight, TrendingDown, DollarSign, CheckCircle2, RefreshCw, Sparkles, HelpCircle } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
+import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 
 export const WhatIfPage: React.FC = () => {
+  const { formatCurrency, currencySymbol } = useRegionalPreferences();
   const [presets, setPresets] = useState<SimulationPreset[]>([]);
   const [activePreset, setActivePreset] = useState<string>('client_delay_5d');
   const [comparison, setComparison] = useState<WhatIfComparisonResponse | null>(null);
@@ -49,11 +51,10 @@ export const WhatIfPage: React.FC = () => {
       })
     : [];
 
-  const formatCurrency = (val: number) => `$${Math.round(val).toLocaleString()}`;
   const formatDelta = (val: number) => {
-    if (val > 0) return `+$${Math.round(val).toLocaleString()}`;
-    if (val < 0) return `-$${Math.round(Math.abs(val)).toLocaleString()}`;
-    return '$0';
+    if (val > 0) return `+${formatCurrency(val)}`;
+    if (val < 0) return `-${formatCurrency(Math.abs(val))}`;
+    return formatCurrency(0);
   };
 
   return (
@@ -113,7 +114,7 @@ export const WhatIfPage: React.FC = () => {
             <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Projected Shortfall</span>
             <div className="flex items-baseline space-x-2">
               <span className="font-mono font-black text-xl text-ink">
-                ${comparison.simulated.shortfall_amount.toLocaleString()}
+                {formatCurrency(comparison.simulated.shortfall_amount)}
               </span>
               <span className={`text-xs font-bold ${comparison.delta.shortfall_change > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                 {formatDelta(comparison.delta.shortfall_change)}
@@ -139,7 +140,7 @@ export const WhatIfPage: React.FC = () => {
             <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Min Projected Balance</span>
             <div className="flex items-baseline space-x-2">
               <span className={`font-mono font-black text-xl ${comparison.simulated.min_projected_balance < 0 ? 'text-rose-600' : 'text-ink'}`}>
-                ${comparison.simulated.min_projected_balance.toLocaleString()}
+                {formatCurrency(comparison.simulated.min_projected_balance)}
               </span>
               <span className={`text-xs font-bold ${comparison.delta.min_balance_change < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                 {formatDelta(comparison.delta.min_balance_change)}
@@ -152,7 +153,7 @@ export const WhatIfPage: React.FC = () => {
             <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Additional Cash Needed</span>
             <div className="flex items-baseline space-x-2">
               <span className="font-mono font-black text-xl text-electric">
-                ${comparison.delta.additional_capital_needed.toLocaleString()}
+                {formatCurrency(comparison.delta.additional_capital_needed)}
               </span>
             </div>
             <span className="text-[11px] text-sardine-slate block">To keep balance non-negative</span>
@@ -186,9 +187,9 @@ export const WhatIfPage: React.FC = () => {
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
               <XAxis dataKey="date" stroke="#6b7c99" fontSize={10} tickLine={false} />
-              <YAxis stroke="#6b7c99" fontSize={10} tickLine={false} tickFormatter={(v) => `$${v}`} />
+              <YAxis stroke="#6b7c99" fontSize={10} tickLine={false} tickFormatter={(v) => `${currencySymbol}${v}`} />
               <Tooltip
-                formatter={(val: number) => [`$${val.toLocaleString()}`, 'Balance']}
+                formatter={(val: number) => [formatCurrency(val), 'Balance']}
                 contentStyle={{ backgroundColor: '#081026', borderColor: '#1E293B', borderRadius: '12px', color: '#fff' }}
               />
               <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />

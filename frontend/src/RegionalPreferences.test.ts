@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   formatCurrency,
+  formatNumber,
+  formatDate,
+  convertAmount,
+  DEFAULT_EXCHANGE_RATES,
   getCurrencySymbol,
   getCurrencyFractionDigits,
   getStoredRegionalPreference,
@@ -14,6 +18,7 @@ import {
   DETECTED_REGION_STORAGE_KEY,
   StoredRegionalPreference
 } from './utils/currency';
+import { regionalPreferencesService } from './services/regionalPreferencesService';
 
 // Simple polyfill for node test environment
 const mockStorage = (() => {
@@ -187,6 +192,53 @@ describe('Regional Preferences & Currency Localization Tests', () => {
     it('formats 3-decimal currencies like KWD properly', () => {
       const formattedKWD = formatCurrency(12.345, 'KWD', 'en-US');
       expect(formattedKWD).toContain('12.345');
+    });
+  });
+
+  describe('Currency Conversion & Regional Formatting Utilities', () => {
+    it('converts amounts accurately using benchmark exchange rates', () => {
+      // Identity conversion
+      expect(convertAmount(100, 'USD', 'USD')).toBe(100);
+      expect(convertAmount(5000, 'INR', 'INR')).toBe(5000);
+
+      // USD to EUR (0.92 per USD)
+      const inEUR = convertAmount(100, 'USD', 'EUR');
+      expect(inEUR).toBeCloseTo(92, 1);
+
+      // USD to INR (83.50 per USD)
+      const inINR = convertAmount(100, 'USD', 'INR');
+      expect(inINR).toBeCloseTo(8350, 1);
+
+      // Non-USD cross conversion: EUR to INR
+      // 100 EUR = (100 / 0.92) * 83.50 ~ 9076.08
+      const eurToInr = convertAmount(100, 'EUR', 'INR');
+      expect(eurToInr).toBeGreaterThan(8000);
+      expect(eurToInr).toBeLessThan(10000);
+
+      // Handles invalid/null inputs
+      expect(convertAmount(null, 'USD', 'EUR')).toBe(0);
+      expect(convertAmount(undefined, 'USD', 'EUR')).toBe(0);
+    });
+
+    it('formats generic numbers and dates with locale sensitivity', () => {
+      expect(formatNumber(1234567.89, 'en-US')).toBe('1,234,567.89');
+      expect(formatNumber(null)).toBe('—');
+
+      const testDate = new Date('2026-11-14T00:00:00.000Z');
+      const formattedDate = formatDate(testDate, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      expect(formattedDate).toContain('2026');
+      expect(formatDate(null)).toBe('—');
+    });
+
+    it('regionalPreferencesService exposes consistent utility APIs', () => {
+      expect(typeof regionalPreferencesService.formatCurrency).toBe('function');
+      expect(typeof regionalPreferencesService.convertAmount).toBe('function');
+      expect(typeof regionalPreferencesService.getStoredPreference).toBe('function');
+
+      const cached = regionalPreferencesService.getCachedRates();
+      expect(cached['USD']).toBe(1.0);
+      expect(cached['INR']).toBe(83.50);
+      expect(cached['EUR']).toBe(0.92);
     });
   });
 });

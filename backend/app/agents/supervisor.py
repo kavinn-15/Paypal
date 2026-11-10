@@ -34,6 +34,10 @@ class AgentSupervisor:
         now_str = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
         steps_trace: List[AgentTraceStep] = []
 
+        from backend.app.services.region_service import CURRENCIES_DB
+        owner_curr = owner.preferred_currency or owner.currency or "USD"
+        owner_sym = CURRENCIES_DB.get(owner_curr, {}).get("symbol", "$")
+
         if starting_balance is None:
             from backend.app.services.financial_service import FinancialService
             starting_balance = float(FinancialService.get_confirmed_balance(self.db, owner))
@@ -51,7 +55,7 @@ class AgentSupervisor:
             agent_name="ForecasterAgent",
             status="completed",
             timestamp=now_str,
-            summary=f"Detected shortfall of ${forecast_res.shortfall_amount:,.2f} on {forecast_res.first_shortfall_date} (p={forecast_res.p_shortfall*100:.0f}%)",
+            summary=f"Detected shortfall of {owner_sym}{forecast_res.shortfall_amount:,.2f} on {forecast_res.first_shortfall_date} (p={forecast_res.p_shortfall*100:.0f}%)",
             key_finding=forecast_res.driver_explanation[:120] + "..." if forecast_res.driver_explanation else "Shortfall identified"
         ))
 
@@ -73,7 +77,7 @@ class AgentSupervisor:
         scored_targets = collector.select_targets_for_reminder(invoices_list, forecast_res.shortfall_amount or 1400.0)
         top_target = scored_targets[0] if scored_targets else None
         collector_summary = (
-            f"Ranked {top_target['client_name']} as primary candidate (score: {top_target['score']}, invoice: ${top_target['amount']:,.2f})"
+            f"Ranked {top_target['client_name']} as primary candidate (score: {top_target['score']}, invoice: {owner_sym}{top_target['amount']:,.2f})"
             if top_target else "No high-scoring client available"
         )
         steps_trace.append(AgentTraceStep(
@@ -123,7 +127,7 @@ class AgentSupervisor:
         # Step 4: Planner Agent
         planner = RescuePlanEngine(self.db)
         plans_res = planner.generate_plans_for_forecast(forecast_res, discount_pct=3.0)
-        plan_summaries = ", ".join([f"Plan {p.plan_type} (${p.cost:,.2f} cost)" for p in plans_res.plans])
+        plan_summaries = ", ".join([f"Plan {p.plan_type} ({owner_sym}{p.cost:,.2f} cost)" for p in plans_res.plans])
         steps_trace.append(AgentTraceStep(
             agent_name="PlannerAgent",
             status="completed",
@@ -156,7 +160,7 @@ class AgentSupervisor:
             confidence_score = 0.98
             rec_reason = (
                 f"No cash shortfall detected across the forecast horizon. Authoritative confirmed balance of "
-                f"${starting_balance:,.2f} safely satisfies all obligations. No rescue action is required."
+                f"{owner_sym}{starting_balance:,.2f} safely satisfies all obligations. No rescue action is required."
             )
         else:
             # Score each available plan dynamically using financial criteria
@@ -201,8 +205,8 @@ class AgentSupervisor:
             if recommended == "B":
                 rec_reason = (
                     f"Plan B (early settlement discount) is the optimal supervisory recommendation. "
-                    f"For a concession of ${best_cost:,.2f}, it creates an actionable incentive for {target_name} "
-                    f"to accelerate settlement within 48 hours, eliminating the projected ${forecast_res.shortfall_amount:,.2f} "
+                    f"For a concession of {owner_sym}{best_cost:,.2f}, it creates an actionable incentive for {target_name} "
+                    f"to accelerate settlement within 48 hours, eliminating the projected {owner_sym}{forecast_res.shortfall_amount:,.2f} "
                     f"deficit before {payee_name}'s scheduled payout."
                 )
             elif recommended == "C":
@@ -215,7 +219,7 @@ class AgentSupervisor:
                 rec_reason = (
                     f"Plan A (direct invoice payment reminder) is the optimal supervisory recommendation. "
                     f"With zero concession cost, prompting {target_name} provides the cleanest recovery path "
-                    f"to settle the ${forecast_res.shortfall_amount:,.2f} projected shortfall."
+                    f"to settle the {owner_sym}{forecast_res.shortfall_amount:,.2f} projected shortfall."
                 )
 
         # Persist Agent Workflow Run

@@ -1,6 +1,7 @@
 import React from 'react';
 import { RescuePlan } from '../types';
 import { ShieldAlert, CheckCircle2, Lock, Send, Percent, Split, Sparkles } from 'lucide-react';
+import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 
 interface RescuePlanCardProps {
   plan: RescuePlan;
@@ -19,6 +20,7 @@ export const RescuePlanCard: React.FC<RescuePlanCardProps> = ({
   onExecute,
   isLoading,
 }) => {
+  const { formatCurrency } = useRegionalPreferences();
   const action = plan.primary_action;
 
   const planPills = {
@@ -78,7 +80,7 @@ export const RescuePlanCard: React.FC<RescuePlanCardProps> = ({
                 plan.cost === 0 ? 'text-emerald-600' : 'text-purple-600'
               }`}
             >
-              ${plan.cost.toFixed(2)}
+              {formatCurrency(plan.cost)}
             </span>
             <span className="text-[10px] text-sardine-slate block truncate">{plan.cost_description}</span>
           </div>
@@ -86,7 +88,7 @@ export const RescuePlanCard: React.FC<RescuePlanCardProps> = ({
           <div className="border-l border-slate-200 pl-3">
             <span className="text-[10px] uppercase font-bold text-sardine-muted block tracking-wider">Incoming Needed</span>
             <span className="text-sm font-extrabold font-mono text-ink">
-              ${plan.incoming_needed.toFixed(2)}
+              {formatCurrency(plan.incoming_needed)}
             </span>
             <span className="text-[10px] text-sardine-slate block truncate">
               {plan.incoming_needed === 0 ? 'Covered Friday' : 'To bridge shortfall'}
@@ -135,7 +137,7 @@ export const RescuePlanCard: React.FC<RescuePlanCardProps> = ({
           </div>
           <div className="flex justify-between">
             <span className="text-sardine-muted">Amount:</span>
-            <span className="text-emerald-400 font-bold">${action.amount.toFixed(2)} USD</span>
+            <span className="text-emerald-400 font-bold">{formatCurrency(action.amount, { currency: action.currency })}</span>
           </div>
         </div>
 
@@ -148,7 +150,7 @@ export const RescuePlanCard: React.FC<RescuePlanCardProps> = ({
               className="w-full py-2.5 px-3 bg-electric hover:bg-electric-600 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center justify-center space-x-2 disabled:opacity-50 min-h-[44px] text-center"
             >
               <Lock className="w-3.5 h-3.5 shrink-0" />
-              <span>Approve Action ({action.recipient.split(' ')[0]} - ${action.amount.toFixed(0)})</span>
+              <span>Approve Action ({action.recipient.split(' ')[0]} - {formatCurrency(action.amount, { currency: action.currency })})</span>
             </button>
           )}
 
