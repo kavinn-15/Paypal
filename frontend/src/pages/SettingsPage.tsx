@@ -23,12 +23,24 @@ import {
   Check,
   RotateCcw,
   Loader2,
-  Sparkles
+  Sparkles,
+  LogOut,
+  UserCheck
 } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
-  const { currentUser, refreshUser } = useAuth();
+  const { currentUser, refreshUser, logout } = useAuth();
   const { updatePreferences } = useRegionalPreferences();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch {
+      // ignore
+    } finally {
+      window.location.href = '/login';
+    }
+  };
   const [status, setStatus] = useState<PayPalConnectionStatus | null>(null);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; token_preview?: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
@@ -722,6 +734,42 @@ export const SettingsPage: React.FC = () => {
               <span className="font-mono text-electric font-bold">Enabled</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Account Session & Sign Out Section */}
+      <div className="bento-card p-4 sm:p-6 space-y-4 border border-slate-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center space-x-3.5">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-ink shrink-0">
+              <UserCheck className="w-5 h-5 text-electric" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h3 className="font-black text-base text-ink tracking-tight">Active User Account Session</h3>
+                {currentUser?.is_demo && (
+                  <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 font-bold px-2 py-0.5 rounded-full">
+                    Demo Mode (Alex Morgan)
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-sardine-slate mt-0.5">
+                Logged in as <strong>{currentUser?.name || 'User'}</strong> ({currentUser?.email}). Sign out to switch accounts.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleLogout}
+            className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center space-x-2 min-h-[44px] ${
+              currentUser?.is_demo
+                ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200'
+            }`}
+          >
+            <LogOut className="w-4 h-4" />
+            <span>{currentUser?.is_demo ? 'Exit Demo Account & Sign Out' : 'Sign Out of Account'}</span>
+          </button>
         </div>
       </div>
 

@@ -18,7 +18,9 @@ import {
   DollarSign,
   Menu,
   X,
-  Play
+  Play,
+  LogOut,
+  UserCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
@@ -29,8 +31,18 @@ export const LandingPage: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [demoLoading, setDemoLoading] = useState(false);
-  const { demoLogin } = useAuth();
+  const { currentUser, logout, demoLogin } = useAuth();
   const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch {
+      // ignore
+    } finally {
+      window.location.reload();
+    }
+  };
 
   // Lock body scroll when mobile menu is open
   useEffect(() => {
@@ -132,27 +144,58 @@ export const LandingPage: React.FC = () => {
 
             {/* Right Action Buttons */}
             <div className="hidden md:flex items-center space-x-3">
-              <button
-                onClick={handleLaunchDemo}
-                disabled={demoLoading}
-                className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-ink-800 text-electric-300 border border-electric/30 hover:bg-ink-700 hover:border-electric transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <Play className="w-3 h-3 fill-electric-300" />
-                <span>{demoLoading ? 'Starting...' : 'Explore Demo'}</span>
-              </button>
-              <Link
-                to="/login"
-                className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:text-white hover:bg-ink-800 transition-colors"
-              >
-                Sign In
-              </Link>
-              <Link
-                to="/register"
-                className="px-4 py-2 rounded-lg text-xs font-semibold bg-electric text-white hover:bg-electric-600 shadow-glow-electric transition-all flex items-center space-x-1"
-              >
-                <span>Get Started Free</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+              {currentUser ? (
+                <>
+                  <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-ink-900 border border-slate-700 rounded-lg text-xs font-semibold">
+                    <UserCheck className="w-3.5 h-3.5 text-electric shrink-0" />
+                    <span className="text-white truncate max-w-[120px]">{currentUser.name || currentUser.email}</span>
+                    {currentUser.is_demo && (
+                      <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold px-1 rounded-sm">
+                        DEMO
+                      </span>
+                    )}
+                  </div>
+                  <Link
+                    to="/dashboard"
+                    className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-electric text-white hover:bg-electric-600 shadow-glow-electric transition-all flex items-center space-x-1"
+                  >
+                    <span>Dashboard</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    className="px-3 py-2 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 hover:bg-rose-500/25 transition-all flex items-center space-x-1 cursor-pointer"
+                    title={currentUser.is_demo ? 'Exit Demo Account' : 'Sign Out Account'}
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>{currentUser.is_demo ? 'Exit Demo' : 'Sign Out'}</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={handleLaunchDemo}
+                    disabled={demoLoading}
+                    className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-ink-800 text-electric-300 border border-electric/30 hover:bg-ink-700 hover:border-electric transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Play className="w-3 h-3 fill-electric-300" />
+                    <span>{demoLoading ? 'Starting...' : 'Explore Demo'}</span>
+                  </button>
+                  <Link
+                    to="/login"
+                    className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:text-white hover:bg-ink-800 transition-colors"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="px-4 py-2 rounded-lg text-xs font-semibold bg-electric text-white hover:bg-electric-600 shadow-glow-electric transition-all flex items-center space-x-1"
+                  >
+                    <span>Get Started Free</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </>
+              )}
             </div>
 
             {/* Mobile Menu Toggle */}
@@ -179,29 +222,63 @@ export const LandingPage: React.FC = () => {
               <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="py-2.5 px-3 rounded-lg hover:bg-ink-800/80 hover:text-white transition-colors">FAQ</a>
             </div>
             <div className="pt-3 border-t border-ink-800 flex flex-col space-y-2.5">
-              <button
-                onClick={() => { setMobileMenuOpen(false); handleLaunchDemo(); }}
-                disabled={demoLoading}
-                className="w-full py-3 rounded-xl text-xs font-semibold bg-ink-800 text-electric-300 border border-electric/30 text-center min-h-[44px] flex items-center justify-center"
-              >
-                {demoLoading ? 'Launching Demo...' : 'Explore Demo (Alex Morgan Persona)'}
-              </button>
-              <div className="grid grid-cols-2 gap-2">
-                <Link
-                  to="/login"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="py-3 rounded-xl text-xs font-semibold bg-ink-800 text-white text-center border border-slate-700 min-h-[44px] flex items-center justify-center"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  to="/register"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="py-3 rounded-xl text-xs font-semibold bg-electric text-white text-center shadow-glow-electric min-h-[44px] flex items-center justify-center"
-                >
-                  Get Started
-                </Link>
-              </div>
+              {currentUser ? (
+                <>
+                  <div className="flex items-center space-x-2 px-3 py-2 bg-ink-950 rounded-xl text-xs border border-slate-800">
+                    <UserCheck className="w-4 h-4 text-electric shrink-0" />
+                    <span className="text-white font-semibold truncate flex-1">{currentUser.name || currentUser.email}</span>
+                    {currentUser.is_demo && (
+                      <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold px-1.5 py-0.5 rounded">
+                        DEMO
+                      </span>
+                    )}
+                  </div>
+                  <Link
+                    to="/dashboard"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="w-full py-3 rounded-xl text-xs font-semibold bg-electric text-white text-center shadow-glow-electric min-h-[44px] flex items-center justify-center space-x-2"
+                  >
+                    <span>Go to Dashboard</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      handleLogout();
+                    }}
+                    className="w-full py-3 rounded-xl text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 text-center min-h-[44px] flex items-center justify-center space-x-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>{currentUser.is_demo ? 'Exit Demo Sandbox' : 'Sign Out Account'}</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => { setMobileMenuOpen(false); handleLaunchDemo(); }}
+                    disabled={demoLoading}
+                    className="w-full py-3 rounded-xl text-xs font-semibold bg-ink-800 text-electric-300 border border-electric/30 text-center min-h-[44px] flex items-center justify-center"
+                  >
+                    {demoLoading ? 'Launching Demo...' : 'Explore Demo (Alex Morgan Persona)'}
+                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link
+                      to="/login"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="py-3 rounded-xl text-xs font-semibold bg-ink-800 text-white text-center border border-slate-700 min-h-[44px] flex items-center justify-center"
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      to="/register"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="py-3 rounded-xl text-xs font-semibold bg-electric text-white text-center shadow-glow-electric min-h-[44px] flex items-center justify-center"
+                    >
+                      Get Started
+                    </Link>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

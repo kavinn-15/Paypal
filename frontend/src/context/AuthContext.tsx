@@ -182,7 +182,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       await api.logout();
+    } catch (err) {
+      console.warn('Logout endpoint error:', err);
     } finally {
+      clearStoredTokens();
       setCurrentUser(null);
       setIsLoading(false);
     }

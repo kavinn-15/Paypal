@@ -42,9 +42,16 @@ export function setStoredTokens(accessToken: string, refreshToken?: string): voi
 }
 
 export function clearStoredTokens(): void {
-  localStorage.removeItem('cashflow_access_token');
-  localStorage.removeItem('cashflow_refresh_token');
-  localStorage.removeItem('cashflow_user_email');
+  try {
+    localStorage.removeItem('cashflow_access_token');
+    localStorage.removeItem('cashflow_refresh_token');
+    localStorage.removeItem('cashflow_user_email');
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.clear();
+    }
+  } catch {
+    // ignore
+  }
 }
 
 async function request<T>(endpoint: string, options?: RequestInit, isRetry = false): Promise<T> {

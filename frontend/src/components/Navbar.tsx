@@ -152,12 +152,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             </nav>
 
             {/* Desktop User Account, Sandbox Indicator & Actions */}
-            <div className="flex items-center space-x-2 shrink-0">
+            <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
               {currentUser ? (
-                <div className="flex items-center space-x-2">
-                  <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-lg text-ink text-xs font-semibold">
-                    <UserCheck className="w-3.5 h-3.5 text-electric" />
-                    <span className="max-w-[120px] truncate">{currentUser.name || currentUser.email}</span>
+                <div className="flex items-center space-x-1.5 sm:space-x-2">
+                  <div className="flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-lg text-ink text-xs font-semibold">
+                    <UserCheck className="w-3.5 h-3.5 text-electric shrink-0" />
+                    <span className="max-w-[90px] sm:max-w-[130px] truncate">{currentUser.name || currentUser.email}</span>
                     <Link
                       to="/settings"
                       className="inline-flex items-center space-x-1 text-[10px] bg-slate-200/80 hover:bg-slate-300 text-slate-800 font-bold px-1.5 py-0.5 rounded transition-colors"
@@ -167,17 +167,24 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <span>{currency}</span>
                     </Link>
                     {currentUser.is_demo && (
-                      <span className="text-[9px] bg-electric/10 text-electric font-bold px-1 rounded-sm">DEMO</span>
+                      <span className="text-[9px] bg-amber-100 text-amber-800 border border-amber-300 font-bold px-1 rounded-sm">
+                        DEMO
+                      </span>
                     )}
                   </div>
 
                   {onLogout && (
                     <button
                       onClick={onLogout}
-                      className="hidden sm:flex p-1.5 text-sardine-slate hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200"
-                      title="Sign Out"
+                      className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 text-xs font-bold rounded-lg transition-colors border shadow-2xs ${
+                        currentUser.is_demo
+                          ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300 hover:border-rose-400'
+                          : 'bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border-slate-200 hover:border-rose-300'
+                      }`}
+                      title={currentUser.is_demo ? 'Exit Demo Account' : 'Sign Out Account'}
                     >
-                      <LogOut className="w-4 h-4" />
+                      <LogOut className="w-3.5 h-3.5 shrink-0" />
+                      <span>{currentUser.is_demo ? 'Exit Demo' : 'Sign Out'}</span>
                     </button>
                   )}
                 </div>
@@ -348,10 +355,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                   setMobileMenuOpen(false);
                   onLogout();
                 }}
-                className="w-full py-2.5 px-4 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors flex items-center justify-center space-x-2 min-h-[44px]"
+                className="w-full py-2.5 px-4 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 transition-colors flex items-center justify-center space-x-2 min-h-[44px]"
               >
                 <LogOut className="w-4 h-4" />
-                <span>Sign Out Account</span>
+                <span>{currentUser.is_demo ? 'Exit Demo Sandbox' : 'Sign Out Account'}</span>
               </button>
             ) : onOpenAuth ? (
               <button

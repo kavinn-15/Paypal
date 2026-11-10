@@ -54,8 +54,13 @@ const AuthenticatedLayout: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    await logout();
-    window.location.href = '/';
+    try {
+      await logout();
+    } catch {
+      // ignore
+    } finally {
+      window.location.href = '/login';
+    }
   };
 
   return (
