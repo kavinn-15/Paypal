@@ -46,19 +46,6 @@ class RescuePlanEngine:
         first_shortfall_date = forecast_response.first_shortfall_date
         starting_balance = forecast_response.starting_balance
         obligation_obj = self.db.query(Obligation).filter(Obligation.id == forecast_response.obligation.id).first()
-
-        if shortfall <= 0:
-            return PlansComparisonResponse(
-                run_id=run_id,
-                obligation=ObligationOut.model_validate(obligation_obj) if obligation_obj else forecast_response.obligation,
-                shortfall_amount=0.0,
-                first_shortfall_date=first_shortfall_date,
-                tradeoff_summary="No cash shortfall projected. Projected cash balances fully satisfy upcoming obligations with positive buffer. No rescue intervention required.",
-                plans=[],
-                starting_balance=starting_balance,
-                driver_rankings=forecast_response.driver_ranking,
-                p_shortfall=forecast_response.p_shortfall
-            )
         from decimal import Decimal
         from backend.app.models import Owner
         from backend.app.services.region_service import CURRENCIES_DB, convert_currency_amount
