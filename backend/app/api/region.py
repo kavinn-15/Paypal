@@ -81,21 +81,36 @@ def get_exchange_rates(from_currency: Optional[str] = "USD", to_currency: Option
     """
     Retrieve authoritative currency conversion rates relative to USD baseline.
     Optionally returns direct cross-currency rate between two currencies.
+    Never silently returns 1.0 for unknown currency pairs.
     """
+    from_code = (from_currency or "USD").strip().upper()
     if to_currency:
-        rate = get_exchange_rate(from_currency or "USD", to_currency)
+        to_code = to_currency.strip().upper()
+        rate = get_exchange_rate(from_code, to_code)
+        if rate is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Exchange rate between {from_code} and {to_code} is unavailable."
+            )
         return {
-            "from_currency": (from_currency or "USD").upper(),
-            "to_currency": to_currency.upper(),
+            "from_currency": from_code,
+            "to_currency": to_code,
             "rate": rate,
             "source": "central_bank_benchmark",
+            "is_stale": False,
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         }
     return {
         "base": "USD",
         "base_currency": "USD",
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
-        "rates": BENCHMARK_EXCHANGE_RATES
+        "source": "central_bank_benchmark",
+        "is_stale": False,
+        "rates": BENCHMARK_EXCHANGE_RATES,
+        "paypal_supported_currencies": [
+            "USD", "EUR", "GBP", "CAD", "AUD", "JPY", "SGD", "CHF", "NZD",
+            "SEK", "NOK", "DKK", "PLN", "BRL", "MXN", "ILS", "PHP", "THB", "TWD", "CZK", "HUF"
+        ]
     }
 
 

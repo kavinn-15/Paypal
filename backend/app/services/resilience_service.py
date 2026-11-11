@@ -1,4 +1,5 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from backend.app.models import Owner, Invoice, Obligation
@@ -8,10 +9,19 @@ from backend.app.schemas import ResilienceScoreResponse, ResilienceFactor
 class ResilienceService:
 
     @staticmethod
-    def calculate_score(db: Session, owner: Owner, starting_balance: float = 1800.0) -> ResilienceScoreResponse:
+    def calculate_score(db: Session, owner: Owner, starting_balance: Optional[float] = None) -> ResilienceScoreResponse:
+        from backend.app.services.financial_service import FinancialService
+        from backend.app.services.region_service import CURRENCIES_DB, convert_currency_amount
+
+        owner_curr = (owner.preferred_currency or owner.currency or "USD").strip().upper()
+        curr_sym = CURRENCIES_DB.get(owner_curr, {}).get("symbol", "$")
+
+        if starting_balance is None:
+            starting_balance = float(FinancialService.get_confirmed_balance(db, owner, target_currency=owner_curr))
+
         invoices = db.query(Invoice).join(Invoice.client).filter(
             Invoice.client.has(owner_id=owner.id),
-            Invoice.status.in_(["SENT", "DRAFT"])
+            Invoice.status.in_(["SENT", "DRAFT", "PARTIALLY_PAID"])
         ).all()
 
         obligations = db.query(Obligation).filter(
@@ -19,12 +29,39 @@ class ResilienceService:
             Obligation.status != "paid"
         ).all()
 
-        tot_invoices = sum(float(i.amount) for i in invoices)
-        tot_obligations = sum(float(o.amount) for o in obligations)
+        # Convert open invoices to owner_curr and account for partial payments
+        open_invoices_data = []
+        tot_invoices = 0.0
+        for i in invoices:
+            hist_items = getattr(i, "history_records", None) or getattr(i, "payment_history", [])
+            paid_amount = sum(Decimal(str(h.amount)) for h in hist_items)
+            unpaid_dec = Decimal(str(i.amount)) - paid_amount
+            if unpaid_dec <= Decimal("0"):
+                continue
+            inv_curr = (i.currency or owner_curr).strip().upper()
+            if inv_curr != owner_curr:
+                conv = convert_currency_amount(unpaid_dec, inv_curr, owner_curr, round_minor_unit=True)
+                amt_in_owner = float(conv) if conv is not None else float(unpaid_dec)
+            else:
+                amt_in_owner = float(unpaid_dec)
+            tot_invoices += amt_in_owner
+            open_invoices_data.append({
+                "invoice": i,
+                "amount": amt_in_owner,
+                "client_name": i.client.name
+            })
 
-        from backend.app.services.region_service import CURRENCIES_DB
-        owner_curr = (owner.preferred_currency or owner.currency or "USD").upper()
-        curr_sym = CURRENCIES_DB.get(owner_curr, {}).get("symbol", "$")
+        # Convert obligations to owner_curr
+        tot_obligations = 0.0
+        for o in obligations:
+            obl_dec = Decimal(str(o.amount))
+            obl_curr = (o.currency or owner_curr).strip().upper()
+            if obl_curr != owner_curr:
+                conv = convert_currency_amount(obl_dec, obl_curr, owner_curr, round_minor_unit=True)
+                amt_in_owner = float(conv) if conv is not None else float(obl_dec)
+            else:
+                amt_in_owner = float(obl_dec)
+            tot_obligations += amt_in_owner
 
         # 1. Cash Reserve Coverage (Weight: 20%)
         # Runway in days assuming 30-day burn rate from obligations
@@ -36,9 +73,10 @@ class ResilienceService:
         # Weighted late probability of outstanding clients
         if tot_invoices > 0:
             weighted_late = 0.0
-            for inv in invoices:
-                p_late = 0.92 if "Apex" in inv.client.name else (0.25 if "Horizon" in inv.client.name else 0.15)
-                weighted_late += float(inv.amount) * p_late
+            for item in open_invoices_data:
+                cname = item["client_name"]
+                p_late = 0.92 if "Apex" in cname else (0.25 if "Horizon" in cname else 0.15)
+                weighted_late += item["amount"] * p_late
             avg_p_late = weighted_late / tot_invoices
             reliability_pct = round((1.0 - avg_p_late) * 100.0, 1)
         else:
@@ -54,7 +92,7 @@ class ResilienceService:
         # 4. Concentration Risk (Weight: 15%)
         # Herfindahl-Hirschman Index (HHI)
         if tot_invoices > 0:
-            shares = [(float(i.amount) / tot_invoices) ** 2 for i in invoices]
+            shares = [(item["amount"] / tot_invoices) ** 2 for item in open_invoices_data]
             hhi = sum(shares)
         else:
             hhi = 0.2
@@ -100,16 +138,24 @@ class ResilienceService:
         if score_concentration > 60:
             improving.append("Invoices distributed across multiple client accounts.")
 
+        top_client_amounts = sorted([item["amount"] for item in open_invoices_data], reverse=True)
+        top2_share = min(100, int((sum(top_client_amounts[:2]) / max(tot_invoices, 1.0)) * 100)) if top_client_amounts else 0
+        apex_amt = sum(item["amount"] for item in open_invoices_data if "Apex" in item["client_name"])
+
         reducing = [
-            f"Apex Design Studio exhibits a 92% late-payment probability, locking up {curr_sym}2,000 in receivables.",
-            f"Upcoming contractor payout ({curr_sym}{tot_obligations:,.2f}) exceeds current cash balance by {curr_sym}{tot_obligations - starting_balance:,.2f}.",
-            f"Receivables concentration: top 2 clients represent {min(100, int((4000/max(tot_invoices,1))*100))}% of total pending revenue."
+            f"Apex Design Studio exhibits a 92% late-payment probability, locking up {curr_sym}{apex_amt:,.2f} in receivables." if apex_amt > 0 else "High-risk client exhibits late-payment probability.",
+            f"Upcoming contractor payout ({curr_sym}{tot_obligations:,.2f}) exceeds current cash balance by {curr_sym}{max(0.0, tot_obligations - starting_balance):,.2f}.",
+            f"Receivables concentration: top clients represent {top2_share}% of total pending revenue."
         ]
 
+        horizon_amt = sum(item["amount"] for item in open_invoices_data if "Horizon" in item["client_name"])
+        horizon_discounted = horizon_amt * 0.97
+        first_contractor = obligations[0].payee_name if obligations else "contractor"
+
         recommendations = [
-            f"Execute Rescue Plan B: apply 3% early-pay discount to Horizon Dynamics to unlock {curr_sym}1,940 within 48h.",
-            "Enable split payment arrangement on Marcus Sterling's payout (50% on Friday, 50% in 14 days).",
-            f"Establish an automated 1-month emergency cash buffer of {curr_sym}3,000 for recurring contractor commitments."
+            f"Execute Rescue Plan B: apply 3% early-pay discount to Horizon Dynamics to unlock {curr_sym}{horizon_discounted:,.2f} within 48h." if horizon_amt > 0 else "Execute Rescue Plan B: apply early-pay discount to top debtor to unlock cashflow.",
+            f"Enable split payment arrangement on {first_contractor}'s payout (50% on Friday, 50% in 14 days).",
+            f"Establish an automated emergency cash buffer of {curr_sym}{max(1000.0, round(tot_obligations, -2)):,.2f} for recurring commitments."
         ]
 
         factors = [

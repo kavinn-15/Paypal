@@ -205,19 +205,22 @@ describe('Regional Preferences & Currency Localization Tests', () => {
       const inEUR = convertAmount(100, 'USD', 'EUR');
       expect(inEUR).toBeCloseTo(92, 1);
 
-      // USD to INR (83.50 per USD)
+      // USD to INR (86.50 per USD benchmark rate)
       const inINR = convertAmount(100, 'USD', 'INR');
-      expect(inINR).toBeCloseTo(8350, 1);
+      expect(inINR).toBeCloseTo(8650, 1);
 
       // Non-USD cross conversion: EUR to INR
-      // 100 EUR = (100 / 0.92) * 83.50 ~ 9076.08
+      // 100 EUR = (100 / 0.92) * 86.50 ~ 9402.17
       const eurToInr = convertAmount(100, 'EUR', 'INR');
-      expect(eurToInr).toBeGreaterThan(8000);
-      expect(eurToInr).toBeLessThan(10000);
+      expect(eurToInr).toBeGreaterThan(8500);
+      expect(eurToInr).toBeLessThan(10500);
 
       // Handles invalid/null inputs
       expect(convertAmount(null, 'USD', 'EUR')).toBe(0);
       expect(convertAmount(undefined, 'USD', 'EUR')).toBe(0);
+
+      // Unknown currency returns NaN rather than silent 1.0 corruption
+      expect(Number.isNaN(convertAmount(100, 'USD', 'NON_EXISTENT_CURRENCY'))).toBe(true);
     });
 
     it('formats generic numbers and dates with locale sensitivity', () => {
@@ -237,7 +240,7 @@ describe('Regional Preferences & Currency Localization Tests', () => {
 
       const cached = regionalPreferencesService.getCachedRates();
       expect(cached['USD']).toBe(1.0);
-      expect(cached['INR']).toBe(83.50);
+      expect(cached['INR']).toBe(86.50);
       expect(cached['EUR']).toBe(0.92);
     });
   });

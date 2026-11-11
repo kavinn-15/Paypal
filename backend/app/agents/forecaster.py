@@ -80,10 +80,14 @@ class ForecasterAgent:
         self.model.fit(history)
 
         # 3. Predict open invoices scoped strictly to this owner
+        from decimal import Decimal
+        from backend.app.services.region_service import convert_currency_amount
+        owner_curr = (owner.preferred_currency or owner.currency or "USD").strip().upper() if owner else "USD"
+
         inv_query = self.db.query(Invoice).join(Invoice.client)
         if actual_owner_id:
             inv_query = inv_query.filter(Client.owner_id == actual_owner_id)
-        open_invoices = inv_query.filter(Invoice.status.in_(["SENT", "DRAFT"])).all()
+        open_invoices = inv_query.filter(Invoice.status.in_(["SENT", "DRAFT", "PARTIALLY_PAID"])).all()
         run_id = f"fc_{uuid.uuid4().hex[:12]}"
 
         open_invoices_with_preds = []
@@ -91,15 +95,21 @@ class ForecasterAgent:
 
         for inv in open_invoices:
             due_d = to_naive(inv.due_date)
+            paid_so_far = sum(Decimal(str(h.amount)) for h in inv.history_records)
+            outstanding_dec = max(Decimal("0.00"), Decimal(str(inv.amount)) - paid_so_far)
+            if outstanding_dec <= Decimal("0.00"):
+                continue
+
             pred = self.model.predict_client_delay(
                 client_id=inv.client_id,
-                invoice_amount=inv.amount,
+                invoice_amount=float(outstanding_dec),
                 due_date=due_d
             )
-            # Store in client_predictions table
+            # Store in client_predictions table with invoice_id
             cp_record = ClientPrediction(
                 run_id=run_id,
                 client_id=inv.client_id,
+                invoice_id=inv.id,
                 expected_pay_date=to_naive(pred["expected_pay_date"]),
                 p_late=pred["p_late"],
                 expected_days_late=pred["expected_days_late"],
@@ -109,12 +119,22 @@ class ForecasterAgent:
             )
             self.db.add(cp_record)
 
+            # Convert to owner_curr for uniform timeline projection if currencies differ
+            inv_curr = (inv.currency or owner_curr).strip().upper()
+            if inv_curr != owner_curr:
+                converted_dec = convert_currency_amount(outstanding_dec, inv_curr, owner_curr, round_minor_unit=True)
+                amount_in_owner_curr = float(converted_dec) if converted_dec is not None else float(outstanding_dec)
+            else:
+                amount_in_owner_curr = float(outstanding_dec)
+
             item = {
                 "invoice_id": inv.id,
                 "paypal_invoice_id": inv.paypal_invoice_id,
                 "client_id": inv.client_id,
                 "client_name": inv.client.name,
-                "amount": float(inv.amount),
+                "amount": amount_in_owner_curr,
+                "original_amount": float(inv.amount),
+                "original_currency": inv.currency,
                 "due_date": due_d,
                 "expected_pay_date": to_naive(pred["expected_pay_date"]),
                 "p_late": pred["p_late"],
@@ -128,6 +148,7 @@ class ForecasterAgent:
 
             client_preds_out.append(ClientPredictionOut(
                 client_id=inv.client_id,
+                invoice_id=inv.id,
                 client_name=inv.client.name,
                 invoice_amount=float(inv.amount),
                 due_date=due_d.strftime("%Y-%m-%d"),
@@ -138,6 +159,14 @@ class ForecasterAgent:
                 ci_high_days=pred["ci_high"],
                 is_cold_start=pred.get("is_cold_start", False)
             ))
+
+        # Convert obligation amount to owner_curr if necessary
+        obl_curr = (obligation.currency or owner_curr).strip().upper()
+        if obl_curr != owner_curr:
+            converted_obl = convert_currency_amount(Decimal(str(obligation.amount)), obl_curr, owner_curr, round_minor_unit=True)
+            obl_amount_in_owner = float(converted_obl) if converted_obl is not None else float(obligation.amount)
+        else:
+            obl_amount_in_owner = float(obligation.amount)
 
         # 4. Fetch scheduled financial expenses (excluding cancelled, paid, and double-counted contractor obligations)
         from backend.app.models import FinancialEntry
@@ -162,16 +191,24 @@ class ForecasterAgent:
             if ent.category == "contractor" and obligation.payee_name.lower() in ent.title.lower():
                 continue
 
+            ent_curr = (ent.currency or owner_curr).strip().upper()
+            ent_dec = Decimal(str(ent.amount))
+            if ent_curr != owner_curr:
+                conv_exp = convert_currency_amount(ent_dec, ent_curr, owner_curr, round_minor_unit=True)
+                exp_amt = float(conv_exp) if conv_exp is not None else float(ent_dec)
+            else:
+                exp_amt = float(ent_dec)
+
             scheduled_expenses.append({
                 "title": ent.title,
-                "amount": float(ent.amount),
+                "amount": exp_amt,
                 "due_date": ent_date,
-                "currency": ent.currency,
+                "currency": owner_curr,
                 "category": ent.category
             })
 
         all_outflows = [{
-            "amount": float(obligation.amount),
+            "amount": obl_amount_in_owner,
             "due_date": obl_due,
             "payee_name": obligation.payee_name
         }]
@@ -196,7 +233,7 @@ class ForecasterAgent:
         p_shortfall, ci_low_band, ci_high_band = run_monte_carlo_simulation(
             starting_balance=starting_balance,
             open_invoices_with_preds=open_invoices_with_preds,
-            obligation_amount=float(obligation.amount),
+            obligation_amount=obl_amount_in_owner,
             obligation_due_date=obl_due,
             start_date=current_time,
             scheduled_expenses=scheduled_expenses,
@@ -224,7 +261,7 @@ class ForecasterAgent:
         driver_items = compute_driver_ranking(
             starting_balance=starting_balance,
             open_invoices_with_preds=open_invoices_with_preds,
-            obligation_amount=float(obligation.amount),
+            obligation_amount=obl_amount_in_owner,
             obligation_due_date=obl_due,
             start_date=current_time,
             scheduled_expenses=scheduled_expenses

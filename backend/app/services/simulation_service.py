@@ -1,5 +1,6 @@
 import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from backend.app.models import Owner, Invoice, Obligation
@@ -14,7 +15,7 @@ class SimulationService:
         db: Session,
         owner: Owner,
         req: SimulationScenarioRequest,
-        starting_balance: float = 1800.0
+        starting_balance: Optional[float] = None
     ) -> WhatIfComparisonResponse:
         """
         Runs a What-If simulation comparing baseline cash flow against a modified scenario.
@@ -23,14 +24,19 @@ class SimulationService:
         now = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         end_date = now + datetime.timedelta(days=14)
 
-        from backend.app.services.region_service import CURRENCIES_DB
-        owner_curr = (owner.preferred_currency or owner.currency or "USD").upper()
+        from backend.app.services.financial_service import FinancialService
+        from backend.app.services.region_service import CURRENCIES_DB, convert_currency_amount
+
+        owner_curr = (owner.preferred_currency or owner.currency or "USD").strip().upper()
         curr_sym = CURRENCIES_DB.get(owner_curr, {}).get("symbol", "$")
+
+        if starting_balance is None:
+            starting_balance = float(FinancialService.get_confirmed_balance(db, owner, target_currency=owner_curr))
 
         # 1. Fetch real baseline records
         invoices = db.query(Invoice).join(Invoice.client).filter(
             Invoice.client.has(owner_id=owner.id),
-            Invoice.status.in_(["SENT", "DRAFT"])
+            Invoice.status.in_(["SENT", "DRAFT", "PARTIALLY_PAID"])
         ).all()
 
         obligation = db.query(Obligation).filter(
@@ -38,17 +44,40 @@ class SimulationService:
             Obligation.status != "paid"
         ).order_by(Obligation.due_date.asc()).first()
 
-        obl_amt = float(obligation.amount) if obligation else 3200.0
-        obl_due = obligation.due_date if obligation else (now + datetime.timedelta(days=5))
+        if obligation:
+            obl_dec = Decimal(str(obligation.amount))
+            obl_curr = (obligation.currency or owner_curr).strip().upper()
+            if obl_curr != owner_curr:
+                conv_obl = convert_currency_amount(obl_dec, obl_curr, owner_curr, round_minor_unit=True)
+                obl_amt = float(conv_obl) if conv_obl is not None else float(obl_dec)
+            else:
+                obl_amt = float(obl_dec)
+            obl_due = obligation.due_date
+        else:
+            obl_amt = 3200.0
+            obl_due = now + datetime.timedelta(days=5)
 
         # Baseline inflows: Apex delays 14d, Nordic delays 6d, Vertex delays 8d
         baseline_inflows = []
         for inv in invoices:
+            hist_items = getattr(inv, "history_records", None) or getattr(inv, "payment_history", [])
+            paid_amount = sum(Decimal(str(h.amount)) for h in hist_items)
+            unpaid_dec = Decimal(str(inv.amount)) - paid_amount
+            if unpaid_dec <= Decimal("0"):
+                continue
+
+            inv_curr = (inv.currency or owner_curr).strip().upper()
+            if inv_curr != owner_curr:
+                conv_inv = convert_currency_amount(unpaid_dec, inv_curr, owner_curr, round_minor_unit=True)
+                amt_in_owner = float(conv_inv) if conv_inv is not None else float(unpaid_dec)
+            else:
+                amt_in_owner = float(unpaid_dec)
+
             delay = 14 if "Apex" in inv.client.name else (6 if "Nordic" in inv.client.name else 8)
             baseline_inflows.append({
                 "client_id": inv.client_id,
                 "client_name": inv.client.name,
-                "amount": float(inv.amount),
+                "amount": amt_in_owner,
                 "expected_pay_date": inv.due_date + datetime.timedelta(days=delay)
             })
 

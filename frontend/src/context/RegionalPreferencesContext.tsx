@@ -233,6 +233,7 @@ export const RegionalPreferencesProvider: React.FC<{ children: React.ReactNode }
           await refreshUser();
         } catch (err) {
           console.error('Failed to update regional preferences on server:', err);
+          throw err;
         }
       }
 
@@ -264,11 +265,19 @@ export const RegionalPreferencesProvider: React.FC<{ children: React.ReactNode }
       const targetLocale = options?.locale || locale;
 
       let numericAmount = amount;
+      let effectiveCurrency = targetCurrency;
+
       if (options?.convertFromBase && baseCurrency !== targetCurrency && amount !== null && amount !== undefined) {
-        numericAmount = utilConvertAmount(amount, baseCurrency, targetCurrency, exchangeRates);
+        const converted = utilConvertAmount(amount, baseCurrency, targetCurrency, exchangeRates);
+        if (converted !== null && !isNaN(converted)) {
+          numericAmount = converted;
+        } else {
+          // Never format unconverted amount with target symbol; fallback safely to base currency
+          effectiveCurrency = baseCurrency;
+        }
       }
 
-      return utilFormatCurrency(numericAmount, targetCurrency, targetLocale, options);
+      return utilFormatCurrency(numericAmount, effectiveCurrency, targetLocale, options);
     },
     [currency, locale, baseCurrency, exchangeRates]
   );

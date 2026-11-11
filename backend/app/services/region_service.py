@@ -8,6 +8,7 @@ browser locale/timezone fallback, and privacy-preserving in-memory caching.
 import ipaddress
 import logging
 import time
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict, Any, List, Optional
 import httpx
 
@@ -125,15 +126,71 @@ BENCHMARK_EXCHANGE_RATES: Dict[str, float] = {
 }
 
 
-def get_exchange_rate(from_currency: str = "USD", to_currency: str = "USD") -> float:
-    """Calculates conversion rate between any two supported currencies via USD cross-rate."""
+def get_exchange_rate(from_currency: str = "USD", to_currency: str = "USD") -> Optional[float]:
+    """
+    Calculates conversion rate between any two supported currencies via USD cross-rate.
+    Returns None if either currency is unknown / not supported (never silently falls back to 1.0).
+    """
     from_code = (from_currency or "USD").strip().upper()
     to_code = (to_currency or "USD").strip().upper()
     if from_code == to_code:
         return 1.0
-    from_usd = BENCHMARK_EXCHANGE_RATES.get(from_code, 1.0)
-    to_usd = BENCHMARK_EXCHANGE_RATES.get(to_code, 1.0)
+    if from_code not in BENCHMARK_EXCHANGE_RATES or to_code not in BENCHMARK_EXCHANGE_RATES:
+        return None
+    from_usd = BENCHMARK_EXCHANGE_RATES[from_code]
+    to_usd = BENCHMARK_EXCHANGE_RATES[to_code]
     return round(to_usd / from_usd, 6)
+
+
+def get_currency_decimals(currency_code: str) -> int:
+    """Returns ISO 4217 standard minor-unit decimal precision for currency_code."""
+    code = (currency_code or "USD").strip().upper()
+    if code in ZERO_DECIMAL_CURRENCIES:
+        return 0
+    if code in THREE_DECIMAL_CURRENCIES:
+        return 3
+    return 2
+
+
+def quantize_currency(amount: Decimal, currency_code: str) -> Decimal:
+    """Quantizes a Decimal to the ISO 4217 minor-unit precision of currency_code."""
+    from decimal import ROUND_HALF_UP
+    decimals = get_currency_decimals(currency_code)
+    if decimals == 0:
+        return amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    elif decimals == 3:
+        return amount.quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+    else:
+        return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def convert_currency_amount(
+    amount: Decimal,
+    from_currency: str = "USD",
+    to_currency: str = "USD",
+    round_minor_unit: bool = False
+) -> Optional[Decimal]:
+    """
+    Converts a Decimal amount from one currency to another using authoritative benchmark cross-rates.
+    Returns None if exchange rate is unavailable (never silently falls back to 1.0).
+    Optionally quantizes to the target currency's ISO 4217 minor-unit precision.
+    """
+    from_code = (from_currency or "USD").strip().upper()
+    to_code = (to_currency or "USD").strip().upper()
+
+    if from_code == to_code:
+        return quantize_currency(amount, to_code) if round_minor_unit else amount
+
+    rate = get_exchange_rate(from_code, to_code)
+    if rate is None:
+        return None
+
+    dec_rate = Decimal(str(rate))
+    converted = amount * dec_rate
+
+    if round_minor_unit:
+        return quantize_currency(converted, to_code)
+    return converted
 
 # Comprehensive Country Data (ISO 3166-1 alpha-2)
 COUNTRIES_DB: Dict[str, Dict[str, Any]] = {
@@ -548,8 +605,10 @@ def _build_detection_result(
         "country_name": country_meta.get("name", country_code),
         "flag": country_meta.get("flag", "🌐"),
         "suggested_currency": currency_code,
+        "currency": currency_code,
         "currency_name": currency_meta.get("name", currency_code),
         "currency_symbol": currency_meta.get("symbol", "$"),
+        "symbol": currency_meta.get("symbol", "$"),
         "decimals": currency_meta.get("decimals", 2),
         "dial_code": country_meta.get("dial_code", "+1"),
         "locale": country_meta.get("locale", "en-US"),
@@ -567,8 +626,10 @@ def _build_unavailable_result() -> Dict[str, Any]:
         "country_name": None,
         "flag": None,
         "suggested_currency": None,
+        "currency": None,
         "currency_name": None,
         "currency_symbol": None,
+        "symbol": None,
         "decimals": 2,
         "dial_code": None,
         "locale": None,

@@ -207,6 +207,7 @@ class ClientPrediction(Base):
     id = Column(Integer, primary_key=True, index=True)
     run_id = Column(String(100), nullable=False, index=True)
     client_id = Column(Integer, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=True, index=True)
     expected_pay_date = Column(DateTime, nullable=False)
     p_late = Column(Float, nullable=False)
     expected_days_late = Column(Float, nullable=False)
@@ -215,6 +216,7 @@ class ClientPrediction(Base):
     is_cold_start = Column(Boolean, default=False, nullable=False)
 
     client = relationship("Client")
+    invoice = relationship("Invoice")
 
 
 class RescuePlan(Base):

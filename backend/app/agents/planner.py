@@ -46,35 +46,61 @@ class RescuePlanEngine:
         first_shortfall_date = forecast_response.first_shortfall_date
         starting_balance = forecast_response.starting_balance
         obligation_obj = self.db.query(Obligation).filter(Obligation.id == forecast_response.obligation.id).first()
+        from decimal import Decimal
         from backend.app.models import Owner
-        from backend.app.services.region_service import CURRENCIES_DB
+        from backend.app.services.region_service import CURRENCIES_DB, convert_currency_amount
         owner = self.db.query(Owner).filter(Owner.id == obligation_obj.owner_id).first() if obligation_obj else None
         owner_curr = (owner.preferred_currency or owner.currency or "USD") if owner else "USD"
         owner_sym = CURRENCIES_DB.get(owner_curr, {}).get("symbol", "$")
+
+        # Convert obligation amount to owner_curr for uniform timeline projections
+        obl_curr = (obligation_obj.currency or owner_curr).strip().upper() if obligation_obj else owner_curr
+        if obl_curr != owner_curr:
+            converted_obl = convert_currency_amount(Decimal(str(obligation_obj.amount)), obl_curr, owner_curr, round_minor_unit=True)
+            obl_amount_in_owner = float(converted_obl) if converted_obl is not None else float(obligation_obj.amount)
+        else:
+            obl_amount_in_owner = float(obligation_obj.amount) if obligation_obj else 0.0
 
         start_time = to_naive(forecast_response.created_at)
         obl_due = to_naive(obligation_obj.due_date)
 
         open_invoices_models = self.db.query(Invoice).join(Invoice.client).filter(
             Invoice.client.has(owner_id=obligation_obj.owner_id),
-            Invoice.status.in_(["SENT", "DRAFT"])
+            Invoice.status.in_(["SENT", "DRAFT", "PARTIALLY_PAID"])
         ).all()
         open_invoices = []
         for inv in open_invoices_models:
-            # find matching prediction from forecast
-            pred = next((p for p in forecast_response.client_predictions if p.client_id == inv.client_id), None)
+            # find matching prediction from forecast by invoice_id first, then fallback to client_id
+            pred = next((p for p in forecast_response.client_predictions if getattr(p, "invoice_id", None) == inv.id), None)
+            if not pred:
+                pred = next((p for p in forecast_response.client_predictions if p.client_id == inv.client_id), None)
             p_late = pred.p_late if pred else 0.5
             expected_days = pred.expected_days_late if pred else 5.0
             inv_due = to_naive(inv.due_date)
-            exp_pay = to_naive(datetime.strptime(pred.expected_pay_date, "%Y-%m-%d")) if pred else inv_due
+            exp_pay = to_naive(datetime.strptime(pred.expected_pay_date, "%Y-%m-%d")) if (pred and pred.expected_pay_date) else inv_due
+
+            hist_items = getattr(inv, "history_records", None) or getattr(inv, "payment_history", [])
+            paid_amount = sum(Decimal(str(h.amount)) for h in hist_items)
+            unpaid_dec = Decimal(str(inv.amount)) - paid_amount
+            if unpaid_dec <= Decimal("0"):
+                continue
+
+            inv_curr = (inv.currency or owner_curr).strip().upper()
+            if inv_curr != owner_curr:
+                converted_dec = convert_currency_amount(unpaid_dec, inv_curr, owner_curr, round_minor_unit=True)
+                amount_in_owner_curr = float(converted_dec) if converted_dec is not None else float(unpaid_dec)
+            else:
+                amount_in_owner_curr = float(unpaid_dec)
+
             open_invoices.append({
                 "invoice_id": inv.id,
                 "paypal_invoice_id": inv.paypal_invoice_id,
                 "client_id": inv.client_id,
                 "client_name": inv.client.name,
                 "client_email": inv.client.email,
-                "amount": float(inv.amount),
-                "currency": inv.currency,
+                "amount": amount_in_owner_curr,
+                "original_amount": float(unpaid_dec),
+                "currency": inv_curr,
                 "due_date": inv_due,
                 "expected_pay_date": exp_pay,
                 "p_late": p_late,
@@ -112,7 +138,7 @@ class RescuePlanEngine:
         plan_a_with_proj, _, _ = project_cashflow_timeline(
             starting_balance=starting_balance,
             predicted_inflows=with_plan_a_inflows,
-            obligations=[{"amount": float(obligation_obj.amount), "due_date": obl_due, "payee_name": obligation_obj.payee_name}],
+            obligations=[{"amount": obl_amount_in_owner, "due_date": obl_due, "payee_name": obligation_obj.payee_name}],
             start_date=start_time,
             end_date=obl_due + timedelta(days=5)
         )
@@ -120,10 +146,11 @@ class RescuePlanEngine:
         plan_a_idempotency = f"act_remind_{top_target['invoice_id'] if top_target else '0'}_{uuid.uuid4().hex[:8]}"
         plan_a_amount = top_target["amount"] if top_target else 0.0
         plan_a_recipient = top_target["client_name"] if top_target else "Client"
+        plan_a_currency = (top_target.get("currency") or owner_curr) if top_target else owner_curr
         plan_a_hash = generate_approval_hash(
             recipient=plan_a_recipient,
             amount=plan_a_amount,
-            currency="USD",
+            currency=plan_a_currency,
             action_type="SEND_REMINDER",
             idempotency_key=plan_a_idempotency
         )
@@ -162,7 +189,7 @@ class RescuePlanEngine:
             action_type="SEND_REMINDER",
             recipient=plan_a_recipient,
             amount=plan_a_amount,
-            currency="USD",
+            currency=plan_a_currency,
             state="proposed",
             idempotency_key=plan_a_idempotency,
             approval_hash=plan_a_hash,
@@ -196,7 +223,7 @@ class RescuePlanEngine:
             name="Plan A: Collect Without Concessions",
             description="Send official PayPal payment reminder with live pay link to top reliable client.",
             cost=0.0,
-            cost_description="$0.00 concession cost. Zero revenue lost.",
+            cost_description=f"{owner_sym}0.00 concession cost. Zero revenue lost.",
             incoming_needed=shortfall,
             selected_clients=scored_targets[:2],
             rationale=plan_a_rationale,
@@ -220,7 +247,7 @@ class RescuePlanEngine:
         plan_b_risk = "Early payment is not guaranteed; offer expires if client does not take advantage of terms."
         plan_b_rationale = (
             f"Updates PayPal invoice terms to grant {disc_client_name} a {discount_pct:.1f}% early-pay discount "
-            f"(${disc_cost:,.2f}), providing strong financial incentive to pay before Friday."
+            f"({owner_sym}{disc_cost:,.2f}), providing strong financial incentive to pay before Friday."
         )
 
         with_plan_b_inflows = []
@@ -234,16 +261,17 @@ class RescuePlanEngine:
         plan_b_with_proj, _, _ = project_cashflow_timeline(
             starting_balance=starting_balance,
             predicted_inflows=with_plan_b_inflows,
-            obligations=[{"amount": float(obligation_obj.amount), "due_date": obl_due, "payee_name": obligation_obj.payee_name}],
+            obligations=[{"amount": obl_amount_in_owner, "due_date": obl_due, "payee_name": obligation_obj.payee_name}],
             start_date=start_time,
             end_date=obl_due + timedelta(days=5)
         )
 
         plan_b_idempotency = f"act_disc_{discount_cand['invoice_id'] if discount_cand else '0'}_{uuid.uuid4().hex[:8]}"
+        plan_b_currency = (discount_cand.get("currency") or owner_curr) if discount_cand else owner_curr
         plan_b_hash = generate_approval_hash(
             recipient=disc_client_name,
             amount=disc_cost,
-            currency="USD",
+            currency=plan_b_currency,
             action_type="APPLY_DISCOUNT",
             idempotency_key=plan_b_idempotency
         )
@@ -274,7 +302,7 @@ class RescuePlanEngine:
             forecast_with_plan=plan_b_with_proj,
             forecast_without_plan=[p.model_dump() for p in forecast_response.projections],
             late_scenario={
-                "outcome": "If client declines early pay offer, discount expires and shortfall of ${shortfall:,.2f} persists.",
+                "outcome": f"If client declines early pay offer, discount expires and shortfall of {owner_sym}{shortfall:,.2f} persists.",
                 "shortfall": shortfall
             },
             remaining_risk=f"Plausibly protects payment date through monetary incentive. {plan_b_risk}"
@@ -288,7 +316,7 @@ class RescuePlanEngine:
             action_type="APPLY_DISCOUNT",
             recipient=disc_client_name,
             amount=disc_cost,
-            currency="USD",
+            currency=plan_b_currency,
             state="proposed",
             idempotency_key=plan_b_idempotency,
             approval_hash=plan_b_hash,
@@ -370,12 +398,22 @@ class RescuePlanEngine:
                 plan_c_rationale += " (SIMULATED CONSENT — DEMO ONLY)"
 
             # Forecast with Plan C: Friday outflow is reduced to installment 1
+            inst1_in_owner = plan_c_inst1
+            inst2_in_owner = plan_c_inst2
+            if obl_curr != owner_curr:
+                c1 = convert_currency_amount(Decimal(str(plan_c_inst1)), obl_curr, owner_curr, round_minor_unit=True)
+                if c1 is not None:
+                    inst1_in_owner = float(c1)
+                c2 = convert_currency_amount(Decimal(str(plan_c_inst2)), obl_curr, owner_curr, round_minor_unit=True)
+                if c2 is not None:
+                    inst2_in_owner = float(c2)
+
             plan_c_with_proj, _, _ = project_cashflow_timeline(
                 starting_balance=starting_balance,
                 predicted_inflows=[{"amount": inv["amount"], "expected_pay_date": inv["expected_pay_date"]} for inv in open_invoices],
                 obligations=[
-                    {"amount": plan_c_inst1, "due_date": obl_due, "payee_name": obligation_obj.payee_name},
-                    {"amount": plan_c_inst2, "due_date": obl_due + timedelta(days=5), "payee_name": obligation_obj.payee_name}
+                    {"amount": inst1_in_owner, "due_date": obl_due, "payee_name": obligation_obj.payee_name},
+                    {"amount": inst2_in_owner, "due_date": obl_due + timedelta(days=5), "payee_name": obligation_obj.payee_name}
                 ],
                 start_date=start_time,
                 end_date=obl_due + timedelta(days=7)

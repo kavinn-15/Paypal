@@ -2645,7 +2645,7 @@ def test_alembic_fresh_database_initialization_reaches_head(tmp_path):
 
     with eng.connect() as c:
         current_rev = c.execute(text("SELECT version_num FROM alembic_version;")).scalar()
-        assert current_rev in ["6f7a8b9c0d1e", "7a8b9c0d1e2f"]
+        assert current_rev in ["6f7a8b9c0d1e", "7a8b9c0d1e2f", "8b9c0d1e2f3a"]
 
 
 def test_paypal_webhook_extracts_individual_payment_amount_not_invoice_total(setup_db):

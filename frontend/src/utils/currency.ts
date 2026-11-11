@@ -102,27 +102,41 @@ export function getCurrencySymbol(currencyCode: string = 'USD', locale: string =
 
 /**
  * Default fallback benchmark exchange rates (units per 1 USD)
+ * Synchronized with backend BENCHMARK_EXCHANGE_RATES
  */
 export const DEFAULT_EXCHANGE_RATES: Record<string, number> = {
   USD: 1.0,
   EUR: 0.92,
   GBP: 0.79,
-  INR: 83.50,
-  CAD: 1.36,
-  AUD: 1.52,
-  JPY: 155.0,
+  CAD: 1.38,
+  AUD: 1.55,
+  JPY: 152.0,
+  INR: 86.50,
+  CHF: 0.88,
+  BRL: 5.75,
+  MXN: 20.30,
   SGD: 1.35,
   AED: 3.67,
-  CHF: 0.91,
-  CNY: 7.23,
-  BRL: 5.15,
-  MXN: 16.85,
-  NZD: 1.66,
-  SEK: 10.82,
+  CNY: 7.25,
+  NZD: 1.68,
+  SEK: 10.60,
 };
 
 /**
+ * Checks if exchange rate data is available for a given currency code.
+ */
+export function isRateAvailable(
+  currencyCode: string,
+  rates: Record<string, number> = DEFAULT_EXCHANGE_RATES
+): boolean {
+  const code = (currencyCode || 'USD').toUpperCase();
+  if (code === 'USD') return true;
+  return typeof rates[code] === 'number' && rates[code] > 0;
+}
+
+/**
  * Converts an amount from one currency to another using exchange rates normalized to USD.
+ * If exchange rate data is unavailable, returns NaN to avoid misleading calculations.
  */
 export function convertAmount(
   amount: number | string | null | undefined,
@@ -140,8 +154,8 @@ export function convertAmount(
   const fromRate = rates[fromCode] ?? (fromCode === 'USD' ? 1.0 : undefined);
   const toRate = rates[toCode] ?? (toCode === 'USD' ? 1.0 : undefined);
 
-  if (!fromRate || !toRate) {
-    return num; // Graceful fallback: return original amount if rate unknown
+  if (fromRate === undefined || toRate === undefined || fromRate <= 0 || toRate <= 0) {
+    return NaN; // Explicit failure: cannot convert without valid exchange rate
   }
 
   // Convert from origin to USD baseline, then from USD to target

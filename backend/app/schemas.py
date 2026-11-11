@@ -166,8 +166,10 @@ class RegionDetectionResponse(BaseModel):
     country_name: Optional[str] = None
     flag: Optional[str] = None
     suggested_currency: Optional[str] = None
+    currency: Optional[str] = None  # Frontend compatibility alias for suggested_currency
     currency_name: Optional[str] = None
     currency_symbol: Optional[str] = None
+    symbol: Optional[str] = None  # Frontend compatibility alias for currency_symbol
     decimals: int = 2
     dial_code: Optional[str] = None
     locale: Optional[str] = None
@@ -385,6 +387,7 @@ class LedgerIntegrityReport(BaseModel):
     total_confirmed_inflows: float
     total_confirmed_outflows: float
     total_reserves: float
+    total_refunds: float = 0.0
     total_adjustments: float
     discrepancy: float
     verified_entries_count: int
@@ -410,6 +413,7 @@ class DailyProjection(BaseModel):
 
 class ClientPredictionOut(BaseModel):
     client_id: int
+    invoice_id: Optional[int] = None
     client_name: str
     invoice_amount: float
     due_date: str

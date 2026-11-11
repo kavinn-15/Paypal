@@ -1,3 +1,4 @@
+import calendar
 import datetime
 from decimal import Decimal
 from typing import List, Dict, Any, Optional, Set
@@ -20,56 +21,100 @@ class FinancialService:
     """
 
     @staticmethod
-    def get_confirmed_balance(db: Session, owner: Owner) -> Decimal:
+    def get_currency_balances(db: Session, owner: Owner) -> Dict[str, Decimal]:
         """
-        Calculates authoritative confirmed cash balance strictly from confirmed entries:
-        Confirmed Balance = Opening Balance + Confirmed Income - Confirmed Expense - Reserves +/- Adjustments
-        Never includes uncollected invoices or expected amounts.
+        Calculates authoritative confirmed balances grouped strictly by original transaction currency.
+        Never combines amounts in different currencies without explicit conversion.
+        Formula per currency:
+        Balance[c] = Opening Balance[c] + Confirmed Income[c] - Confirmed Expense[c] - Reserves[c] - Refunds[c] + Adjustments[c]
         """
         entries = db.query(FinancialEntry).filter(
             FinancialEntry.owner_id == owner.id,
             FinancialEntry.status == "confirmed"
         ).all()
 
-        balance = Decimal("0.00")
-        has_opening = False
+        balances: Dict[str, Decimal] = {}
+        has_opening_per_curr: Dict[str, bool] = {}
 
         for e in entries:
+            curr = (e.currency or owner.currency or "USD").strip().upper()
+            if curr not in balances:
+                balances[curr] = Decimal("0.00")
+                has_opening_per_curr[curr] = False
+
             amt = Decimal(str(e.amount))
             if e.entry_type == "opening_balance":
-                balance += amt
-                has_opening = True
+                balances[curr] += amt
+                has_opening_per_curr[curr] = True
             elif e.entry_type in ("income", "confirmed_income"):
-                balance += amt
+                balances[curr] += amt
             elif e.entry_type in ("expense", "confirmed_expense"):
-                balance -= amt
+                balances[curr] -= amt
             elif e.entry_type == "reserve":
-                balance -= amt  # Earmarked cash removed from available operating balance
+                balances[curr] -= amt  # Earmarked cash removed from available operating balance
             elif e.entry_type == "refund":
-                balance -= amt
+                balances[curr] -= amt
             elif e.entry_type == "adjustment":
-                balance += amt
+                balances[curr] += amt
 
-        # For seeded demo account without opening entry, provide deterministic baseline
-        if not has_opening and owner.is_demo:
-            balance += Decimal("1800.00")
+        # For seeded demo account without an opening entry, provide deterministic baseline in owner's native base currency
+        owner_base = (owner.currency or "USD").strip().upper()
+        if owner.is_demo:
+            if owner_base not in balances:
+                balances[owner_base] = Decimal("0.00")
+                has_opening_per_curr[owner_base] = False
+            if not has_opening_per_curr.get(owner_base, False) and balances[owner_base] == Decimal("0.00"):
+                balances[owner_base] += Decimal("1800.00")
 
-        return balance
+        # If no entries exist, return owner base currency with 0.00
+        if not balances:
+            balances[owner_base] = Decimal("0.00")
+
+        return balances
+
+    @staticmethod
+    def get_confirmed_balance(db: Session, owner: Owner, target_currency: Optional[str] = None) -> Decimal:
+        """
+        Calculates authoritative confirmed cash balance converted to target_currency
+        (defaults to owner's preferred or base currency).
+        Converts each currency's balance using explicit exchange rates.
+        Never combines amounts without explicit conversion.
+        """
+        from backend.app.services.region_service import convert_currency_amount
+
+        target = (target_currency or owner.preferred_currency or owner.currency or "USD").strip().upper()
+        balances_by_curr = FinancialService.get_currency_balances(db, owner)
+
+        total_in_target = Decimal("0.00")
+        for curr, bal in balances_by_curr.items():
+            if curr == target:
+                total_in_target += bal
+            else:
+                converted = convert_currency_amount(bal, curr, target, round_minor_unit=True)
+                if converted is None:
+                    raise ValueError(
+                        f"Cannot compute consolidated balance in {target}: exchange rate for {curr} is unavailable."
+                    )
+                total_in_target += converted
+
+        return total_in_target
 
     @staticmethod
     def get_summary(db: Session, owner: Owner) -> FinancialSummaryResponse:
         """
         Calculates comprehensive financial summary:
-        - Reconciled confirmed balance
-        - Deduplicated 30-day expected inflows
-        - Deduplicated 30-day expected outflows
+        - Reconciled confirmed balance in display/base currency
+        - Deduplicated 30-day expected inflows (converted to base currency)
+        - Deduplicated 30-day expected outflows (converted to base currency)
         - Reserve coverage ratio
-        - Multi-currency distribution
+        - Multi-currency distribution built directly from ledger entries without double-counting
         """
         now = datetime.datetime.utcnow()
         thirty_days_later = now + datetime.timedelta(days=30)
+        target_curr = (owner.preferred_currency or owner.currency or "USD").strip().upper()
 
-        confirmed_balance = FinancialService.get_confirmed_balance(db, owner)
+        confirmed_balance = FinancialService.get_confirmed_balance(db, owner, target_currency=target_curr)
+        currency_balances = FinancialService.get_currency_balances(db, owner)
 
         # Track canonical IDs to prevent any double-counting
         seen_inflow_canonical_ids: Set[str] = set()
@@ -84,6 +129,8 @@ class FinancialService:
             Invoice.status.in_(["SENT", "DRAFT", "PARTIALLY_PAID"])
         ).all()
 
+        from backend.app.services.region_service import convert_currency_amount
+
         for inv in open_invoices:
             paid_so_far = sum(Decimal(str(h.amount)) for h in inv.history_records)
             outstanding = max(Decimal("0.00"), Decimal(str(inv.amount)) - paid_so_far)
@@ -91,7 +138,12 @@ class FinancialService:
                 canon_id = f"inv_{inv.paypal_invoice_id}"
                 seen_inflow_canonical_ids.add(canon_id)
                 if inv.due_date <= thirty_days_later:
-                    expected_inflows += outstanding
+                    inv_curr = (inv.currency or target_curr).strip().upper()
+                    if inv_curr == target_curr:
+                        expected_inflows += outstanding
+                    else:
+                        converted = convert_currency_amount(outstanding, inv_curr, target_curr, round_minor_unit=True)
+                        expected_inflows += converted if converted is not None else outstanding
 
         # 2. Open obligations (Payables)
         obligations = db.query(Obligation).filter(
@@ -103,17 +155,22 @@ class FinancialService:
             canon_id = f"obl_{ob.id}"
             seen_outflow_canonical_ids.add(canon_id)
             if ob.due_date <= thirty_days_later:
-                expected_outflows += Decimal(str(ob.amount))
+                ob_curr = (ob.currency or target_curr).strip().upper()
+                amt = Decimal(str(ob.amount))
+                if ob_curr == target_curr:
+                    expected_outflows += amt
+                else:
+                    converted = convert_currency_amount(amt, ob_curr, target_curr, round_minor_unit=True)
+                    expected_outflows += converted if converted is not None else amt
 
-        # 3. Expected financial entries (with deduplication against invoices/obligations)
+        # 3. Future financial entries (with deduplication against invoices/obligations)
+        # ONLY include expected future entries here to avoid double-counting confirmed transactions!
         entries_30d = db.query(FinancialEntry).filter(
             FinancialEntry.owner_id == owner.id,
             FinancialEntry.transaction_date >= now,
             FinancialEntry.transaction_date <= thirty_days_later,
-            FinancialEntry.status.in_(["expected", "confirmed"])
+            FinancialEntry.status == "expected"
         ).all()
-
-        currency_buckets: Dict[str, Decimal] = {owner.currency: confirmed_balance}
 
         for ent in entries_30d:
             # Check canonical reference deduplication
@@ -122,30 +179,35 @@ class FinancialService:
             if ent.canonical_id and (ent.canonical_id in seen_inflow_canonical_ids or ent.canonical_id in seen_outflow_canonical_ids):
                 continue
 
+            ent_curr = (ent.currency or target_curr).strip().upper()
             amt = Decimal(str(ent.amount))
+            if ent_curr != target_curr:
+                converted = convert_currency_amount(amt, ent_curr, target_curr, round_minor_unit=True)
+                amt_in_target = converted if converted is not None else amt
+            else:
+                amt_in_target = amt
+
             if ent.entry_type in ("income", "expected_income"):
-                expected_inflows += amt
+                expected_inflows += amt_in_target
             elif ent.entry_type in ("expense", "expected_expense"):
-                expected_outflows += amt
+                expected_outflows += amt_in_target
 
-            # Track currency distribution
-            c = ent.currency.upper()
-            if c not in currency_buckets:
-                currency_buckets[c] = Decimal("0.00")
-            if ent.entry_type in ("income", "confirmed_income", "opening_balance"):
-                currency_buckets[c] += amt
-            elif ent.entry_type in ("expense", "confirmed_expense"):
-                currency_buckets[c] -= amt
+        # Reserve target calculation: 1 month of average expense obligations (~$3,000 baseline in target currency)
+        reserve_baseline_usd = Decimal("3000.00")
+        if target_curr == "USD":
+            reserve_target = reserve_baseline_usd
+        else:
+            conv_reserve = convert_currency_amount(reserve_baseline_usd, "USD", target_curr, round_minor_unit=True)
+            reserve_target = conv_reserve if conv_reserve is not None else reserve_baseline_usd
 
-        # Reserve target calculation: 1 month of average expense obligations (~$3,000 baseline)
-        reserve_target = Decimal("3000.00")
         reserve_actual = max(Decimal("0.00"), confirmed_balance)
         coverage_ratio = float(reserve_actual / reserve_target) if reserve_target > 0 else 1.0
 
-        currency_breakdown = {k: float(v) for k, v in currency_buckets.items()}
+        # Currency breakdown from single consistent source of truth: currency_balances
+        currency_breakdown = {k: float(v) for k, v in currency_balances.items()}
 
         return FinancialSummaryResponse(
-            currency=owner.currency,
+            currency=target_curr,
             current_confirmed_balance=float(confirmed_balance),
             expected_inflows_30d=float(expected_inflows),
             expected_outflows_30d=float(expected_outflows),
@@ -287,47 +349,74 @@ class FinancialService:
         return items
 
     @staticmethod
+    def _add_calendar_months(dt: datetime.datetime, months: int, original_day: Optional[int] = None) -> datetime.datetime:
+        target_day = original_day if original_day is not None else dt.day
+        total_months = dt.year * 12 + (dt.month - 1) + months
+        new_year = total_months // 12
+        new_month = (total_months % 12) + 1
+        max_days = calendar.monthrange(new_year, new_month)[1]
+        new_day = min(target_day, max_days)
+        return dt.replace(year=new_year, month=new_month, day=new_day)
+
+    @staticmethod
+    def _add_calendar_years(dt: datetime.datetime, years: int, original_day: Optional[int] = None) -> datetime.datetime:
+        target_day = original_day if original_day is not None else dt.day
+        new_year = dt.year + years
+        max_days = calendar.monthrange(new_year, dt.month)[1]
+        new_day = min(target_day, max_days)
+        return dt.replace(year=new_year, day=new_day)
+
+    @staticmethod
     def _generate_occurrences(entry: FinancialEntry, start: datetime.datetime, end: datetime.datetime) -> List[Dict[str, Any]]:
-        """Generates future virtual occurrences of recurring transactions without database duplication."""
+        """
+        Generates future virtual occurrences of recurring transactions without database duplication.
+        Uses calendar-aware monthly, quarterly, and annual math preserving month-ends and leap years.
+        """
         occurrences = []
-        rec = entry.recurrence.lower()
-        step_days = 0
-        if rec == "daily":
-            step_days = 1
-        elif rec == "weekly":
-            step_days = 7
-        elif rec == "monthly":
-            step_days = 30
-        elif rec == "quarterly":
-            step_days = 90
-        elif rec == "annual":
-            step_days = 365
-        else:
+        rec = (entry.recurrence or "").lower()
+        if rec not in ("daily", "weekly", "monthly", "quarterly", "annual"):
             return occurrences
 
-        current_date = entry.transaction_date
+        orig_date = entry.transaction_date
+        orig_day = orig_date.day
         max_end = entry.recurrence_end_date if entry.recurrence_end_date else end
         effective_end = min(end, max_end)
-
         direction = "inflow" if entry.entry_type in ["income", "opening_balance", "confirmed_income"] else "outflow"
 
-        while current_date + datetime.timedelta(days=step_days) <= effective_end:
-            current_date += datetime.timedelta(days=step_days)
-            if current_date < start:
-                continue
-            occurrences.append({
-                "id": f"recurring-{entry.id}-{current_date.strftime('%Y%m%d')}",
-                "title": f"{entry.title} (Recurring)",
-                "amount": float(entry.amount),
-                "currency": entry.currency,
-                "direction": direction,
-                "category": entry.category,
-                "date": current_date.strftime("%Y-%m-%d"),
-                "status": "expected",
-                "data_source": "recurring_engine",
-                "reference_id": str(entry.id),
-                "is_virtual": True
-            })
+        iteration = 1
+        while True:
+            if rec == "daily":
+                next_date = orig_date + datetime.timedelta(days=iteration)
+            elif rec == "weekly":
+                next_date = orig_date + datetime.timedelta(days=7 * iteration)
+            elif rec == "monthly":
+                next_date = FinancialService._add_calendar_months(orig_date, iteration, orig_day)
+            elif rec == "quarterly":
+                next_date = FinancialService._add_calendar_months(orig_date, 3 * iteration, orig_day)
+            elif rec == "annual":
+                next_date = FinancialService._add_calendar_years(orig_date, iteration, orig_day)
+            else:
+                break
+
+            if next_date > effective_end:
+                break
+
+            if next_date >= start:
+                occurrences.append({
+                    "id": f"recurring-{entry.id}-{next_date.strftime('%Y%m%d')}",
+                    "title": f"{entry.title} (Recurring)",
+                    "amount": float(entry.amount),
+                    "currency": entry.currency,
+                    "direction": direction,
+                    "category": entry.category,
+                    "date": next_date.strftime("%Y-%m-%d"),
+                    "status": "expected",
+                    "data_source": "recurring_engine",
+                    "reference_id": str(entry.id),
+                    "is_virtual": True
+                })
+
+            iteration += 1
 
         return occurrences
 
@@ -369,58 +458,96 @@ class FinancialService:
     @staticmethod
     def check_integrity(db: Session, owner: Owner) -> LedgerIntegrityReport:
         """
-        Validates mathematical integrity of the financial ledger:
-        Opening Balance + Total Confirmed Inflows - Total Confirmed Outflows - Reserves = Reconciled Balance
-        Verifies discrepancy == 0.00.
+        Validates mathematical integrity of the financial ledger per currency:
+        Opening Balance[c] + Confirmed Inflows[c] - Confirmed Outflows[c] - Reserves[c] - Refunds[c] + Adjustments[c] = Reconciled Balance[c]
+        Handles refunds, reversals, multi-currency segregation, and dynamic currency symbols.
         """
+        from backend.app.services.region_service import CURRENCIES_DB
+
+        owner_curr = (owner.preferred_currency or owner.currency or "USD").strip().upper()
+        sym = CURRENCIES_DB.get(owner_curr, {}).get("symbol", "$")
+
         entries = db.query(FinancialEntry).filter(
             FinancialEntry.owner_id == owner.id,
             FinancialEntry.status == "confirmed"
         ).all()
 
-        opening_balance = Decimal("1800.00") if owner.is_demo else Decimal("0.00")
-        confirmed_inflows = Decimal("0.00")
-        confirmed_outflows = Decimal("0.00")
-        reserves = Decimal("0.00")
-        adjustments = Decimal("0.00")
-
+        currencies: Set[str] = {owner_curr, (owner.currency or "USD").strip().upper()}
         for e in entries:
+            currencies.add((e.currency or owner.currency).strip().upper())
+
+        opening_balances: Dict[str, Decimal] = {c: Decimal("0.00") for c in currencies}
+        confirmed_inflows: Dict[str, Decimal] = {c: Decimal("0.00") for c in currencies}
+        confirmed_outflows: Dict[str, Decimal] = {c: Decimal("0.00") for c in currencies}
+        reserves: Dict[str, Decimal] = {c: Decimal("0.00") for c in currencies}
+        refunds: Dict[str, Decimal] = {c: Decimal("0.00") for c in currencies}
+        adjustments: Dict[str, Decimal] = {c: Decimal("0.00") for c in currencies}
+
+        has_opening = False
+        for e in entries:
+            curr = (e.currency or owner.currency).strip().upper()
             amt = Decimal(str(e.amount))
             if e.entry_type == "opening_balance":
-                opening_balance = amt
+                opening_balances[curr] += amt
+                has_opening = True
             elif e.entry_type in ("income", "confirmed_income"):
-                confirmed_inflows += amt
+                confirmed_inflows[curr] += amt
             elif e.entry_type in ("expense", "confirmed_expense"):
-                confirmed_outflows += amt
+                confirmed_outflows[curr] += amt
             elif e.entry_type == "reserve":
-                reserves += amt
+                reserves[curr] += amt
+            elif e.entry_type == "refund":
+                refunds[curr] += amt
             elif e.entry_type == "adjustment":
-                adjustments += amt
+                adjustments[curr] += amt
 
-        reconciled_balance = opening_balance + confirmed_inflows - confirmed_outflows - reserves + adjustments
-        actual_balance = FinancialService.get_confirmed_balance(db, owner)
-        discrepancy = actual_balance - reconciled_balance
+        # Seed baseline for demo account if no opening entry
+        base_curr = (owner.currency or "USD").strip().upper()
+        if not has_opening and owner.is_demo and opening_balances[base_curr] == Decimal("0.00"):
+            opening_balances[base_curr] = Decimal("1800.00")
+
+        actual_balances = FinancialService.get_currency_balances(db, owner)
+        currency_discrepancies: Dict[str, Decimal] = {}
+        total_discrepancy = Decimal("0.00")
 
         notes = [
-            f"Verified {len(entries)} confirmed ledger transactions.",
-            f"Opening balance authoritative anchor: ${float(opening_balance):,.2f}.",
-            "All inflows and outflows match strict DECIMAL(12, 2) arithmetic."
+            f"Verified {len(entries)} confirmed ledger transactions across {len(currencies)} currency account(s).",
+            f"Opening balance authoritative anchor: {sym}{float(opening_balances.get(owner_curr, Decimal('0.00'))):,.2f}.",
+            "All inflows, outflows, refunds, and adjustments match strict DECIMAL(12, 2) arithmetic."
         ]
 
-        if discrepancy != Decimal("0.00"):
-            notes.append(f"WARNING: Discrepancy detected of ${float(discrepancy):,.2f}.")
+        for c in sorted(currencies):
+            c_sym = CURRENCIES_DB.get(c, {}).get("symbol", c)
+            reconciled = opening_balances[c] + confirmed_inflows[c] - confirmed_outflows[c] - reserves[c] - refunds[c] + adjustments[c]
+            actual = actual_balances.get(c, Decimal("0.00"))
+            disc = actual - reconciled
+            currency_discrepancies[c] = disc
+            total_discrepancy += abs(disc)
+            if disc != Decimal("0.00"):
+                notes.append(f"WARNING: Discrepancy detected in {c} of {c_sym}{float(disc):,.2f}.")
+
+        # Owner's primary currency metrics for summary report
+        primary_reconciled = opening_balances[owner_curr] + confirmed_inflows[owner_curr] - confirmed_outflows[owner_curr] - reserves[owner_curr] - refunds[owner_curr] + adjustments[owner_curr]
+        primary_opening = opening_balances[owner_curr]
+        primary_inflows = confirmed_inflows[owner_curr]
+        primary_outflows = confirmed_outflows[owner_curr]
+        primary_reserves = reserves[owner_curr]
+        primary_refunds = refunds[owner_curr]
+        primary_adjustments = adjustments[owner_curr]
+        primary_discrepancy = currency_discrepancies.get(owner_curr, Decimal("0.00"))
 
         return LedgerIntegrityReport(
-            is_balanced=(discrepancy == Decimal("0.00")),
-            currency=owner.currency,
-            reconciled_balance=float(reconciled_balance),
-            opening_balance=float(opening_balance),
-            total_confirmed_inflows=float(confirmed_inflows),
-            total_confirmed_outflows=float(confirmed_outflows),
-            total_reserves=float(reserves),
-            total_adjustments=float(adjustments),
-            discrepancy=float(discrepancy),
+            is_balanced=(total_discrepancy == Decimal("0.00")),
+            currency=owner_curr,
+            reconciled_balance=float(primary_reconciled),
+            opening_balance=float(primary_opening),
+            total_confirmed_inflows=float(primary_inflows),
+            total_confirmed_outflows=float(primary_outflows),
+            total_reserves=float(primary_reserves),
+            total_refunds=float(primary_refunds),
+            total_adjustments=float(primary_adjustments),
+            discrepancy=float(primary_discrepancy),
             verified_entries_count=len(entries),
-            unreconciled_items_count=0 if discrepancy == Decimal("0.00") else 1,
+            unreconciled_items_count=0 if total_discrepancy == Decimal("0.00") else 1,
             notes=notes
         )

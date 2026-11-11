@@ -71,8 +71,10 @@ export interface RegionDetectionResponse {
   country_name?: string | null;
   flag?: string | null;
   suggested_currency?: string | null;
+  currency?: string | null;
   currency_name?: string | null;
   currency_symbol?: string | null;
+  symbol?: string | null;
   decimals?: number;
   dial_code?: string | null;
   locale?: string | null;
