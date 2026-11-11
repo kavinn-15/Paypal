@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import {
@@ -77,7 +77,7 @@ export const IgnaraSidebar: React.FC<IgnaraSidebarProps> = ({
     };
   }, [location.pathname]);
 
-  const navGroups: NavGroupDef[] = [
+  const navGroups: NavGroupDef[] = useMemo(() => [
     {
       label: 'INTELLIGENCE',
       items: [
@@ -103,7 +103,7 @@ export const IgnaraSidebar: React.FC<IgnaraSidebarProps> = ({
         { id: 'settings', path: '/settings', label: 'Settings', icon: Settings },
       ],
     },
-  ];
+  ], [pendingInboxCount]);
 
   // Map of item id to nav DOM element
   const itemRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -163,34 +163,45 @@ export const IgnaraSidebar: React.FC<IgnaraSidebarProps> = ({
     return current === item.path;
   };
 
-  const activeItem = navGroups
-    .flatMap((g) => g.items)
-    .find((item) => isPathActive(item));
+  const activeItemId = useMemo(() => {
+    for (const g of navGroups) {
+      for (const item of g.items) {
+        if (isPathActive(item)) return item.id;
+      }
+    }
+    return undefined;
+  }, [location.pathname, navGroups]);
 
   useEffect(() => {
-    if (!activeItem || !navContainerRef.current) return;
-    const el = itemRefs.current[activeItem.id];
+    if (!activeItemId || !navContainerRef.current) return;
+    const el = itemRefs.current[activeItemId];
     if (el) {
       const containerRect = navContainerRef.current.getBoundingClientRect();
       const elRect = el.getBoundingClientRect();
       const newTop = elRect.top - containerRect.top + navContainerRef.current.scrollTop;
       const newHeight = elRect.height;
 
-      // Stretch animation trigger
-      setPillStyle((prev) => ({
-        top: newTop,
-        height: newHeight,
-        opacity: 1,
-        stretching: Math.abs(prev.top - newTop) > 10,
-      }));
+      // Stretch animation trigger with idempotency guard
+      setPillStyle((prev) => {
+        const isStretching = Math.abs(prev.top - newTop) > 10;
+        if (prev.top === newTop && prev.height === newHeight && prev.opacity === 1 && !prev.stretching && !isStretching) {
+          return prev;
+        }
+        return {
+          top: newTop,
+          height: newHeight,
+          opacity: 1,
+          stretching: isStretching,
+        };
+      });
 
       const timer = setTimeout(() => {
-        setPillStyle((prev) => ({ ...prev, stretching: false }));
-      }, 520);
+        setPillStyle((prev) => (prev.stretching ? { ...prev, stretching: false } : prev));
+      }, 300);
 
       return () => clearTimeout(timer);
     }
-  }, [location.pathname, activeItem]);
+  }, [location.pathname, activeItemId]);
 
   // Listen to 'n' shortcut for New action
   useEffect(() => {

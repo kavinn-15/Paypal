@@ -16,7 +16,8 @@ import {
   Loader2,
   CheckCircle,
   RotateCcw,
-  Flame
+  Flame,
+  Sparkles
 } from 'lucide-react';
 
 const GoogleIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
@@ -211,7 +212,7 @@ export const LoginPage: React.FC = () => {
     setDemoLoading(true);
     try {
       await demoLogin();
-      navigate('/dashboard', { replace: true });
+      navigate(from, { replace: true });
     } catch (err: any) {
       setError(err.message || 'Demo initialization failed. Please try again.');
     } finally {
@@ -248,6 +249,13 @@ export const LoginPage: React.FC = () => {
               Access your real-time cashflow predictions and rescue inbox
             </p>
           </div>
+
+          {(location.state as any)?.from && (
+            <div className="p-3 rounded-[14px] bg-[var(--o1)]/10 border border-[var(--o1)]/25 text-[var(--o1)] text-xs flex items-center gap-2">
+              <Sparkles className="w-4 h-4 shrink-0" />
+              <span>Please sign in or use 1-Click Demo to access <strong>{from}</strong>.</span>
+            </div>
+          )}
 
           {error && (
             <div className="p-3.5 rounded-[14px] bg-[var(--r)]/15 border border-[var(--r)]/30 text-[var(--r)] text-xs flex items-start space-x-2.5">

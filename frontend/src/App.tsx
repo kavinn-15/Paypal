@@ -105,7 +105,7 @@ const AuthenticatedLayout: React.FC = () => {
 
         {/* Ignara Main Scroll Container: max-width 1080px, padding 14px 28px 40px, gap 16px */}
         <main ref={mainScrollRef} className="flex-1 overflow-y-auto ignara-scroll px-4 sm:px-7 py-3.5 sm:py-[14px] pb-10">
-          <div className="max-w-[1080px] mx-auto flex flex-col gap-4">
+          <div key={location.pathname} className="max-w-[1080px] mx-auto flex flex-col gap-4">
             <Outlet />
           </div>
         </main>
