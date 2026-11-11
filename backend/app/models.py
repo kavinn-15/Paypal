@@ -66,6 +66,11 @@ class PayPalConnection(Base):
     status = Column(String(50), default="connected", nullable=False)  # connected | disconnected | error
     last_checked_at = Column(DateTime, nullable=True)
     client_id_preview = Column(String(50), nullable=True)
+    connection_type = Column(String(50), default="shared_sandbox", nullable=False)  # shared_sandbox | merchant_oauth
+    is_shared_sandbox = Column(Boolean, default=True, nullable=False)
+    merchant_id = Column(String(100), nullable=True)
+    merchant_email = Column(String(255), nullable=True)
+    webhook_id = Column(String(100), nullable=True)
 
     owner = relationship("Owner", back_populates="paypal_connection")
 
@@ -373,13 +378,32 @@ class WebhookEvent(Base):
     verified = Column(Boolean, default=False, nullable=False)
     payload = Column(JSON, nullable=False, default=dict)
     processed = Column(Boolean, default=False, nullable=False, index=True)
-    processing_state = Column(String(50), default="received", nullable=False, index=True)  # received | processing | processed | quarantined | failed
+    processing_state = Column(String(50), default="received", nullable=False, index=True)  # received | processing | processed | quarantined | failed | dead_letter
     retry_count = Column(Integer, default=0, nullable=False)
+    max_retries = Column(Integer, default=3, nullable=False)
     error_details = Column(Text, nullable=True)
     processed_at = Column(DateTime, nullable=True)
-    reconciliation_status = Column(String(50), default="pending", nullable=False)  # pending | matched | manual_review_required | reconciled
+    reconciliation_status = Column(String(50), default="pending", nullable=False)  # pending | matched | manual_review_required | reconciled | payout_failed | unverified_signature
     received_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     is_simulated = Column(Boolean, default=False, nullable=False)
+    locked_at = Column(DateTime, nullable=True)
+    locked_by = Column(String(100), nullable=True)
+
+
+class PayPalWebhookRegistration(Base):
+    """
+    Persisted PayPal webhook registrations for verification and lifecycle tracking.
+    """
+    __tablename__ = "paypal_webhook_registrations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    webhook_id = Column(String(100), unique=True, nullable=False, index=True)
+    url = Column(String(500), nullable=False)
+    environment = Column(String(50), default="sandbox", nullable=False)
+    status = Column(String(50), default="active", nullable=False)  # active | disabled | deleted
+    event_types = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    last_verified_at = Column(DateTime, nullable=True)
 
 
 class RefreshToken(Base):

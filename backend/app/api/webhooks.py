@@ -1,13 +1,14 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
 from backend.app.db import get_db
 from backend.app.config import settings
 from backend.app.auth.deps import get_verified_current_user
-from backend.app.models import WebhookEvent, Invoice, Owner
+from backend.app.models import WebhookEvent, PayPalWebhookRegistration, Invoice, Owner
 from backend.app.paypal.client import paypal_client
 from backend.app.events.queue import event_queue
 from backend.app.events.processor import process_webhook_event
@@ -30,25 +31,45 @@ async def receive_paypal_webhook(
     """
     Public webhook endpoint receiving PayPal Sandbox events.
     Verifies cryptographic signature against PayPal API before queue processing.
-    Deduplicates by paypal_event_id.
+    Deduplicates atomically by paypal_event_id catching IntegrityError under concurrency.
     """
-    body_json = await request.json()
+    try:
+        body_json = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON in webhook payload")
+
+    if not isinstance(body_json, dict):
+        raise HTTPException(status_code=400, detail="Webhook payload must be a JSON object")
+
     event_id = body_json.get("id")
     event_type = body_json.get("event_type", "UNKNOWN")
+    resource = body_json.get("resource")
 
-    if not event_id:
+    if not event_id or not str(event_id).strip():
         raise HTTPException(status_code=400, detail="Missing webhook event id")
+    if not event_type or not str(event_type).strip():
+        raise HTTPException(status_code=400, detail="Missing webhook event type")
+    if not isinstance(resource, dict):
+        raise HTTPException(status_code=400, detail="Missing or invalid webhook resource object")
 
-    # 1. Deduplication check
+    # 1. Fast-path deduplication check
     existing = db.query(WebhookEvent).filter(WebhookEvent.paypal_event_id == event_id).first()
     if existing:
         return {"status": "ignored", "reason": "duplicate_event_id", "event_id": event_id}
 
-    # 2. Verify webhook signature through PayPal API
-    webhook_id = settings.PAYPAL_WEBHOOK_ID or "sandbox_wh_id"
-    is_verified = False
+    # 2. Retrieve authoritative registered webhook ID from database or config
+    active_reg = db.query(PayPalWebhookRegistration).filter(
+        PayPalWebhookRegistration.status == "active"
+    ).order_by(PayPalWebhookRegistration.created_at.desc()).first()
 
-    if paypal_transmission_id and paypal_transmission_sig and paypal_cert_url:
+    webhook_id = None
+    if active_reg and active_reg.webhook_id:
+        webhook_id = active_reg.webhook_id
+    elif settings.PAYPAL_WEBHOOK_ID and settings.PAYPAL_WEBHOOK_ID.strip().lower() not in ("sandbox_wh_id", "dummy_webhook_id", "none", ""):
+        webhook_id = settings.PAYPAL_WEBHOOK_ID.strip()
+
+    is_verified = False
+    if webhook_id and paypal_transmission_id and paypal_transmission_sig and paypal_cert_url:
         is_verified = await paypal_client.verify_webhook_signature(
             transmission_id=paypal_transmission_id,
             transmission_time=paypal_transmission_time or datetime.now(timezone.utc).isoformat(),
@@ -61,7 +82,11 @@ async def receive_paypal_webhook(
     else:
         is_verified = False
 
-    # Persist event with durable tracking state
+    reconciliation_status = "pending" if is_verified else (
+        "unverified_unregistered_webhook" if not webhook_id else "unverified_signature"
+    )
+
+    # 3. Persist event with durable tracking state and atomic insertion
     evt_record = WebhookEvent(
         paypal_event_id=event_id,
         event_type=event_type,
@@ -69,12 +94,16 @@ async def receive_paypal_webhook(
         payload=body_json,
         processed=False,
         processing_state="received" if is_verified else "quarantined",
-        reconciliation_status="pending" if is_verified else "unverified_signature",
+        reconciliation_status=reconciliation_status,
         is_simulated=False
     )
-    db.add(evt_record)
-    db.commit()
-    db.refresh(evt_record)
+    try:
+        db.add(evt_record)
+        db.commit()
+        db.refresh(evt_record)
+    except IntegrityError:
+        db.rollback()
+        return {"status": "ignored", "reason": "duplicate_event_id", "event_id": event_id}
 
     append_audit_log(
         db=db,
@@ -88,11 +117,15 @@ async def receive_paypal_webhook(
             db=db,
             actor="paypal_webhook",
             event="WEBHOOK_SIGNATURE_VERIFICATION_FAILED",
-            payload={"event_id": event_id, "event_type": event_type, "reason": "invalid_or_missing_signature"}
+            payload={
+                "event_id": event_id,
+                "event_type": event_type,
+                "reason": "unregistered_webhook_id" if not webhook_id else "invalid_or_missing_signature"
+            }
         )
         return {"status": "unverified_signature_stored", "verified": False, "event_id": event_id}
 
-    # 3. Enqueue verified event for processing
+    # 4. Enqueue verified event for asynchronous processing
     await event_queue.enqueue(event_id=evt_record.id, payload=body_json, is_simulated=False)
     return {"status": "accepted", "verified": True, "event_id": event_id}
 

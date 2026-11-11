@@ -413,10 +413,12 @@ def process_webhook_event(
 
         due_d = invoice.due_date if invoice.due_date.tzinfo else invoice.due_date.replace(tzinfo=timezone.utc)
         days_late = max((now.date() - due_d.date()).days, 0)
+        inv_total = Decimal(str(invoice.amount))
 
         if is_simulated:
             # SIMULATED PAYMENTS: NEVER mutate authoritative invoice payment state to PAID or create authoritative PaymentHistory
             invoice.is_simulated_paid = True
+            total_cumulative = Decimal(str(paid_amount))
             # Keep invoice.status as SENT or PARTIALLY_PAID (authoritative state untouched)
 
             # Record or update non-authoritative simulation ledger entry
@@ -607,6 +609,7 @@ def process_webhook_event(
 
         # Recalculate forecast using actual reconciled balance
         reconciled_balance = float(FinancialService.get_confirmed_balance(db, owner)) if owner else 1800.0 + float(paid_amount)
+        updated_forecast = None
         try:
             forecaster = ForecasterAgent(db)
             updated_forecast = forecaster.run_forecast(
@@ -615,8 +618,10 @@ def process_webhook_event(
                 owner_id=owner.id if owner else None
             )
         except Exception as e:
-            logger.info(f"Forecast recalculation skipped after payment: {e}")
+            logger.warning(f"Forecast recalculation skipped after payment: {e}")
             updated_forecast = None
+
+        shortfall_remaining = updated_forecast.shortfall_amount if updated_forecast is not None else None
 
         if not is_simulated and total_cumulative > inv_total:
             excess = total_cumulative - inv_total
@@ -654,112 +659,369 @@ def process_webhook_event(
                 "paypal_invoice_id": invoice.paypal_invoice_id,
                 "paid_amount": float(paid_amount),
                 "reconciled_balance": reconciled_balance,
-                "shortfall_remaining": updated_forecast.shortfall_amount,
+                "shortfall_remaining": shortfall_remaining,
                 "action_confirmed": action.id if action else None,
                 "is_simulated": is_simulated
             },
             owner_id=owner.id if owner else None
         )
 
+        remaining_balance = float(max(inv_total - total_cumulative, Decimal("0.00")))
         return {
             "status": "success",
             "invoice_id": invoice.id,
             "paypal_invoice_id": invoice.paypal_invoice_id,
             "action_confirmed": action.id if action else None,
             "reconciled_balance": reconciled_balance,
-            "shortfall_amount": updated_forecast.shortfall_amount,
+            "shortfall_amount": shortfall_remaining,
+            "remaining_balance": remaining_balance,
             "is_simulated": is_simulated
         }
 
     elif event_type == "PAYMENT.PAYOUTS-ITEM.SUCCEEDED":
-        sender_batch_id = resource.get("sender_batch_id")
+        sender_batch_id = (
+            resource.get("sender_batch_id")
+            or resource.get("payout_batch_id")
+            or resource.get("batch_header", {}).get("sender_batch_header", {}).get("sender_batch_id")
+        )
+        sender_item_id = resource.get("payout_item", {}).get("sender_item_id") or resource.get("sender_item_id")
+
+        action = None
+        if sender_batch_id:
+            action = db.query(Action).filter(Action.idempotency_key == sender_batch_id).first()
+        if not action and sender_item_id:
+            action = db.query(Action).filter(
+                (Action.idempotency_key == sender_item_id) | (Action.paypal_ref == sender_item_id)
+            ).first()
+
+        # Extract payout item amount, currency, recipient
+        p_item = resource.get("payout_item") or resource
+        raw_p_amount = None
+        raw_p_currency = None
+        amt_obj = p_item.get("amount") or resource.get("amount")
+        if isinstance(amt_obj, dict):
+            raw_p_amount = amt_obj.get("value")
+            raw_p_currency = amt_obj.get("currency") or amt_obj.get("currency_code")
+        elif amt_obj is not None:
+            raw_p_amount = amt_obj
+
+        p_receiver = p_item.get("receiver") or resource.get("receiver")
+
+        # Validate action matching and verification rules
+        is_matched = False
+        mismatch_reason = None
+
+        if not action:
+            mismatch_reason = f"No corresponding Action found for sender_batch_id '{sender_batch_id}'"
+        elif action.state not in (ActionState.APPROVED, ActionState.EXECUTING, ActionState.EXECUTED, ActionState.SIMULATED):
+            mismatch_reason = f"Action {action.id} is in invalid state '{action.state}' for confirmation"
+        elif not action.owner_id:
+            mismatch_reason = f"Action {action.id} has no assigned owner_id"
+        else:
+            # Check amount, currency, recipient
+            if raw_p_amount is not None:
+                p_amt_dec = Decimal(str(raw_p_amount))
+                act_amt_dec = Decimal(str(action.amount))
+                if abs(p_amt_dec - act_amt_dec) > Decimal("0.01"):
+                    mismatch_reason = f"Payout amount mismatch: action={act_amt_dec}, payout={p_amt_dec}"
+
+            if not mismatch_reason and raw_p_currency and action.currency:
+                if raw_p_currency.upper().strip() != action.currency.upper().strip():
+                    mismatch_reason = f"Payout currency mismatch: action={action.currency}, payout={raw_p_currency}"
+
+            if not mismatch_reason and p_receiver and action.recipient:
+                if p_receiver.strip().lower() != action.recipient.strip().lower():
+                    act_email = getattr(action, "payout_recipient_email", None)
+                    if not act_email or p_receiver.strip().lower() != act_email.strip().lower():
+                        mismatch_reason = f"Payout receiver mismatch: action={action.recipient}, payout={p_receiver}"
+
+            if not mismatch_reason:
+                is_matched = True
+
+        if not is_matched:
+            logger.warning(f"Unmatched or conflicting payout event {event_id}: {mismatch_reason}. Quarantining.")
+            if evt_record:
+                evt_record.processing_state = "quarantined"
+                evt_record.reconciliation_status = "manual_review_required"
+                evt_record.error_details = mismatch_reason
+                evt_record.processed = False
+                evt_record.processed_at = now
+                if action and action.owner_id:
+                    evt_record.owner_id = action.owner_id
+                db.commit()
+            append_audit_log(
+                db=db,
+                actor="paypal_webhook" if not is_simulated else "dev_simulator",
+                event="UNMATCHED_PAYOUT_QUARANTINED",
+                payload={
+                    "event_id": event_id,
+                    "sender_batch_id": sender_batch_id,
+                    "reason": mismatch_reason,
+                    "action_id": action.id if action else None
+                },
+                owner_id=action.owner_id if action else None
+            )
+            return {
+                "status": "quarantined",
+                "reason": "unmatched_payout_action",
+                "details": mismatch_reason
+            }
+
+        # Transition Action state
+        if is_simulated:
+            GuardrailStateMachine.transition(
+                db=db,
+                action=action,
+                target_state=ActionState.SIMULATED,
+                actor="dev_simulator"
+            )
+            action.is_simulated = True
+            action.confirmed_at = None
+        else:
+            GuardrailStateMachine.transition(
+                db=db,
+                action=action,
+                target_state=ActionState.CONFIRMED,
+                actor="paypal_webhook"
+            )
+            action.is_simulated = False
+            action.confirmed_at = now
+        db.commit()
+
+        # Record financial entry in ledger (distinguishing simulated from confirmed)
+        if action.owner_id:
+            if is_simulated:
+                sim_outflow = db.query(FinancialEntry).filter(
+                    FinancialEntry.owner_id == action.owner_id,
+                    FinancialEntry.reference_id == sender_batch_id,
+                    FinancialEntry.is_demo == True
+                ).first()
+                if sim_outflow:
+                    sim_outflow.amount = Decimal(str(action.amount))
+                    sim_outflow.transaction_date = now
+                else:
+                    sim_outflow = FinancialEntry(
+                        owner_id=action.owner_id,
+                        canonical_id=f"sim_payout_{sender_batch_id}_{event_id}",
+                        title=f"[SIMULATED] Contractor Payout ({action.recipient})",
+                        amount=Decimal(str(action.amount)),
+                        currency=action.currency,
+                        entry_type="simulated_expense",
+                        category="contractor",
+                        transaction_date=now,
+                        status="simulated",
+                        data_source="dev_simulator",
+                        reference_id=sender_batch_id,
+                        is_demo=True
+                    )
+                    db.add(sim_outflow)
+                db.commit()
+            else:
+                existing_outflow = db.query(FinancialEntry).filter(
+                    FinancialEntry.owner_id == action.owner_id,
+                    FinancialEntry.reference_id == sender_batch_id,
+                    FinancialEntry.status == "confirmed"
+                ).first()
+                if not existing_outflow:
+                    outflow_entry = FinancialEntry(
+                        owner_id=action.owner_id,
+                        canonical_id=f"payout_{sender_batch_id}_{event_id}",
+                        title=f"Contractor Payout Confirmed ({action.recipient})",
+                        amount=Decimal(str(action.amount)),
+                        currency=action.currency,
+                        entry_type="confirmed_expense",
+                        category="contractor",
+                        transaction_date=now,
+                        status="confirmed",
+                        data_source="paypal_webhook",
+                        reference_id=sender_batch_id,
+                        is_demo=False
+                    )
+                    db.add(outflow_entry)
+                    db.commit()
+
+        if evt_record:
+            evt_record.reconciliation_status = "reconciled"
+            evt_record.processing_state = "processed"
+            evt_record.processed = True
+            evt_record.processed_at = now
+            evt_record.owner_id = action.owner_id
+            db.commit()
+
+        append_audit_log(
+            db=db,
+            actor="paypal_webhook" if not is_simulated else "dev_simulator",
+            event="PAYOUT_CONFIRMED_RECONCILED",
+            payload={
+                "action_id": action.id,
+                "amount": float(action.amount),
+                "recipient": action.recipient,
+                "sender_batch_id": sender_batch_id,
+                "is_simulated": is_simulated
+            },
+            owner_id=action.owner_id
+        )
+
+        return {"status": "success", "payout_action_confirmed": action.id}
+
+    elif event_type in (
+        "PAYMENT.PAYOUTS-ITEM.FAILED",
+        "PAYMENT.PAYOUTS-ITEM.CANCELED",
+        "PAYMENT.PAYOUTS-ITEM.DENIED",
+        "PAYMENT.PAYOUTS-ITEM.BLOCKED"
+    ):
+        sender_batch_id = (
+            resource.get("sender_batch_id")
+            or resource.get("payout_batch_id")
+            or resource.get("batch_header", {}).get("sender_batch_header", {}).get("sender_batch_id")
+        )
         action = None
         if sender_batch_id:
             action = db.query(Action).filter(Action.idempotency_key == sender_batch_id).first()
 
-        if action and action.state in [ActionState.EXECUTED, ActionState.SIMULATED]:
-            if is_simulated:
-                GuardrailStateMachine.transition(
-                    db=db,
-                    action=action,
-                    target_state=ActionState.SIMULATED,
-                    actor="dev_simulator"
-                )
-                action.is_simulated = True
-                action.confirmed_at = None
-                db.commit()
-            else:
-                GuardrailStateMachine.transition(
-                    db=db,
-                    action=action,
-                    target_state=ActionState.CONFIRMED,
-                    actor="paypal_webhook"
-                )
-                action.is_simulated = False
-                action.confirmed_at = now
-                db.commit()
+        error_data = resource.get("errors") or resource.get("payout_item_fee") or resource.get("transaction_status")
+        err_msg = str(error_data) if error_data else f"Payout failed: {event_type}"
 
-            # Record financial entry in ledger (distinguishing simulated from confirmed)
-            if action.owner_id:
-                if is_simulated:
-                    sim_outflow = db.query(FinancialEntry).filter(
-                        FinancialEntry.owner_id == action.owner_id,
-                        FinancialEntry.reference_id == sender_batch_id,
-                        FinancialEntry.is_demo == True
-                    ).first()
-                    if sim_outflow:
-                        sim_outflow.amount = Decimal(str(action.amount))
-                        sim_outflow.transaction_date = now
-                    else:
-                        sim_outflow = FinancialEntry(
-                            owner_id=action.owner_id,
-                            canonical_id=f"sim_payout_{sender_batch_id}_{event_id}",
-                            title=f"[SIMULATED] Contractor Payout ({action.recipient})",
-                            amount=Decimal(str(action.amount)),
-                            currency=action.currency,
-                            entry_type="simulated_expense",
-                            category="contractor",
-                            transaction_date=now,
-                            status="simulated",
-                            data_source="dev_simulator",
-                            reference_id=sender_batch_id,
-                            is_demo=True
-                        )
-                        db.add(sim_outflow)
-                    db.commit()
-                else:
-                    existing_outflow = db.query(FinancialEntry).filter(
-                        FinancialEntry.owner_id == action.owner_id,
-                        FinancialEntry.reference_id == sender_batch_id,
-                        FinancialEntry.status == "confirmed"
-                    ).first()
-                    if not existing_outflow:
-                        outflow_entry = FinancialEntry(
-                            owner_id=action.owner_id,
-                            canonical_id=f"payout_{sender_batch_id}_{event_id}",
-                            title=f"Contractor Payout Confirmed ({action.recipient})",
-                            amount=Decimal(str(action.amount)),
-                            currency=action.currency,
-                            entry_type="confirmed_expense",
-                            category="contractor",
-                            transaction_date=now,
-                            status="confirmed",
-                            data_source="paypal_webhook",
-                            reference_id=sender_batch_id,
-                            is_demo=False
-                        )
-                        db.add(outflow_entry)
-                        db.commit()
+        if action and action.state in (ActionState.APPROVED, ActionState.EXECUTING, ActionState.EXECUTED, ActionState.SIMULATED):
+            try:
+                GuardrailStateMachine.transition(
+                    db=db,
+                    action=action,
+                    target_state=ActionState.FAILED,
+                    actor="paypal_webhook",
+                    error_message=err_msg
+                )
+                action.error_details = err_msg
+                db.commit()
+            except Exception as tr_err:
+                logger.warning(f"Error transitioning action {action.id} to FAILED: {tr_err}")
 
         if evt_record:
-            if evt_record.reconciliation_status != "manual_review_required":
-                evt_record.reconciliation_status = "reconciled"
-                evt_record.processing_state = "processed"
-                evt_record.processed = True
+            evt_record.processing_state = "processed"
+            evt_record.processed = True
+            evt_record.reconciliation_status = "payout_failed"
+            evt_record.error_details = err_msg
+            evt_record.processed_at = now
+            if action and action.owner_id:
+                evt_record.owner_id = action.owner_id
+            db.commit()
+
+        append_audit_log(
+            db=db,
+            actor="paypal_webhook",
+            event="PAYOUT_EXECUTION_FAILED",
+            payload={
+                "event_id": event_id,
+                "event_type": event_type,
+                "sender_batch_id": sender_batch_id,
+                "error": err_msg,
+                "action_id": action.id if action else None
+            },
+            owner_id=action.owner_id if action else None
+        )
+        return {"status": "success", "payout_action_failed": action.id if action else None, "event_type": event_type}
+
+    elif event_type in (
+        "PAYMENT.CAPTURE.REFUNDED",
+        "PAYMENT.CAPTURE.REVERSED",
+        "INVOICING.INVOICE.REFUNDED"
+    ):
+        paypal_inv_id = (
+            resource.get("invoice_id")
+            or resource.get("custom_id")
+            or resource.get("invoice", {}).get("id")
+        )
+        refund_tx_ref = resource.get("id") or resource.get("refund_id") or f"ref_{event_id}"
+        amt_obj = resource.get("amount") or resource.get("total_refunded_amount")
+        refund_amt_raw = amt_obj.get("value") if isinstance(amt_obj, dict) else amt_obj
+        refund_curr = amt_obj.get("currency_code") or amt_obj.get("currency") if isinstance(amt_obj, dict) else None
+
+        invoice = None
+        if paypal_inv_id:
+            invoice = db.query(Invoice).filter(Invoice.paypal_invoice_id == paypal_inv_id).first()
+
+        if not invoice:
+            logger.warning(f"Refund event {event_id} cannot be matched to an invoice (id={paypal_inv_id}). Quarantining.")
+            if evt_record:
+                evt_record.processing_state = "quarantined"
+                evt_record.reconciliation_status = "manual_review_required"
+                evt_record.error_details = f"Refund event cannot be matched to invoice '{paypal_inv_id}'"
+                evt_record.processed = False
+                evt_record.processed_at = now
+                db.commit()
+            append_audit_log(
+                db=db,
+                actor="paypal_webhook",
+                event="UNMATCHED_REFUND_QUARANTINED",
+                payload={"event_id": event_id, "paypal_invoice_id": paypal_inv_id, "resource": resource}
+            )
+            return {"status": "quarantined", "reason": "invoice_not_found_for_refund", "paypal_invoice_id": paypal_inv_id}
+
+        owner = invoice.client.owner if invoice.client else None
+        if evt_record and owner:
+            evt_record.owner_id = owner.id
+
+        refund_amt = Decimal(str(refund_amt_raw)) if refund_amt_raw else Decimal(str(invoice.amount))
+
+        # Check for duplicate refund processing by transaction reference
+        existing_refund_entry = None
+        if owner:
+            existing_refund_entry = db.query(FinancialEntry).filter(
+                FinancialEntry.owner_id == owner.id,
+                FinancialEntry.reference_id == refund_tx_ref
+            ).first()
+
+        if not existing_refund_entry and owner:
+            refund_entry = FinancialEntry(
+                owner_id=owner.id,
+                canonical_id=f"refund_{refund_tx_ref}",
+                title=f"Refund/Reversal for Invoice #{invoice.paypal_invoice_id} ({invoice.client.name})",
+                amount=refund_amt,
+                currency=refund_curr or invoice.currency,
+                entry_type="confirmed_expense",
+                category="refund",
+                transaction_date=now,
+                status="confirmed",
+                data_source="paypal_webhook",
+                reference_id=refund_tx_ref,
+                is_demo=False
+            )
+            db.add(refund_entry)
+
+        # Update invoice status
+        inv_amt = Decimal(str(invoice.amount))
+        if refund_amt >= inv_amt:
+            invoice.status = "REFUNDED"
+        else:
+            invoice.status = "PARTIALLY_REFUNDED"
+        db.commit()
+
+        if evt_record:
+            evt_record.processing_state = "processed"
+            evt_record.processed = True
+            evt_record.reconciliation_status = "reconciled"
             evt_record.processed_at = now
             db.commit()
 
-        return {"status": "success", "payout_action_confirmed": action.id if action else None}
+        append_audit_log(
+            db=db,
+            actor="paypal_webhook",
+            event="WEBHOOK_REFUND_RECONCILED",
+            payload={
+                "paypal_invoice_id": invoice.paypal_invoice_id,
+                "refund_amount": float(refund_amt),
+                "status": invoice.status,
+                "transaction_ref": refund_tx_ref
+            },
+            owner_id=owner.id if owner else None
+        )
+        return {
+            "status": "success",
+            "invoice_id": invoice.id,
+            "paypal_invoice_id": invoice.paypal_invoice_id,
+            "refund_amount": float(refund_amt),
+            "invoice_status": invoice.status
+        }
 
     if evt_record:
         evt_record.processing_state = "quarantined"

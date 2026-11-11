@@ -638,19 +638,28 @@ export const SettingsPage: React.FC = () => {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3 pt-3 text-xs border-t border-slate-100">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3 text-xs border-t border-slate-100">
+            <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/60">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Integration Type</span>
+              <span className="font-bold text-ink block mt-0.5 truncate">{status?.account_label || 'Shared Developer Sandbox'}</span>
+              <span className="text-[10px] text-sardine-slate block">Test / Demo Mode</span>
+            </div>
             <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/60">
               <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Environment</span>
               <span className="font-black text-emerald-700 block mt-0.5">SANDBOX ONLY</span>
               <span className="text-[10px] text-sardine-slate block">Hard Refusal Active</span>
             </div>
-            <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/60">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Client ID Preview</span>
+            <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/60 col-span-2 sm:col-span-1">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Webhook ID</span>
               <span className="font-mono font-bold text-ink block mt-0.5 truncate">
-                {status?.client_id_preview || 'Configured via .env'}
+                {status?.webhook_id ? status.webhook_id.substring(0, 14) + '...' : 'Registered via API'}
               </span>
-              <span className="text-[10px] text-sardine-slate block">OAuth2 Cached</span>
+              <span className="text-[10px] text-sardine-slate block">Verified Listener</span>
             </div>
+          </div>
+          <div className="p-3 bg-blue-50/70 border border-blue-200/70 rounded-xl text-[11px] text-blue-900 leading-relaxed">
+            <span className="font-bold">Integration Notice: </span>
+            This workspace uses the Cashflow Lifeline shared PayPal developer sandbox for simulated transactions and verification testing. Connecting an individual live merchant account requires PayPal Seller Onboarding (OAuth partner referrals).
           </div>
         </div>
 

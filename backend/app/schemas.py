@@ -262,6 +262,12 @@ class PayPalConnectionStatus(BaseModel):
     client_id_preview: Optional[str] = None
     last_checked_at: Optional[datetime] = None
     message: Optional[str] = None
+    connection_type: str = "shared_sandbox"
+    is_shared_sandbox: bool = True
+    account_label: str = "Shared Sandbox Integration (Developer Test Account)"
+    merchant_id: Optional[str] = None
+    merchant_email: Optional[str] = None
+    webhook_id: Optional[str] = None
 
 
 class SandboxTestResponse(BaseModel):

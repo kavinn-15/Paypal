@@ -305,6 +305,12 @@ export interface PayPalConnectionStatus {
   client_id_preview?: string;
   last_checked_at?: string;
   message?: string;
+  connection_type?: string;
+  is_shared_sandbox?: boolean;
+  account_label?: string;
+  merchant_id?: string;
+  merchant_email?: string;
+  webhook_id?: string;
 }
 
 export interface WhatIfComparisonResponse {

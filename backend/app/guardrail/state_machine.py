@@ -23,7 +23,7 @@ class ActionState:
 # Strict Directed State Machine Graph
 ALLOWED_TRANSITIONS = {
     ActionState.PROPOSED: [ActionState.APPROVED],
-    ActionState.APPROVED: [ActionState.EXECUTING, ActionState.EXECUTED],
+    ActionState.APPROVED: [ActionState.EXECUTING, ActionState.EXECUTED, ActionState.FAILED],
     ActionState.EXECUTING: [ActionState.EXECUTED, ActionState.FAILED],
     ActionState.EXECUTED: [ActionState.CONFIRMED, ActionState.SIMULATED, ActionState.FAILED],
     ActionState.SIMULATED: [ActionState.CONFIRMED, ActionState.FAILED],
