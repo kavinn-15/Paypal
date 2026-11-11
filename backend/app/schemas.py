@@ -314,6 +314,9 @@ class InvoiceOut(InvoiceBase):
     paypal_invoice_id: str
     paid_date: Optional[datetime] = None
     client_name: Optional[str] = None
+    is_seeded: bool = False
+    invoice_number: Optional[str] = None
+    provider_status: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -349,6 +352,7 @@ class ObligationOut(ObligationCreate):
     split_consent_source: Optional[str] = None
     split_consent_timestamp: Optional[datetime] = None
     split_consent_is_simulated: bool = False
+    is_demo: bool = False
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -523,8 +527,12 @@ class ActionOut(BaseModel):
     executed_at: Optional[datetime] = None
     confirmed_at: Optional[datetime] = None
     paypal_ref: Optional[str] = None
+    provider_request_id: Optional[str] = None
     error_message: Optional[str] = None
+    execution_error: Optional[str] = None
     is_simulated: bool = False
+    is_seeded: bool = False
+    is_demo: bool = False
     approval_version: int = 2
     obligation_id: Optional[int] = None
     payout_recipient_email: Optional[str] = None
@@ -548,6 +556,7 @@ class RescuePlanOut(BaseModel):
     forecast_without_plan: List[DailyProjection]
     late_scenario: Dict[str, Any]
     remaining_risk: str
+    is_demo: bool = False
     primary_action: ActionOut
 
 

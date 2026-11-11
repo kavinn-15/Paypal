@@ -256,10 +256,41 @@ def run_multi_horizon_simulation(
         tot_inflows = sum([p["inflows"] for p in projections])
         tot_outflows = sum([p["outflows"] for p in projections])
 
-        # Shortfall risk probability approximation across horizon
-        p_short = 0.85 if max_shortfall > 0 else 0.05
-        if max_shortfall > 0 and final_bal > 0:
-            p_short = 0.70  # temporary dip
+        # Empirical shortfall risk probability calculation across horizon
+        if max_shortfall <= 0:
+            p_short = 0.0
+        else:
+            # Monte Carlo sampling across horizon to compute empirical probability
+            date_strs = [p["date"] for p in projections]
+            daily_outflows = {p["date"]: p["outflows"] for p in projections}
+            sim_paths = 200
+            sim_shortfalls = 0
+            for _ in range(sim_paths):
+                path_bal = starting_balance
+                daily_sim_in = {d: 0.0 for d in date_strs}
+                for inf in predicted_inflows:
+                    # Perturb arrival date based on delay variability
+                    exp_d = inf.get("expected_pay_date", start_date)
+                    jitter = int(round(np.random.normal(0, 1.5)))
+                    actual_pay_d = exp_d + timedelta(days=jitter)
+                    d_str = actual_pay_d.strftime("%Y-%m-%d")
+                    if d_str in daily_sim_in:
+                        daily_sim_in[d_str] += float(inf.get("amount", 0.0))
+                    elif actual_pay_d.date() < start_date.date():
+                        daily_sim_in[date_strs[0]] += float(inf.get("amount", 0.0))
+
+                path_had_shortfall = False
+                for d in date_strs:
+                    path_bal += daily_sim_in[d] - daily_outflows[d]
+                    if path_bal < 0.0:
+                        path_had_shortfall = True
+                        break
+                if path_had_shortfall:
+                    sim_shortfalls += 1
+
+            p_short = round(float(sim_shortfalls / sim_paths), 3)
+            if p_short == 0.0 and max_shortfall > 0:
+                p_short = round(min(0.95, max(0.05, max_shortfall / max(tot_outflows, 1.0))), 3)
 
         # Days of runway without incoming revenue
         avg_daily_burn = (tot_outflows / days) if days > 0 else 1.0

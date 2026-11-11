@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 from sqlalchemy.orm import Session
-from backend.app.models import Action, Invoice, Obligation
+from backend.app.models import Action, Invoice, Obligation, Owner
 from backend.app.paypal.client import paypal_client, PayPalError
 from backend.app.guardrail.state_machine import GuardrailStateMachine, ActionState, InvalidStateTransitionError
 from backend.app.guardrail.policy import validate_action_against_policy, PolicyViolationError
@@ -74,6 +74,7 @@ class ActionExecutionService:
             raise
 
         # 4. Execution routing
+        owner = db.query(Owner).filter(Owner.id == action.owner_id).first() if action.owner_id else None
         try:
             if action.action_type == "SEND_REMINDER":
                 inv_id = action.paypal_ref
@@ -90,7 +91,16 @@ class ActionExecutionService:
 
                 msg = action.messages[0].body if action.messages else "Please find payment link attached."
 
-                if action.is_simulated:
+                is_local_sim = (
+                    action.is_simulated
+                    or getattr(action, "is_seeded", False)
+                    or getattr(action, "is_demo", False)
+                    or (owner and getattr(owner, "is_demo", False))
+                    or getattr(invoice, "is_seeded", False)
+                    or any(inv_id.startswith(p) for p in ["INV-", "INV2-MOCK-", "INV2-NORDIC-", "INV2-APEX-", "INV2-VERTEX-", "INV2-DEMO-", "INV2-HIST-", "INV2-SANDBOX-"])
+                )
+
+                if is_local_sim:
                     logger.info(f"[LOCAL DEMO SIMULATION] Simulated invoice reminder for action {action.id} ({inv_id}). External PayPal API not called.")
                     append_audit_log(
                         db=db,
@@ -107,15 +117,18 @@ class ActionExecutionService:
                         paypal_ref=inv_id
                     )
                     action.is_simulated = True
+                    invoice.provider_status = "REMINDED_LOCAL"
                     db.commit()
                 else:
                     # Dispatches real request to PayPal Sandbox API; raises PayPalError on failure
+                    req_id = f"remind_{inv_id}_{int(action.id)}_{action.idempotency_key[:8]}"
+                    action.provider_request_id = req_id
                     await paypal_client.send_invoice_reminder(
                         invoice_id=inv_id,
                         subject="Payment Reminder: Upcoming Invoice Settlement",
                         note=msg
                     )
-
+                    invoice.provider_status = "SENT"
                     GuardrailStateMachine.transition(
                         db=db,
                         action=action,
@@ -123,6 +136,8 @@ class ActionExecutionService:
                         actor=actor,
                         paypal_ref=inv_id
                     )
+                    action.is_simulated = False
+                    db.commit()
 
             elif action.action_type == "APPLY_DISCOUNT":
                 inv_id = action.paypal_ref
@@ -138,9 +153,19 @@ class ActionExecutionService:
 
                 disc_pct = float(action.plan.details.get("discount_pct", 3.0)) if action.plan and action.plan.details else 3.0
 
-                if action.is_simulated:
+                is_local_sim = (
+                    action.is_simulated
+                    or getattr(action, "is_seeded", False)
+                    or getattr(action, "is_demo", False)
+                    or (owner and getattr(owner, "is_demo", False))
+                    or getattr(invoice, "is_seeded", False)
+                    or any(inv_id.startswith(p) for p in ["INV-", "INV2-MOCK-", "INV2-NORDIC-", "INV2-APEX-", "INV2-VERTEX-", "INV2-DEMO-", "INV2-HIST-", "INV2-SANDBOX-"])
+                )
+
+                if is_local_sim:
                     logger.info(f"[LOCAL DEMO SIMULATION] Simulated discount for action {action.id} ({inv_id}). External PayPal API not called.")
                     invoice.discount_applied = disc_pct
+                    invoice.provider_status = "DISCOUNTED_LOCAL"
                     db.commit()
                     append_audit_log(
                         db=db,
@@ -160,6 +185,8 @@ class ActionExecutionService:
                     db.commit()
                 else:
                     # Dispatches real request to PayPal Sandbox API; raises PayPalError on failure
+                    req_id = f"disc_{inv_id}_{int(disc_pct * 100)}_{action.idempotency_key[:8]}"
+                    action.provider_request_id = req_id
                     await paypal_client.apply_invoice_discount(
                         invoice_id=inv_id,
                         discount_percent=disc_pct,
@@ -168,6 +195,7 @@ class ActionExecutionService:
 
                     # Only update local database upon verified PayPal API success
                     invoice.discount_applied = disc_pct
+                    invoice.provider_status = "SENT"
                     db.commit()
 
                     GuardrailStateMachine.transition(
@@ -177,6 +205,8 @@ class ActionExecutionService:
                         actor=actor,
                         paypal_ref=inv_id
                     )
+                    action.is_simulated = False
+                    db.commit()
 
             elif action.action_type in ("SCHEDULE_PAYOUT_SPLIT", "PAYOUT"):
                 # Determine and validate recipient contractor email
@@ -293,7 +323,7 @@ class ActionExecutionService:
 
                 # STRICT CENTRAL CHECK: Treat every action marked is_simulated=True as strictly local/demo-only.
                 # Under NO circumstances can a simulated action call paypal_client.create_payout()
-                if action.is_simulated:
+                if action.is_simulated or getattr(action, "is_seeded", False) or getattr(action, "is_demo", False):
                     sim_batch_id = f"SIM-PAYOUT-{action.idempotency_key[:24]}"
                     logger.info(
                         f"[LOCAL DEMO SIMULATION] Executed simulated payout action {action.id} "
@@ -356,6 +386,8 @@ class ActionExecutionService:
 
         except Exception as e:
             logger.error(f"Execution failed for action {action.id}: {e}")
+            action.execution_error = str(e)
+            action.error_message = str(e)
             GuardrailStateMachine.transition(
                 db=db,
                 action=action,
@@ -370,6 +402,7 @@ class ActionExecutionService:
                 payload={"action_id": action.id, "error": str(e)},
                 owner_id=action.owner_id
             )
+            db.commit()
             raise e
 
         return action

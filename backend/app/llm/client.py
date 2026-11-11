@@ -126,11 +126,32 @@ class LLMService:
         sym = currency_symbol or "$"
         curr = currency or "USD"
         link_str = f" Pay securely via PayPal: {pay_link}" if pay_link else ""
-        return (
+        template_fallback = (
             f"Hi {client_name}, this is a gentle reminder regarding invoice #{invoice_id} "
             f"for {sym}{amount:,.2f} {curr} due on {due_date_str}.{link_str} "
             f"Thank you for your business!"
         )
+
+        if self.provider == "template" or not self.api_key:
+            return template_fallback
+
+        prompt = (
+            f"Draft a polite, professional 2-sentence payment reminder email from a freelancer to a client ({client_name}). "
+            f"Invoice #{invoice_id} for {sym}{amount:,.2f} {curr} is due on {due_date_str}. "
+            f"Include this exact PayPal payment link if present: '{pay_link or ''}'. "
+            f"Keep tone warm and professional. Do NOT alter the invoice ID, amount, currency, or due date."
+        )
+
+        try:
+            llm_text = self._call_llm(prompt)
+            if llm_text:
+                if validate_llm_numbers(llm_text, [amount]):
+                    return llm_text.strip().strip('"')
+                logger.info("Reminder message number validation mismatch; using template fallback.")
+        except Exception as e:
+            logger.warning(f"LLM reminder draft failed: {e}. Using deterministic template.")
+
+        return template_fallback
 
     def draft_discount_message(
         self,
@@ -147,13 +168,37 @@ class LLMService:
         """Drafts early settlement incentive message."""
         sym = currency_symbol or "$"
         curr = currency or "USD"
+        savings = original_amount - discounted_amount
         link_str = f" Pay here: {pay_link}" if pay_link else ""
-        return (
+        template_fallback = (
             f"Hi {client_name}, we are pleased to offer a {discount_pct:.0f}% early payment discount on "
             f"invoice #{invoice_id}. If settled by {deadline_str}, the revised amount is "
-            f"{sym}{discounted_amount:,.2f} {curr} (saving {sym}{original_amount - discounted_amount:,.2f}).{link_str} "
+            f"{sym}{discounted_amount:,.2f} {curr} (saving {sym}{savings:,.2f}).{link_str} "
             f"Let us know if you'd like to take advantage of this concession!"
         )
+
+        if self.provider == "template" or not self.api_key:
+            return template_fallback
+
+        prompt = (
+            f"Draft a professional, compelling message from a freelancer to a client ({client_name}) offering a {discount_pct:.0f}% "
+            f"early payment discount on invoice #{invoice_id}. "
+            f"Original amount is {sym}{original_amount:,.2f}. Discounted amount is {sym}{discounted_amount:,.2f} {curr} "
+            f"(saving {sym}{savings:,.2f}) if settled by {deadline_str}. "
+            f"Include payment link '{pay_link or ''}' if available. Never alter the figures."
+        )
+
+        try:
+            llm_text = self._call_llm(prompt)
+            if llm_text:
+                allowed = [original_amount, discounted_amount, discount_pct, savings]
+                if validate_llm_numbers(llm_text, allowed):
+                    return llm_text.strip().strip('"')
+                logger.info("Discount message number validation mismatch; using template fallback.")
+        except Exception as e:
+            logger.warning(f"LLM discount draft failed: {e}. Using deterministic template.")
+
+        return template_fallback
 
     def draft_contractor_split_message(
         self,
@@ -168,12 +213,34 @@ class LLMService:
     ) -> str:
         """Drafts polite installment agreement message for contractor payout."""
         sym = currency_symbol or "$"
-        return (
+        template_fallback = (
             f"Hi {contractor_name}, thank you for your continued great work. To align with our client payment "
             f"cycles, we propose splitting your {sym}{total_amount:,.2f} payout into two installments: "
             f"{sym}{first_installment:,.2f} on {first_date_str}, and the remaining {sym}{second_installment:,.2f} "
             f"on {second_date_str}. Please let us know if this arrangement works for you."
         )
+
+        if self.provider == "template" or not self.api_key:
+            return template_fallback
+
+        prompt = (
+            f"Draft a respectful, collaborative message from a business owner to their contractor ({contractor_name}) "
+            f"proposing to split their upcoming {sym}{total_amount:,.2f} payment into two installments: "
+            f"{sym}{first_installment:,.2f} on {first_date_str}, and {sym}{second_installment:,.2f} on {second_date_str}. "
+            f"Thank them for great work and ask for their consent. Do not alter the amounts or dates."
+        )
+
+        try:
+            llm_text = self._call_llm(prompt)
+            if llm_text:
+                allowed = [total_amount, first_installment, second_installment]
+                if validate_llm_numbers(llm_text, allowed):
+                    return llm_text.strip().strip('"')
+                logger.info("Contractor split message number validation mismatch; using template fallback.")
+        except Exception as e:
+            logger.warning(f"LLM contractor split draft failed: {e}. Using deterministic template.")
+
+        return template_fallback
 
     def _call_llm(self, prompt: str) -> Optional[str]:
         """Synchronously calls Anthropic or Gemini endpoint."""

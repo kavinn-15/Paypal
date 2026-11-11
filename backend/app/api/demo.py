@@ -147,9 +147,10 @@ def clear_demo_scenario(
                 Client.owner_id == target_owner_id
             ).delete(synchronize_session=False)
 
-        # 7. Delete contractor obligations strictly belonging to this owner
+        # 7. Delete contractor obligations strictly belonging to this demo scenario
         db.query(Obligation).filter(
-            Obligation.owner_id == target_owner_id
+            Obligation.owner_id == target_owner_id,
+            Obligation.is_demo == True
         ).delete(synchronize_session=False)
 
         # 8. Delete demo financial entries strictly belonging to this owner
@@ -158,17 +159,20 @@ def clear_demo_scenario(
             FinancialEntry.is_demo == True
         ).delete(synchronize_session=False)
 
-        # 9. Delete actions, plans, forecasts, simulations strictly belonging to this owner
+        # 9. Delete demo actions, plans, forecasts, simulations strictly belonging to this owner
         db.query(Action).filter(
-            Action.owner_id == target_owner_id
+            Action.owner_id == target_owner_id,
+            (Action.is_demo == True) | (Action.is_seeded == True)
         ).delete(synchronize_session=False)
 
         db.query(RescuePlan).filter(
-            RescuePlan.owner_id == target_owner_id
+            RescuePlan.owner_id == target_owner_id,
+            RescuePlan.is_demo == True
         ).delete(synchronize_session=False)
 
         db.query(Forecast).filter(
-            Forecast.owner_id == target_owner_id
+            Forecast.owner_id == target_owner_id,
+            Forecast.is_demo == True
         ).delete(synchronize_session=False)
 
         db.query(SimulationRun).filter(

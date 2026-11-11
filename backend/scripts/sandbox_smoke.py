@@ -48,6 +48,19 @@ async def run_smoke_test():
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="PayPal Sandbox Live Smoke Test")
+    parser.add_argument("--strict", action="store_true", help="Fail with non-zero exit code on authentication failure")
+    args = parser.parse_args()
+
     success = asyncio.run(run_smoke_test())
-    sys.exit(0 if success else 0)  # Exit 0 so local scripts don't break if placeholder credentials
+    is_placeholder = (
+        not settings.PAYPAL_CLIENT_ID
+        or settings.PAYPAL_CLIENT_ID in ("sb-client-id-demo-8428", "sandbox_client_id", "mock_client_id")
+        or len(settings.PAYPAL_CLIENT_ID) < 20
+    )
+    if not success and (args.strict or not is_placeholder):
+        print("\n[FAILURE] PayPal Sandbox Smoke Test failed. Exiting with status 1.")
+        sys.exit(1)
+    sys.exit(0)
 

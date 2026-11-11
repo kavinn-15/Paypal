@@ -188,3 +188,26 @@ async def register_webhook(
         }
     except PayPalError as e:
         raise HTTPException(status_code=502, detail=f"Webhook registration failed: {str(e)}")
+
+
+@router.post("/invoices/provision-demo")
+async def provision_demo_invoices(
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_verified_current_user)
+):
+    """
+    Provisions genuine PayPal Sandbox invoices for the authenticated user's scenario clients
+    via PayPal Invoicing v2 (create + send). Returns real INV2-... IDs and payer-view links.
+    """
+    from backend.app.services.paypal_invoice_service import provision_sandbox_invoices
+    try:
+        invoices = await provision_sandbox_invoices(db=db, owner_id=current_user.id)
+        return {
+            "success": True,
+            "count": len(invoices),
+            "invoices": invoices,
+            "message": f"Successfully provisioned {len(invoices)} genuine PayPal Sandbox invoices with payer links."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to provision PayPal Sandbox invoices: {str(e)}")
+

@@ -131,8 +131,9 @@ async def receive_paypal_webhook(
 
 
 @router.post("/dev/simulate-webhook")
+@router.post("/webhooks/simulate")
 def simulate_webhook_event(
-    payload: SimulateWebhookRequest,
+    payload: Optional[SimulateWebhookRequest] = None,
     db: Session = Depends(get_db),
     current_user: Owner = Depends(get_verified_current_user)
 ):
@@ -145,6 +146,9 @@ def simulate_webhook_event(
             status_code=403,
             detail="Forbidden: Webhook simulation endpoint is disabled in production."
         )
+
+    if payload is None:
+        payload = SimulateWebhookRequest()
 
     # Find target invoice owned by current_user
     inv_query = db.query(Invoice).join(Invoice.client).filter(Invoice.client.has(owner_id=current_user.id))

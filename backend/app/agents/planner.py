@@ -118,7 +118,9 @@ class RescuePlanEngine:
         # PLAN A: Collect without concessions
         # Only created when an eligible open invoice target exists
         # -------------------------------------------------------------
-        scored_targets = self.collector.select_targets_for_reminder(open_invoices, shortfall)
+        scored_targets = self.collector.select_targets_for_reminder(
+            open_invoices, shortfall, obligation_due_date=obl_due
+        )
         top_target = scored_targets[0] if scored_targets else None
         plan_a_risk = "Clients may still pay late despite reminders; settlement timing is not guaranteed."
 
@@ -243,7 +245,9 @@ class RescuePlanEngine:
         # PLAN B: Limited early-pay discount
         # Only created when an eligible open invoice candidate exists
         # -------------------------------------------------------------
-        discount_cand = self.collector.select_best_discount_candidate(open_invoices, shortfall, discount_pct)
+        discount_cand = self.collector.select_best_discount_candidate(
+            open_invoices, shortfall, discount_pct, obligation_due_date=obl_due
+        )
         disc_cost = discount_cand["discount_cost"] if discount_cand else 0.0
         plan_b_risk = "Early payment is not guaranteed; offer expires if client does not take advantage of terms."
 

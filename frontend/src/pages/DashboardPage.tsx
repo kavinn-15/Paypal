@@ -22,6 +22,7 @@ export const DashboardPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'30d' | '60d' | '90d'>('30d');
   const [filterChip, setFilterChip] = useState<'all' | 'risk' | 'contractors'>('all');
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [horizonsData, setHorizonsData] = useState<Record<string, any> | null>(null);
 
   const fetchForecast = async () => {
     try {
@@ -36,10 +37,37 @@ export const DashboardPage: React.FC = () => {
         setSelectedPlan(match);
         setActiveAction(match.primary_action);
       }
+      api.getMultiHorizonForecast(res.starting_balance ?? 1800.0).then(setHorizonsData).catch(() => {});
     } catch (err: any) {
       const msg = err.message || 'Failed to load forecast data';
       setFetchError(msg);
       setNotification({ type: 'error', message: msg });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRecalculate = async () => {
+    try {
+      setIsLoading(true);
+      setFetchError(null);
+      const res = await api.runForecast(data?.starting_balance ?? 1800.0);
+      setData(res);
+      if (res.plans && res.plans.length > 0) {
+        const match = selectedPlan
+          ? res.plans.find((p) => p.plan_type === selectedPlan.plan_type) || res.plans[0]
+          : res.plans[0];
+        setSelectedPlan(match);
+        setActiveAction(match.primary_action);
+      }
+      api.getMultiHorizonForecast(res.starting_balance ?? 1800.0).then(setHorizonsData).catch(() => {});
+      setNotification({
+        type: 'success',
+        message: 'Forecast recalculated successfully using updated balance and payment history.',
+      });
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err.message || 'Forecast recalculation failed' });
+      await fetchForecast();
     } finally {
       setIsLoading(false);
     }
@@ -178,10 +206,10 @@ export const DashboardPage: React.FC = () => {
 
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <button
-            onClick={fetchForecast}
+            onClick={handleRecalculate}
             disabled={isLoading}
             className="ignara-btn-secondary flex-1 sm:flex-initial"
-            title="Refresh current forecast"
+            title="Recalculate forecast with latest ledger balance and payment models"
           >
             <RefreshCw className={`w-4 h-4 text-[var(--mu)] ${isLoading ? 'animate-spin' : ''}`} />
             <span>Recalculate</span>
@@ -280,6 +308,8 @@ export const DashboardPage: React.FC = () => {
           firstShortfallDate={data.first_shortfall_date}
           startingBalance={data.starting_balance ?? 1800.0}
           isCovered={isCovered}
+          webhookVerified={activeAction?.state === 'confirmed' && !activeAction?.is_simulated}
+          paymentReceived={data.obligation.status === 'paid' || isCovered}
         />
       </div>
 
@@ -287,7 +317,11 @@ export const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 ignara-stagger-2">
         <div className="lg:col-span-2">
           <ForecastChart
-            projections={data.plans[0]?.forecast_without_plan || []}
+            projections={
+              horizonsData && horizonsData[activeTab]?.projections?.length > 0
+                ? horizonsData[activeTab].projections
+                : data.plans[0]?.forecast_without_plan || []
+            }
             selectedPlan={selectedPlan}
             obligationDateStr={data.obligation.due_date}
             obligationAmount={data.obligation.amount}

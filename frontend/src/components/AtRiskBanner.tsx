@@ -10,6 +10,8 @@ interface AtRiskBannerProps {
   firstShortfallDate?: string;
   startingBalance: number;
   isCovered?: boolean;
+  webhookVerified?: boolean;
+  paymentReceived?: boolean;
 }
 
 export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
@@ -18,6 +20,8 @@ export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
   firstShortfallDate,
   startingBalance,
   isCovered = false,
+  webhookVerified = false,
+  paymentReceived = false,
 }) => {
   const { formatCurrency, formatDate, currencySymbol } = useRegionalPreferences();
   if (!obligation) return null;
@@ -32,6 +36,16 @@ export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
 
   // Calculate percentage of obligation covered by initial balance
   const coveragePercent = Math.min(Math.round((startingBalance / (obligation.amount || 1)) * 100), 100);
+
+  const getHeroMessage = () => {
+    if (webhookVerified) {
+      return `PayPal Sandbox webhook verified payment receipt. Available balance comfortably covers Friday's ${formatCurrency(obligation.amount, { currency: obligation.currency })} payout.`;
+    }
+    if (paymentReceived || isCovered) {
+      return `Forecast recalculation indicates sufficient cashflow to cover Friday's ${formatCurrency(obligation.amount, { currency: obligation.currency })} contractor payout to ${obligation.payee_name}.`;
+    }
+    return `Current PayPal balance is ${formatCurrency(startingBalance)}. Due to predictable client payment delays, available liquidity cannot cover the ${formatCurrency(obligation.amount, { currency: obligation.currency })} contractor payout.`;
+  };
 
   return (
     <div className="space-y-4 w-full">
@@ -76,9 +90,7 @@ export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
             </h1>
 
             <p className="text-[13px] sm:text-[14px] text-white/90 leading-relaxed max-w-xl">
-              {isCovered
-                ? `PayPal Sandbox webhook verified payment. Available balance comfortably covers Friday's ${formatCurrency(obligation.amount, { currency: obligation.currency })} payout.`
-                : `Current PayPal balance is ${formatCurrency(startingBalance)}. Due to predictable client payment delays, available liquidity cannot cover the ${formatCurrency(obligation.amount, { currency: obligation.currency })} contractor payout.`}
+              {getHeroMessage()}
             </p>
           </div>
 

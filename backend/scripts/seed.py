@@ -80,6 +80,14 @@ CLIENT_PROFILES = [
 ]
 
 
+def get_upcoming_friday(base_date: datetime) -> datetime:
+    """Calculates the upcoming Friday at 17:00 UTC."""
+    days_ahead = 4 - base_date.weekday()
+    if days_ahead <= 0:
+        days_ahead += 7
+    return (base_date + timedelta(days=days_ahead)).replace(hour=17, minute=0, second=0, microsecond=0)
+
+
 def reset_database_schema(confirm: bool = False):
     """
     Destructive operation: drops all tables and re-initializes schema via Alembic.
@@ -188,6 +196,12 @@ def seed_demo_scenario(db: Session, target_owner: Optional[Owner] = None) -> Own
             db.flush()
         created_clients.append((client, p))
 
+        # Ensure no leftover test transactions pollute demo history
+        db.query(PaymentHistory).filter(
+            PaymentHistory.client_id == client.id,
+            PaymentHistory.source != "seeded"
+        ).delete()
+
         # Check if client has history
         existing_hist = db.query(PaymentHistory).filter(PaymentHistory.client_id == client.id).count()
         if existing_hist == 0:
@@ -239,25 +253,27 @@ def seed_demo_scenario(db: Session, target_owner: Optional[Owner] = None) -> Own
                     )
                     db.add(history_record)
 
+    due_friday = get_upcoming_friday(now)
+
     open_invoices_data = [
         {
             "client_index": 0,  # Apex Design Studio
             "amount": 2000.0,
-            "due_in_days": 2,
+            "due_date": due_friday - timedelta(days=2),
             "issue_days_ago": 18,
             "paypal_id": "INV2-DEMO-APEX-001"
         },
         {
             "client_index": 2,  # Nordic Data Labs
             "amount": 1500.0,
-            "due_in_days": 1,
+            "due_date": due_friday - timedelta(days=1),
             "issue_days_ago": 14,
             "paypal_id": "INV2-DEMO-NORDIC-002"
         },
         {
             "client_index": 1,  # Vertex Software
             "amount": 1000.0,
-            "due_in_days": 9,
+            "due_date": due_friday + timedelta(days=4),
             "issue_days_ago": 10,
             "paypal_id": "INV2-DEMO-VERTEX-003"
         }
@@ -266,34 +282,66 @@ def seed_demo_scenario(db: Session, target_owner: Optional[Owner] = None) -> Own
     for inv_info in open_invoices_data:
         c = created_clients[inv_info["client_index"]][0]
         paypal_id = inv_info["paypal_id"] if owner.email == CANONICAL_DEMO_EMAIL else f"{inv_info['paypal_id']}-{owner.id}"
-        existing_open = db.query(Invoice).filter(
-            Invoice.client_id == c.id,
-            Invoice.paypal_invoice_id == paypal_id
-        ).first()
-        if not existing_open:
+        
+        existing_by_paypal = db.query(Invoice).filter(Invoice.paypal_invoice_id == paypal_id).first()
+        if existing_by_paypal:
+            existing_open = existing_by_paypal
+            existing_open.client_id = c.id
+        else:
+            existing_open = db.query(Invoice).filter(
+                Invoice.client_id == c.id,
+                Invoice.status.in_(["SENT", "DRAFT"])
+            ).first()
+
+        if existing_open:
+            existing_open.paypal_invoice_id = paypal_id
+            existing_open.invoice_number = f"INV-DEMO-{inv_info['client_index']+1:03d}"
+            existing_open.amount = inv_info["amount"]
+            existing_open.due_date = inv_info["due_date"]
+            existing_open.status = "SENT"
+            existing_open.paid_date = None
+            existing_open.is_seeded = True
+            existing_open.is_simulated_paid = False
+            existing_open.provider_status = "SENT"
+            existing_open.discount_applied = 0.0
+            existing_open.pay_link = f"https://www.sandbox.paypal.com/invoice/p/#{paypal_id}"
+            db.query(PaymentHistory).filter(PaymentHistory.invoice_id == existing_open.id).delete()
+            target_id = existing_open.id
+        else:
             open_inv = Invoice(
                 paypal_invoice_id=paypal_id,
+                invoice_number=f"INV-DEMO-{inv_info['client_index']+1:03d}",
                 client_id=c.id,
                 amount=inv_info["amount"],
                 currency="USD",
                 issue_date=now - timedelta(days=inv_info["issue_days_ago"]),
-                due_date=now + timedelta(days=inv_info["due_in_days"]),
+                due_date=inv_info["due_date"],
                 paid_date=None,
                 status="SENT",
                 discount_applied=0.0,
-                pay_link=f"https://www.sandbox.paypal.com/invoice/p/#{paypal_id}"
+                pay_link=f"https://www.sandbox.paypal.com/invoice/p/#{paypal_id}",
+                is_seeded=True,
+                provider_status="SENT"
             )
             db.add(open_inv)
-        else:
-            existing_open.amount = inv_info["amount"]
-            existing_open.due_date = now + timedelta(days=inv_info["due_in_days"])
-            existing_open.status = "SENT"
+            db.flush()
+            target_id = open_inv.id
+
+        # Clean up any extraneous open invoice for this client or matching paypal_id to prevent duplicates / UNIQUE constraint errors
+        duplicates = db.query(Invoice).filter(
+            Invoice.id != target_id,
+            Invoice.status.in_(["SENT", "DRAFT"]),
+            (Invoice.client_id == c.id) | (Invoice.paypal_invoice_id == paypal_id)
+        ).all()
+        for dup in duplicates:
+            db.query(PaymentHistory).filter(PaymentHistory.invoice_id == dup.id).delete()
+            db.delete(dup)
+        db.flush()
 
     contractor_obligation = db.query(Obligation).filter(
         Obligation.owner_id == owner.id,
         Obligation.payee_email == "marcus.contractor@example.com"
     ).first()
-    due_friday = now + timedelta(days=5)
     if not contractor_obligation:
         contractor_obligation = Obligation(
             owner_id=owner.id,
@@ -307,7 +355,8 @@ def seed_demo_scenario(db: Session, target_owner: Optional[Owner] = None) -> Own
             split_consent_source="written_email_agreement",
             split_consent_timestamp=now,
             split_consent_is_simulated=True,
-            status="pending"
+            status="pending",
+            is_demo=True
         )
         db.add(contractor_obligation)
     else:
@@ -319,6 +368,15 @@ def seed_demo_scenario(db: Session, target_owner: Optional[Owner] = None) -> Own
         contractor_obligation.split_consent_timestamp = now
         contractor_obligation.split_consent_is_simulated = True
         contractor_obligation.status = "pending"
+        contractor_obligation.is_demo = True
+
+    # Clean up any extraneous obligations for this demo persona so Marcus Sterling is the single obligation
+    extra_obls = db.query(Obligation).filter(
+        Obligation.owner_id == owner.id,
+        Obligation.payee_email != "marcus.contractor@example.com"
+    ).all()
+    for extra in extra_obls:
+        db.delete(extra)
 
     opening_ref = "OPENING-BAL-001" if owner.email == CANONICAL_DEMO_EMAIL else f"OPENING-BAL-{owner.id}"
     opening_entry = db.query(FinancialEntry).filter(
@@ -346,6 +404,13 @@ def seed_demo_scenario(db: Session, target_owner: Optional[Owner] = None) -> Own
     else:
         opening_entry.amount = 1800.0
         opening_entry.status = "confirmed"
+
+    # Reset any leftover ledger transactions for demo owner so baseline cash balance is strictly $1,800
+    db.query(FinancialEntry).filter(
+        FinancialEntry.owner_id == owner.id,
+        FinancialEntry.entry_type != "opening_balance"
+    ).delete()
+    db.flush()
 
     existing_audit = db.query(AuditLog).filter(
         AuditLog.owner_id == owner.id,

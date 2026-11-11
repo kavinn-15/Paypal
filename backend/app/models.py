@@ -108,6 +108,9 @@ class Invoice(Base):
     discount_applied = Column(Numeric(5, 2), default=Decimal("0.00"), nullable=False)  # e.g. 3.00 for 3%
     pay_link = Column(String(1024), nullable=True)
     is_simulated_paid = Column(Boolean, default=False, nullable=False)
+    is_seeded = Column(Boolean, default=False, nullable=False)
+    invoice_number = Column(String(100), nullable=True)
+    provider_status = Column(String(50), nullable=True)  # DRAFT | SENT | PAID | CANCELLED | REFUNDED
 
     client = relationship("Client", back_populates="invoices")
     history_records = relationship("PaymentHistory", back_populates="invoice")
@@ -146,6 +149,7 @@ class Obligation(Base):
     split_consent_timestamp = Column(DateTime, nullable=True)
     split_consent_is_simulated = Column(Boolean, default=False, nullable=False)
     status = Column(String(50), default="pending", nullable=False)  # pending | split_agreed | paid
+    is_demo = Column(Boolean, default=False, nullable=False)
 
     owner = relationship("Owner", back_populates="obligations")
 
@@ -241,6 +245,7 @@ class RescuePlan(Base):
     forecast_without_plan = Column(JSON, nullable=False, default=list)
     late_scenario = Column(JSON, nullable=False, default=dict)
     remaining_risk = Column(Text, nullable=False)
+    is_demo = Column(Boolean, default=False, nullable=False)
 
     owner = relationship("Owner", back_populates="rescue_plans")
     actions = relationship("Action", back_populates="plan", cascade="all, delete-orphan")
@@ -264,8 +269,12 @@ class Action(Base):
     executed_at = Column(DateTime, nullable=True)
     confirmed_at = Column(DateTime, nullable=True)
     paypal_ref = Column(String(255), nullable=True)
+    provider_request_id = Column(String(255), nullable=True)
     error_message = Column(Text, nullable=True)
+    execution_error = Column(Text, nullable=True)
     is_simulated = Column(Boolean, default=False, nullable=False)
+    is_seeded = Column(Boolean, default=False, nullable=False)
+    is_demo = Column(Boolean, default=False, nullable=False)
     approval_version = Column(Integer, default=2, nullable=False)
     obligation_id = Column(Integer, ForeignKey("obligations.id", ondelete="SET NULL"), nullable=True)
     payout_recipient_email = Column(String(255), nullable=True)

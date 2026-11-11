@@ -2027,6 +2027,12 @@ async def test_genuine_action_follows_real_execution_path(monkeypatch):
         assert executed.paypal_ref == "REAL-PAYPAL-BATCH-88888"
         assert executed.is_simulated is False
     finally:
+        try:
+            db.delete(real_action)
+            db.delete(genuine_obl)
+            db.commit()
+        except Exception:
+            db.rollback()
         db.close()
 
 
@@ -2645,7 +2651,7 @@ def test_alembic_fresh_database_initialization_reaches_head(tmp_path):
 
     with eng.connect() as c:
         current_rev = c.execute(text("SELECT version_num FROM alembic_version;")).scalar()
-        assert current_rev in ["6f7a8b9c0d1e", "7a8b9c0d1e2f", "8b9c0d1e2f3a", "9c0d1e2f3a4b"]
+        assert current_rev in ["6f7a8b9c0d1e", "7a8b9c0d1e2f", "8b9c0d1e2f3a", "9c0d1e2f3a4b", "b1c2d3e4f5a6"]
 
 
 def test_paypal_webhook_extracts_individual_payment_amount_not_invoice_total(setup_db):

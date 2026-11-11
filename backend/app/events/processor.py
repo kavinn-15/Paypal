@@ -607,8 +607,11 @@ def process_webhook_event(
                 action.confirmed_at = now
                 db.commit()
 
-        # Recalculate forecast using actual reconciled balance
-        reconciled_balance = float(FinancialService.get_confirmed_balance(db, owner)) if owner else 1800.0 + float(paid_amount)
+        # Recalculate forecast using actual reconciled balance (incorporating simulated inflow if simulating)
+        if is_simulated:
+            reconciled_balance = (float(FinancialService.get_confirmed_balance(db, owner)) if owner else 1800.0) + float(paid_amount)
+        else:
+            reconciled_balance = float(FinancialService.get_confirmed_balance(db, owner)) if owner else 1800.0
         updated_forecast = None
         try:
             forecaster = ForecasterAgent(db)
@@ -848,6 +851,23 @@ def process_webhook_event(
             evt_record.owner_id = action.owner_id
             db.commit()
 
+        # Update contractor obligation upon payout completion
+        obl = None
+        if getattr(action, "obligation_id", None):
+            obl = db.query(Obligation).filter(Obligation.id == action.obligation_id).first()
+        elif action.owner_id and action.recipient:
+            obl = db.query(Obligation).filter(
+                Obligation.owner_id == action.owner_id,
+                (Obligation.payee_name.ilike(action.recipient.strip())) | (Obligation.payee_email.ilike(action.recipient.strip()))
+            ).first()
+
+        if obl:
+            if float(action.amount) >= float(obl.amount):
+                obl.status = "paid"
+            else:
+                obl.status = "split_agreed"
+            db.commit()
+
         append_audit_log(
             db=db,
             actor="paypal_webhook" if not is_simulated else "dev_simulator",
@@ -857,6 +877,8 @@ def process_webhook_event(
                 "amount": float(action.amount),
                 "recipient": action.recipient,
                 "sender_batch_id": sender_batch_id,
+                "obligation_id": obl.id if obl else None,
+                "obligation_status": obl.status if obl else None,
                 "is_simulated": is_simulated
             },
             owner_id=action.owner_id
