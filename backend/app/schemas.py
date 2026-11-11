@@ -345,7 +345,18 @@ class ObligationOut(ObligationCreate):
     id: int
     owner_id: int
     status: str
+    split_consent_recorded: bool = False
+    split_consent_source: Optional[str] = None
+    split_consent_timestamp: Optional[datetime] = None
+    split_consent_is_simulated: bool = False
     model_config = ConfigDict(from_attributes=True)
+
+
+class ObligationConsentRequest(BaseModel):
+    consent_source: str = Field(default="written_agreement", description="Source of consent: written_agreement, contractor_email, signed_document, phone_confirmation")
+    consent_notes: Optional[str] = Field(default=None, description="Optional notes or agreed installment terms")
+    split_allowed: bool = Field(default=True, description="Whether splitting this obligation into installments is permitted")
+    is_simulated: bool = Field(default=False, description="Flag indicating whether this consent was generated in demo simulation mode")
 
 
 class FinancialEntryCreate(BaseModel):

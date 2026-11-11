@@ -1,4 +1,5 @@
 import datetime
+from decimal import Decimal
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 
@@ -32,6 +33,7 @@ class NegotiationAgent:
 
         if req.target_type == "client_discount":
             client = None
+            open_inv = None
             if req.client_id:
                 client = self.db.query(Client).filter(
                     Client.id == req.client_id,
@@ -39,26 +41,41 @@ class NegotiationAgent:
                 ).first()
                 if not client:
                     raise ValueError(f"Client with id {req.client_id} not found or does not belong to owner.")
-            if not client:
-                client = self.db.query(Client).filter(Client.owner_id == owner.id).first()
+                # Find this client's open invoice
+                open_inv = self.db.query(Invoice).filter(
+                    Invoice.client_id == client.id,
+                    Invoice.status.in_(["SENT", "DRAFT", "PARTIALLY_PAID"])
+                ).first()
+                if not open_inv:
+                    raise ValueError(f"Client '{client.name}' has no active unpaid invoices.")
+            else:
+                # Find an open invoice belonging to this owner
+                open_inv = self.db.query(Invoice).join(Invoice.client).filter(
+                    Invoice.client.has(owner_id=owner.id),
+                    Invoice.status.in_(["SENT", "DRAFT", "PARTIALLY_PAID"])
+                ).first()
+                if open_inv:
+                    client = open_inv.client
+                else:
+                    client = self.db.query(Client).filter(Client.owner_id == owner.id).first()
+                    if not client:
+                        raise ValueError("No eligible client found for early-payment negotiation.")
+                    raise ValueError("No open unpaid invoices found for early-payment negotiation.")
 
-            if not client:
-                raise ValueError("No eligible client found for early-payment negotiation.")
+            hist_records = getattr(open_inv, "history_records", None) or getattr(open_inv, "payment_history", [])
+            paid_amount = sum(Decimal(str(h.amount)) for h in hist_records)
+            unpaid_dec = Decimal(str(open_inv.amount)) - paid_amount
+            if unpaid_dec <= Decimal("0"):
+                raise ValueError(f"Invoice #{open_inv.paypal_invoice_id or open_inv.id} is already fully paid.")
 
-            # Find client's open invoice
-            open_inv = self.db.query(Invoice).filter(
-                Invoice.client_id == client.id,
-                Invoice.status.in_(["SENT", "DRAFT"])
-            ).first()
-
-            inv_amt = float(open_inv.amount) if open_inv else float(client.typical_invoice_amount)
-            inv_ref = open_inv.paypal_invoice_id if open_inv else "INV-CURRENT"
-            inv_due = open_inv.due_date.strftime("%B %d, %Y") if open_inv else "upcoming"
-            inv_curr = open_inv.currency if open_inv and open_inv.currency else (owner.preferred_currency or owner.currency or "USD")
+            inv_amt = float(unpaid_dec)
+            inv_ref = open_inv.paypal_invoice_id or f"INV-{open_inv.id}"
+            inv_due = open_inv.due_date.strftime("%B %d, %Y") if open_inv.due_date else "upcoming"
+            inv_curr = (open_inv.currency or owner.preferred_currency or owner.currency or "USD").strip().upper()
             curr_sym = CURRENCIES_DB.get(inv_curr, {}).get("symbol", "$")
             discount_pct = req.discount_pct or 3.0
-            discount_val = inv_amt * (discount_pct / 100.0)
-            net_amt = inv_amt - discount_val
+            discount_val = round(inv_amt * (discount_pct / 100.0), 2)
+            net_amt = round(inv_amt - discount_val, 2)
 
             # Draft 3 Tone Styles
             tones = [
@@ -142,14 +159,20 @@ class NegotiationAgent:
                 if not obligation:
                     raise ValueError(f"Obligation with id {req.obligation_id} not found or does not belong to owner.")
             if not obligation:
+                obligation = self.db.query(Obligation).filter(
+                    Obligation.owner_id == owner.id,
+                    Obligation.status != "paid"
+                ).order_by(Obligation.due_date.asc()).first()
+            if not obligation:
                 obligation = self.db.query(Obligation).filter(Obligation.owner_id == owner.id).first()
 
             if not obligation:
                 raise ValueError("No active contractor obligation found for split negotiation.")
 
             split_pct = req.split_pct or 50.0
-            p1_amt = float(obligation.amount) * (split_pct / 100.0)
-            p2_amt = float(obligation.amount) - p1_amt
+            total_amt = float(obligation.amount)
+            p1_amt = round(total_amt * (split_pct / 100.0), 2)
+            p2_amt = round(total_amt - p1_amt, 2)
             payee_first = obligation.payee_name.split()[0]
             ob_curr = obligation.currency if obligation and obligation.currency else (owner.preferred_currency or owner.currency or "USD")
             curr_sym = CURRENCIES_DB.get(ob_curr, {}).get("symbol", "$")

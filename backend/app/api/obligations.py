@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+import datetime
 from backend.app.db import get_db
 from backend.app.models import Obligation, Owner
-from backend.app.schemas import ObligationCreate, ObligationOut
+from backend.app.schemas import ObligationCreate, ObligationOut, ObligationConsentRequest
 from backend.app.auth.deps import get_verified_current_user
 from backend.app.guardrail.audit import append_audit_log
 
@@ -100,3 +101,54 @@ def delete_obligation(
     db.delete(obl)
     db.commit()
     return None
+
+
+@router.post("/{obligation_id}/consent", response_model=ObligationOut)
+def record_contractor_consent(
+    obligation_id: int,
+    payload: ObligationConsentRequest,
+    db: Session = Depends(get_db),
+    current_user: Owner = Depends(get_verified_current_user)
+):
+    """
+    Legitimately records auditable contractor consent for installment splits (Plan C requirement).
+    Enforces ownership validation, captures consent source, audit timestamp, and optional terms notes.
+    """
+    obl = db.query(Obligation).filter(
+        Obligation.id == obligation_id,
+        Obligation.owner_id == current_user.id
+    ).first()
+    if not obl:
+        raise HTTPException(status_code=404, detail="Obligation not found.")
+
+    obl.split_allowed = payload.split_allowed
+    obl.split_consent_recorded = payload.split_allowed
+    obl.split_consent_source = payload.consent_source if payload.split_allowed else None
+    obl.split_consent_timestamp = datetime.datetime.utcnow() if payload.split_allowed else None
+    obl.split_consent_is_simulated = payload.is_simulated if payload.split_allowed else False
+    if payload.split_allowed:
+        obl.status = "split_agreed"
+    elif obl.status == "split_agreed":
+        obl.status = "pending"
+
+    db.commit()
+    db.refresh(obl)
+
+    append_audit_log(
+        db=db,
+        actor="owner",
+        event="CONTRACTOR_CONSENT_RECORDED",
+        payload={
+            "obligation_id": obl.id,
+            "payee_name": obl.payee_name,
+            "payee_email": obl.payee_email,
+            "split_allowed": obl.split_allowed,
+            "consent_source": obl.split_consent_source,
+            "is_simulated": obl.split_consent_is_simulated,
+            "consent_notes": payload.consent_notes,
+            "timestamp": obl.split_consent_timestamp.isoformat() if obl.split_consent_timestamp else None
+        },
+        owner_id=current_user.id
+    )
+
+    return ObligationOut.model_validate(obl)

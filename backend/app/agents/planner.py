@@ -46,6 +46,19 @@ class RescuePlanEngine:
         first_shortfall_date = forecast_response.first_shortfall_date
         starting_balance = forecast_response.starting_balance
         obligation_obj = self.db.query(Obligation).filter(Obligation.id == forecast_response.obligation.id).first()
+
+        if shortfall <= 0:
+            return PlansComparisonResponse(
+                run_id=run_id,
+                obligation=ObligationOut.model_validate(obligation_obj) if obligation_obj else forecast_response.obligation,
+                shortfall_amount=0.0,
+                first_shortfall_date=first_shortfall_date,
+                tradeoff_summary="No cash shortfall projected. Projected cash balances fully satisfy upcoming obligations with positive buffer. No rescue intervention required.",
+                plans=[],
+                starting_balance=starting_balance,
+                driver_rankings=forecast_response.driver_ranking,
+                p_shortfall=forecast_response.p_shortfall
+            )
         from decimal import Decimal
         from backend.app.models import Owner
         from backend.app.services.region_service import CURRENCIES_DB, convert_currency_amount
@@ -116,253 +129,257 @@ class RescuePlanEngine:
 
         # -------------------------------------------------------------
         # PLAN A: Collect without concessions
+        # Only created when an eligible open invoice target exists
         # -------------------------------------------------------------
         scored_targets = self.collector.select_targets_for_reminder(open_invoices, shortfall)
         top_target = scored_targets[0] if scored_targets else None
-
         plan_a_risk = "Clients may still pay late despite reminders; settlement timing is not guaranteed."
-        plan_a_rationale = (
-            f"Sends an official PayPal payment reminder with a direct pay link to {top_target['client_name'] if top_target else 'open clients'} "
-            f"to prompt settlement before Friday's deadline without forfeiting revenue."
-        )
 
-        # Forecast with Plan A: Target client pays on or before obligation date
-        with_plan_a_inflows = []
-        for inv in open_invoices:
-            if top_target and inv["client_id"] == top_target["client_id"]:
-                # Accelerated to invoice due date
-                with_plan_a_inflows.append({"amount": inv["amount"], "expected_pay_date": inv["due_date"]})
-            else:
-                with_plan_a_inflows.append({"amount": inv["amount"], "expected_pay_date": inv["expected_pay_date"]})
+        if top_target is not None:
+            plan_a_rationale = (
+                f"Sends an official PayPal payment reminder with a direct pay link to {top_target['client_name']} "
+                f"to prompt settlement before Friday's deadline without forfeiting revenue."
+            )
 
-        plan_a_with_proj, _, _ = project_cashflow_timeline(
-            starting_balance=starting_balance,
-            predicted_inflows=with_plan_a_inflows,
-            obligations=[{"amount": obl_amount_in_owner, "due_date": obl_due, "payee_name": obligation_obj.payee_name}],
-            start_date=start_time,
-            end_date=obl_due + timedelta(days=5)
-        )
+            # Forecast with Plan A: Target client pays on or before obligation date
+            with_plan_a_inflows = []
+            for inv in open_invoices:
+                if inv["client_id"] == top_target["client_id"]:
+                    # Accelerated to invoice due date
+                    with_plan_a_inflows.append({"amount": inv["amount"], "expected_pay_date": inv["due_date"]})
+                else:
+                    with_plan_a_inflows.append({"amount": inv["amount"], "expected_pay_date": inv["expected_pay_date"]})
 
-        plan_a_idempotency = f"act_remind_{top_target['invoice_id'] if top_target else '0'}_{uuid.uuid4().hex[:8]}"
-        plan_a_amount = top_target["amount"] if top_target else 0.0
-        plan_a_recipient = top_target["client_name"] if top_target else "Client"
-        plan_a_currency = (top_target.get("currency") or owner_curr) if top_target else owner_curr
-        plan_a_hash = generate_approval_hash(
-            recipient=plan_a_recipient,
-            amount=plan_a_amount,
-            currency=plan_a_currency,
-            action_type="SEND_REMINDER",
-            idempotency_key=plan_a_idempotency
-        )
+            plan_a_with_proj, _, _ = project_cashflow_timeline(
+                starting_balance=starting_balance,
+                predicted_inflows=with_plan_a_inflows,
+                obligations=[{"amount": obl_amount_in_owner, "due_date": obl_due, "payee_name": obligation_obj.payee_name}],
+                start_date=start_time,
+                end_date=obl_due + timedelta(days=5)
+            )
 
-        plan_a_msg_draft = llm_service.draft_reminder_message(
-            client_name=plan_a_recipient,
-            invoice_id=top_target["paypal_invoice_id"] if top_target else "INV-001",
-            amount=plan_a_amount,
-            due_date_str=obligation_obj.due_date.strftime("%b %d"),
-            pay_link=top_target.get("pay_link") if top_target else None
-        )
+            plan_a_idempotency = f"act_remind_{top_target['invoice_id']}_{uuid.uuid4().hex[:8]}"
+            plan_a_amount = top_target["amount"]
+            plan_a_recipient = top_target["client_name"]
+            plan_a_currency = top_target.get("currency") or owner_curr
+            plan_a_hash = generate_approval_hash(
+                recipient=plan_a_recipient,
+                amount=plan_a_amount,
+                currency=plan_a_currency,
+                action_type="SEND_REMINDER",
+                idempotency_key=plan_a_idempotency
+            )
 
-        plan_a_db = RescuePlan(
-            owner_id=obligation_obj.owner_id,
-            run_id=run_id,
-            plan_type="A",
-            details={"invoice_id": top_target["invoice_id"] if top_target else None, "type": "reminder"},
-            cost=0.0,
-            incoming_needed=shortfall,
-            selected_clients=scored_targets[:2],
-            rationale=plan_a_rationale,
-            forecast_with_plan=plan_a_with_proj,
-            forecast_without_plan=[p.model_dump() for p in forecast_response.projections],
-            late_scenario={
-                "outcome": "If client still pays late, balance remains at projected shortfall on due date.",
-                "shortfall": shortfall
-            },
-            remaining_risk=f"Plausibly protects contractor payout if client acts on reminder. {plan_a_risk}"
-        )
-        self.db.add(plan_a_db)
-        self.db.flush()
+            plan_a_msg_draft = llm_service.draft_reminder_message(
+                client_name=plan_a_recipient,
+                invoice_id=top_target["paypal_invoice_id"] or f"INV-{top_target['invoice_id']}",
+                amount=plan_a_amount,
+                due_date_str=obligation_obj.due_date.strftime("%b %d"),
+                pay_link=top_target.get("pay_link")
+            )
 
-        action_a_db = Action(
-            owner_id=obligation_obj.owner_id,
-            plan_id=plan_a_db.id,
-            action_type="SEND_REMINDER",
-            recipient=plan_a_recipient,
-            amount=plan_a_amount,
-            currency=plan_a_currency,
-            state="proposed",
-            idempotency_key=plan_a_idempotency,
-            approval_hash=plan_a_hash,
-            approval_version=2,
-            paypal_ref=top_target["paypal_invoice_id"] if top_target else None
-        )
-        self.db.add(action_a_db)
-        self.db.flush()
+            plan_a_db = RescuePlan(
+                owner_id=obligation_obj.owner_id,
+                run_id=run_id,
+                plan_type="A",
+                details={"invoice_id": top_target["invoice_id"], "type": "reminder"},
+                cost=0.0,
+                incoming_needed=shortfall,
+                selected_clients=scored_targets[:2],
+                rationale=plan_a_rationale,
+                forecast_with_plan=plan_a_with_proj,
+                forecast_without_plan=[p.model_dump() for p in forecast_response.projections],
+                late_scenario={
+                    "outcome": "If client still pays late, balance remains at projected shortfall on due date.",
+                    "shortfall": shortfall
+                },
+                remaining_risk=f"Plausibly protects contractor payout if client acts on reminder. {plan_a_risk}"
+            )
+            self.db.add(plan_a_db)
+            self.db.flush()
 
-        msg_a = Message(
-            action_id=action_a_db.id,
-            client_id=top_target["client_id"] if top_target else 1,
-            body=plan_a_msg_draft,
-            approval_status="draft"
-        )
-        self.db.add(msg_a)
-        self.db.flush()
+            action_a_db = Action(
+                owner_id=obligation_obj.owner_id,
+                plan_id=plan_a_db.id,
+                action_type="SEND_REMINDER",
+                recipient=plan_a_recipient,
+                amount=plan_a_amount,
+                currency=plan_a_currency,
+                state="proposed",
+                idempotency_key=plan_a_idempotency,
+                approval_hash=plan_a_hash,
+                approval_version=2,
+                paypal_ref=top_target["paypal_invoice_id"] or f"INV-{top_target['invoice_id']}"
+            )
+            self.db.add(action_a_db)
+            self.db.flush()
 
-        # Compute complete canonical payload signature
-        canonical_a = compute_action_payload(action_a_db)
-        p_hash_a = generate_payload_hash(canonical_a)
-        sig_a = generate_canonical_approval_signature(p_hash_a)
-        action_a_db.approval_hash = sig_a
-        action_a_db.approved_payload_hash = p_hash_a
-        self.db.flush()
+            msg_a = Message(
+                action_id=action_a_db.id,
+                client_id=top_target["client_id"],
+                body=plan_a_msg_draft,
+                approval_status="draft"
+            )
+            self.db.add(msg_a)
+            self.db.flush()
 
-        plans_out.append(RescuePlanOut(
-            id=plan_a_db.id,
-            run_id=run_id,
-            plan_type="A",
-            name="Plan A: Collect Without Concessions",
-            description="Send official PayPal payment reminder with live pay link to top reliable client.",
-            cost=0.0,
-            cost_description=f"{owner_sym}0.00 concession cost. Zero revenue lost.",
-            incoming_needed=shortfall,
-            selected_clients=scored_targets[:2],
-            rationale=plan_a_rationale,
-            forecast_with_plan=[DailyProjection(**p) for p in plan_a_with_proj],
-            forecast_without_plan=forecast_response.projections,
-            late_scenario={
-                "outcome": "If client ignores reminder, shortfall remains.",
-                "shortfall": shortfall
-            },
-            remaining_risk="Plausibly protects contractor payment if client settles promptly. Timing is not guaranteed.",
-            primary_action=ActionOut.model_validate(action_a_db)
-        ))
+            # Compute complete canonical payload signature
+            canonical_a = compute_action_payload(action_a_db)
+            p_hash_a = generate_payload_hash(canonical_a)
+            sig_a = generate_canonical_approval_signature(p_hash_a)
+            action_a_db.approval_hash = sig_a
+            action_a_db.approved_payload_hash = p_hash_a
+            self.db.flush()
+
+            plans_out.append(RescuePlanOut(
+                id=plan_a_db.id,
+                run_id=run_id,
+                plan_type="A",
+                name="Plan A: Collect Without Concessions",
+                description="Send official PayPal payment reminder with live pay link to top reliable client.",
+                cost=0.0,
+                cost_description=f"{owner_sym}0.00 concession cost. Zero revenue lost.",
+                incoming_needed=shortfall,
+                selected_clients=scored_targets[:2],
+                rationale=plan_a_rationale,
+                forecast_with_plan=[DailyProjection(**p) for p in plan_a_with_proj],
+                forecast_without_plan=forecast_response.projections,
+                late_scenario={
+                    "outcome": "If client ignores reminder, shortfall remains.",
+                    "shortfall": shortfall
+                },
+                remaining_risk="Plausibly protects contractor payment if client settles promptly. Timing is not guaranteed.",
+                primary_action=ActionOut.model_validate(action_a_db)
+            ))
 
         # -------------------------------------------------------------
         # PLAN B: Limited early-pay discount
+        # Only created when an eligible open invoice candidate exists
         # -------------------------------------------------------------
         discount_cand = self.collector.select_best_discount_candidate(open_invoices, shortfall, discount_pct)
-        disc_cost = discount_cand["discount_cost"] if discount_cand else round(shortfall * 0.03, 2)
-        disc_client_name = discount_cand["client_name"] if discount_cand else "Client"
-
+        disc_cost = discount_cand["discount_cost"] if discount_cand else 0.0
         plan_b_risk = "Early payment is not guaranteed; offer expires if client does not take advantage of terms."
-        plan_b_rationale = (
-            f"Updates PayPal invoice terms to grant {disc_client_name} a {discount_pct:.1f}% early-pay discount "
-            f"({owner_sym}{disc_cost:,.2f}), providing strong financial incentive to pay before Friday."
-        )
 
-        with_plan_b_inflows = []
-        for inv in open_invoices:
-            if discount_cand and inv["client_id"] == discount_cand["client_id"]:
-                # Accelerated net proceeds arrive early
-                with_plan_b_inflows.append({"amount": discount_cand["net_proceeds"], "expected_pay_date": inv["due_date"]})
-            else:
-                with_plan_b_inflows.append({"amount": inv["amount"], "expected_pay_date": inv["expected_pay_date"]})
+        if discount_cand is not None:
+            disc_client_name = discount_cand["client_name"]
+            plan_b_rationale = (
+                f"Updates PayPal invoice terms to grant {disc_client_name} a {discount_pct:.1f}% early-pay discount "
+                f"({owner_sym}{disc_cost:,.2f}), providing strong financial incentive to pay before Friday."
+            )
 
-        plan_b_with_proj, _, _ = project_cashflow_timeline(
-            starting_balance=starting_balance,
-            predicted_inflows=with_plan_b_inflows,
-            obligations=[{"amount": obl_amount_in_owner, "due_date": obl_due, "payee_name": obligation_obj.payee_name}],
-            start_date=start_time,
-            end_date=obl_due + timedelta(days=5)
-        )
+            with_plan_b_inflows = []
+            for inv in open_invoices:
+                if inv["client_id"] == discount_cand["client_id"]:
+                    # Accelerated net proceeds arrive early
+                    with_plan_b_inflows.append({"amount": discount_cand["net_proceeds"], "expected_pay_date": inv["due_date"]})
+                else:
+                    with_plan_b_inflows.append({"amount": inv["amount"], "expected_pay_date": inv["expected_pay_date"]})
 
-        plan_b_idempotency = f"act_disc_{discount_cand['invoice_id'] if discount_cand else '0'}_{uuid.uuid4().hex[:8]}"
-        plan_b_currency = (discount_cand.get("currency") or owner_curr) if discount_cand else owner_curr
-        plan_b_hash = generate_approval_hash(
-            recipient=disc_client_name,
-            amount=disc_cost,
-            currency=plan_b_currency,
-            action_type="APPLY_DISCOUNT",
-            idempotency_key=plan_b_idempotency
-        )
+            plan_b_with_proj, _, _ = project_cashflow_timeline(
+                starting_balance=starting_balance,
+                predicted_inflows=with_plan_b_inflows,
+                obligations=[{"amount": obl_amount_in_owner, "due_date": obl_due, "payee_name": obligation_obj.payee_name}],
+                start_date=start_time,
+                end_date=obl_due + timedelta(days=5)
+            )
 
-        plan_b_msg_draft = llm_service.draft_discount_message(
-            client_name=disc_client_name,
-            invoice_id=discount_cand["paypal_invoice_id"] if discount_cand else "INV-002",
-            original_amount=discount_cand["original_amount"] if discount_cand else 2000.0,
-            discount_pct=discount_pct,
-            discounted_amount=discount_cand["net_proceeds"] if discount_cand else 1940.0,
-            deadline_str=obligation_obj.due_date.strftime("%b %d"),
-            pay_link=discount_cand.get("pay_link") if discount_cand else None
-        )
+            plan_b_idempotency = f"act_disc_{discount_cand['invoice_id']}_{uuid.uuid4().hex[:8]}"
+            plan_b_currency = discount_cand.get("currency") or owner_curr
+            plan_b_hash = generate_approval_hash(
+                recipient=disc_client_name,
+                amount=disc_cost,
+                currency=plan_b_currency,
+                action_type="APPLY_DISCOUNT",
+                idempotency_key=plan_b_idempotency
+            )
 
-        plan_b_db = RescuePlan(
-            owner_id=obligation_obj.owner_id,
-            run_id=run_id,
-            plan_type="B",
-            details={
-                "invoice_id": discount_cand["invoice_id"] if discount_cand else None,
-                "discount_pct": discount_pct,
-                "discount_cost": disc_cost
-            },
-            cost=disc_cost,
-            incoming_needed=shortfall,
-            selected_clients=[discount_cand] if discount_cand else [],
-            rationale=plan_b_rationale,
-            forecast_with_plan=plan_b_with_proj,
-            forecast_without_plan=[p.model_dump() for p in forecast_response.projections],
-            late_scenario={
-                "outcome": f"If client declines early pay offer, discount expires and shortfall of {owner_sym}{shortfall:,.2f} persists.",
-                "shortfall": shortfall
-            },
-            remaining_risk=f"Plausibly protects payment date through monetary incentive. {plan_b_risk}"
-        )
-        self.db.add(plan_b_db)
-        self.db.flush()
+            plan_b_msg_draft = llm_service.draft_discount_message(
+                client_name=disc_client_name,
+                invoice_id=discount_cand["paypal_invoice_id"] or f"INV-{discount_cand['invoice_id']}",
+                original_amount=discount_cand["original_amount"],
+                discount_pct=discount_pct,
+                discounted_amount=discount_cand["net_proceeds"],
+                deadline_str=obligation_obj.due_date.strftime("%b %d"),
+                pay_link=discount_cand.get("pay_link")
+            )
 
-        action_b_db = Action(
-            owner_id=obligation_obj.owner_id,
-            plan_id=plan_b_db.id,
-            action_type="APPLY_DISCOUNT",
-            recipient=disc_client_name,
-            amount=disc_cost,
-            currency=plan_b_currency,
-            state="proposed",
-            idempotency_key=plan_b_idempotency,
-            approval_hash=plan_b_hash,
-            approval_version=2,
-            paypal_ref=discount_cand["paypal_invoice_id"] if discount_cand else None
-        )
-        self.db.add(action_b_db)
-        self.db.flush()
+            plan_b_db = RescuePlan(
+                owner_id=obligation_obj.owner_id,
+                run_id=run_id,
+                plan_type="B",
+                details={
+                    "invoice_id": discount_cand["invoice_id"],
+                    "discount_pct": discount_pct,
+                    "discount_cost": disc_cost
+                },
+                cost=disc_cost,
+                incoming_needed=shortfall,
+                selected_clients=[discount_cand],
+                rationale=plan_b_rationale,
+                forecast_with_plan=plan_b_with_proj,
+                forecast_without_plan=[p.model_dump() for p in forecast_response.projections],
+                late_scenario={
+                    "outcome": f"If client declines early pay offer, discount expires and shortfall of {owner_sym}{shortfall:,.2f} persists.",
+                    "shortfall": shortfall
+                },
+                remaining_risk=f"Plausibly protects payment date through monetary incentive. {plan_b_risk}"
+            )
+            self.db.add(plan_b_db)
+            self.db.flush()
 
-        msg_b = Message(
-            action_id=action_b_db.id,
-            client_id=discount_cand["client_id"] if discount_cand else 1,
-            body=plan_b_msg_draft,
-            approval_status="draft"
-        )
-        self.db.add(msg_b)
-        self.db.flush()
+            action_b_db = Action(
+                owner_id=obligation_obj.owner_id,
+                plan_id=plan_b_db.id,
+                action_type="APPLY_DISCOUNT",
+                recipient=disc_client_name,
+                amount=disc_cost,
+                currency=plan_b_currency,
+                state="proposed",
+                idempotency_key=plan_b_idempotency,
+                approval_hash=plan_b_hash,
+                approval_version=2,
+                paypal_ref=discount_cand["paypal_invoice_id"] or f"INV-{discount_cand['invoice_id']}"
+            )
+            self.db.add(action_b_db)
+            self.db.flush()
 
-        # Compute complete canonical payload signature
-        canonical_b = compute_action_payload(action_b_db)
-        p_hash_b = generate_payload_hash(canonical_b)
-        sig_b = generate_canonical_approval_signature(p_hash_b)
-        action_b_db.approval_hash = sig_b
-        action_b_db.approved_payload_hash = p_hash_b
-        self.db.flush()
+            msg_b = Message(
+                action_id=action_b_db.id,
+                client_id=discount_cand["client_id"],
+                body=plan_b_msg_draft,
+                approval_status="draft"
+            )
+            self.db.add(msg_b)
+            self.db.flush()
 
-        plans_out.append(RescuePlanOut(
-            id=plan_b_db.id,
-            run_id=run_id,
-            plan_type="B",
-            name="Plan B: Limited Early-Pay Discount",
-            description=f"Apply {discount_pct:.1f}% discount to {disc_client_name}'s invoice in exchange for settlement by Friday.",
-            cost=disc_cost,
-            cost_description=f"{owner_sym}{disc_cost:,.2f} discount cost ({discount_pct:.1f}% concession).",
-            incoming_needed=shortfall,
-            selected_clients=[discount_cand] if discount_cand else [],
-            rationale=plan_b_rationale,
-            forecast_with_plan=[DailyProjection(**p) for p in plan_b_with_proj],
-            forecast_without_plan=forecast_response.projections,
-            late_scenario={
-                "outcome": "If client fails to pay by deadline, discount expires and shortfall remains.",
-                "shortfall": shortfall
-            },
-            remaining_risk="Plausibly protects Friday invoice by providing monetary incentive. Concession expires if unaccepted.",
-            primary_action=ActionOut.model_validate(action_b_db)
-        ))
+            # Compute complete canonical payload signature
+            canonical_b = compute_action_payload(action_b_db)
+            p_hash_b = generate_payload_hash(canonical_b)
+            sig_b = generate_canonical_approval_signature(p_hash_b)
+            action_b_db.approval_hash = sig_b
+            action_b_db.approved_payload_hash = p_hash_b
+            self.db.flush()
+
+            plans_out.append(RescuePlanOut(
+                id=plan_b_db.id,
+                run_id=run_id,
+                plan_type="B",
+                name="Plan B: Limited Early-Pay Discount",
+                description=f"Apply {discount_pct:.1f}% discount to {disc_client_name}'s invoice in exchange for settlement by Friday.",
+                cost=disc_cost,
+                cost_description=f"{owner_sym}{disc_cost:,.2f} discount cost ({discount_pct:.1f}% concession).",
+                incoming_needed=shortfall,
+                selected_clients=[discount_cand],
+                rationale=plan_b_rationale,
+                forecast_with_plan=[DailyProjection(**p) for p in plan_b_with_proj],
+                forecast_without_plan=forecast_response.projections,
+                late_scenario={
+                    "outcome": "If client fails to pay by deadline, discount expires and shortfall remains.",
+                    "shortfall": shortfall
+                },
+                remaining_risk="Plausibly protects Friday invoice by providing monetary incentive. Concession expires if unaccepted.",
+                primary_action=ActionOut.model_validate(action_b_db)
+            ))
 
         # -------------------------------------------------------------
         # PLAN C: Collect plus agreed contractor split
@@ -494,14 +511,24 @@ class RescuePlanEngine:
             self.db.add(action_c_db)
             self.db.flush()
 
-            msg_c = Message(
-                action_id=action_c_db.id,
-                client_id=top_target["client_id"] if top_target else 1,
-                body=plan_c_msg_draft,
-                approval_status="draft"
-            )
-            self.db.add(msg_c)
-            self.db.flush()
+            # Link message to an actual client if available, avoiding fallback to fake client_id=1
+            client_for_msg = None
+            if top_target:
+                client_for_msg = top_target["client_id"]
+            else:
+                first_client = self.db.query(Client).filter(Client.owner_id == obligation_obj.owner_id).first()
+                if first_client:
+                    client_for_msg = first_client.id
+
+            if client_for_msg is not None:
+                msg_c = Message(
+                    action_id=action_c_db.id,
+                    client_id=client_for_msg,
+                    body=plan_c_msg_draft,
+                    approval_status="draft"
+                )
+                self.db.add(msg_c)
+                self.db.flush()
 
             # Compute complete canonical payload signature
             canonical_c = compute_action_payload(action_c_db)
@@ -535,16 +562,22 @@ class RescuePlanEngine:
         self.db.commit()
 
         # Generate validated LLM trade-off summary
-        tradeoff_summary = llm_service.generate_tradeoff_summary(
-            shortfall_amount=shortfall,
-            plan_b_discount_cost=disc_cost,
-            contractor_name=obligation_obj.payee_name,
-            plan_a_risk=plan_a_risk,
-            plan_b_risk=plan_b_risk,
-            plan_c_risk=plan_c_risk,
-            currency=owner_curr,
-            currency_symbol=owner_sym
-        )
+        if not plans_out:
+            tradeoff_summary = (
+                f"Projected shortfall of {owner_sym}{shortfall:,.2f} detected, but no actionable rescue plans could be formulated "
+                "due to lack of eligible receivables or unconsented split terms."
+            )
+        else:
+            tradeoff_summary = llm_service.generate_tradeoff_summary(
+                shortfall_amount=shortfall,
+                plan_b_discount_cost=disc_cost if discount_cand else 0.0,
+                contractor_name=obligation_obj.payee_name,
+                plan_a_risk=plan_a_risk,
+                plan_b_risk=plan_b_risk,
+                plan_c_risk=plan_c_risk,
+                currency=owner_curr,
+                currency_symbol=owner_sym
+            )
 
         return PlansComparisonResponse(
             run_id=run_id,

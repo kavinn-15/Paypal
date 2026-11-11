@@ -3,7 +3,7 @@ from typing import Dict, Any, List, Optional
 from decimal import Decimal
 from sqlalchemy.orm import Session
 
-from backend.app.models import Owner, Invoice, Obligation
+from backend.app.models import Owner, Invoice, Obligation, PaymentHistory
 from backend.app.ml.simulation import project_cashflow_timeline
 from backend.app.schemas import SimulationScenarioRequest, WhatIfComparisonResponse, DailyProjection
 
@@ -39,25 +39,28 @@ class SimulationService:
             Invoice.status.in_(["SENT", "DRAFT", "PARTIALLY_PAID"])
         ).all()
 
-        obligation = db.query(Obligation).filter(
+        obligations_models = db.query(Obligation).filter(
             Obligation.owner_id == owner.id,
             Obligation.status != "paid"
-        ).order_by(Obligation.due_date.asc()).first()
+        ).order_by(Obligation.due_date.asc()).all()
 
-        if obligation:
-            obl_dec = Decimal(str(obligation.amount))
-            obl_curr = (obligation.currency or owner_curr).strip().upper()
+        baseline_obligations = []
+        for obl in obligations_models:
+            obl_dec = Decimal(str(obl.amount))
+            obl_curr = (obl.currency or owner_curr).strip().upper()
             if obl_curr != owner_curr:
                 conv_obl = convert_currency_amount(obl_dec, obl_curr, owner_curr, round_minor_unit=True)
-                obl_amt = float(conv_obl) if conv_obl is not None else float(obl_dec)
+                amt_obl = float(conv_obl) if conv_obl is not None else float(obl_dec)
             else:
-                obl_amt = float(obl_dec)
-            obl_due = obligation.due_date
-        else:
-            obl_amt = 3200.0
-            obl_due = now + datetime.timedelta(days=5)
+                amt_obl = float(obl_dec)
+            baseline_obligations.append({
+                "obligation_id": obl.id,
+                "amount": amt_obl,
+                "due_date": obl.due_date,
+                "payee_name": obl.payee_name
+            })
 
-        # Baseline inflows: Apex delays 14d, Nordic delays 6d, Vertex delays 8d
+        # Calculate baseline inflows from empirical client payment history
         baseline_inflows = []
         for inv in invoices:
             hist_items = getattr(inv, "history_records", None) or getattr(inv, "payment_history", [])
@@ -73,19 +76,21 @@ class SimulationService:
             else:
                 amt_in_owner = float(unpaid_dec)
 
-            delay = 14 if "Apex" in inv.client.name else (6 if "Nordic" in inv.client.name else 8)
+            # Determine empirical delay from actual client payment history
+            c_history = db.query(PaymentHistory).filter(PaymentHistory.client_id == inv.client_id).all()
+            if len(c_history) >= 2:
+                avg_delay = max(0, int(round(sum(r.days_late for r in c_history) / len(c_history))))
+            elif len(c_history) == 1:
+                avg_delay = max(0, c_history[0].days_late)
+            else:
+                avg_delay = 3  # Neutral prior for clients without history
+
             baseline_inflows.append({
                 "client_id": inv.client_id,
                 "client_name": inv.client.name,
                 "amount": amt_in_owner,
-                "expected_pay_date": inv.due_date + datetime.timedelta(days=delay)
+                "expected_pay_date": inv.due_date + datetime.timedelta(days=avg_delay)
             })
-
-        baseline_obligations = [{
-            "amount": obl_amt,
-            "due_date": obl_due,
-            "payee_name": obligation.payee_name if obligation else "Contractor"
-        }]
 
         proj_base, sf_date_base, sf_amt_base = project_cashflow_timeline(
             starting_balance=starting_balance,
@@ -96,7 +101,12 @@ class SimulationService:
         )
 
         min_bal_base = min(p["ending_balance"] for p in proj_base) if proj_base else starting_balance
-        p_shortfall_base = 0.88 if sf_amt_base > 0 else 0.05
+        if sf_amt_base > 0:
+            tot_obl_amt = sum(o["amount"] for o in baseline_obligations)
+            ratio = sf_amt_base / max(tot_obl_amt, 1.0)
+            p_shortfall_base = min(0.95, max(0.50, round(0.50 + ratio * 0.45, 2)))
+        else:
+            p_shortfall_base = 0.05
 
         # 2. Apply What-If Modifications
         sim_inflows = [dict(inf) for inf in baseline_inflows]
@@ -104,47 +114,79 @@ class SimulationService:
         explanation = ""
 
         if req.scenario_type in ["client_delay_5d", "client_delay_10d"]:
-            days = 5 if req.scenario_type == "client_delay_5d" else 10
-            # Target Nordic or first client
-            target = next((x for x in sim_inflows if "Nordic" in x["client_name"]), sim_inflows[0] if sim_inflows else None)
+            days = req.delay_days if (req.delay_days is not None and req.delay_days > 0) else (5 if req.scenario_type == "client_delay_5d" else 10)
+            if req.delay_client_id:
+                target = next((x for x in sim_inflows if x["client_id"] == req.delay_client_id), None)
+            else:
+                target = max(sim_inflows, key=lambda x: x["amount"]) if sim_inflows else None
+
             if target:
                 target["expected_pay_date"] = target["expected_pay_date"] + datetime.timedelta(days=days)
-                explanation = f"Simulating {target['client_name']} delaying payment by an additional {days} days past expected date."
+                explanation = f"Simulating {target['client_name']} delaying payment by an additional {days} days past expected date ({target['expected_pay_date'].strftime('%b %d')})."
+            else:
+                explanation = f"Simulation requested client delay of {days} days, but no eligible open receivables were found to delay."
 
         elif req.scenario_type == "partial_pay_50":
-            target = next((x for x in sim_inflows if "Nordic" in x["client_name"]), sim_inflows[0] if sim_inflows else None)
+            pct = req.partial_pct if (req.partial_pct is not None and 0 < req.partial_pct <= 100) else 50.0
+            if req.delay_client_id:
+                target = next((x for x in sim_inflows if x["client_id"] == req.delay_client_id), None)
+            else:
+                target = max(sim_inflows, key=lambda x: x["amount"]) if sim_inflows else None
+
             if target:
                 original_amt = target["amount"]
-                target["amount"] = original_amt * 0.50
-                explanation = f"Simulating {target['client_name']} paying only 50% ({curr_sym}{target['amount']:,.2f}) of invoice before the deadline."
+                target["amount"] = round(original_amt * (pct / 100.0), 2)
+                explanation = f"Simulating {target['client_name']} paying only {pct:.0f}% ({curr_sym}{target['amount']:,.2f}) of invoice before the deadline."
+            else:
+                explanation = f"Simulation requested partial payment of {pct:.0f}%, but no eligible open receivables were found."
 
         elif req.scenario_type == "dual_delay":
-            for target in sim_inflows[:2]:
-                target["expected_pay_date"] = target["expected_pay_date"] + datetime.timedelta(days=7)
-            explanation = "Simulating two key clients (Apex & Nordic) delaying simultaneously by 7 days."
+            days = req.delay_days if (req.delay_days is not None and req.delay_days > 0) else 7
+            if len(sim_inflows) >= 2:
+                for target in sim_inflows[:2]:
+                    target["expected_pay_date"] = target["expected_pay_date"] + datetime.timedelta(days=days)
+                explanation = f"Simulating two key clients ({sim_inflows[0]['client_name']} & {sim_inflows[1]['client_name']}) delaying simultaneously by {days} days."
+            elif len(sim_inflows) == 1:
+                sim_inflows[0]["expected_pay_date"] = sim_inflows[0]["expected_pay_date"] + datetime.timedelta(days=days)
+                explanation = f"Simulating client {sim_inflows[0]['client_name']} delaying payment by {days} days (only 1 open invoice exists)."
+            else:
+                explanation = f"Simulation requested dual client delay, but no open receivables were found."
 
         elif req.scenario_type == "emergency_expense":
-            em_amt = req.emergency_amount or 500.0
+            em_amt = req.emergency_amount if (req.emergency_amount is not None and req.emergency_amount > 0) else 500.0
             sim_obligations.append({
                 "amount": em_amt,
                 "due_date": now + datetime.timedelta(days=3),
                 "payee_name": "Emergency Hardware/Tool Expense"
             })
-            explanation = f"Simulating an unexpected emergency equipment expense of {curr_sym}{em_amt:,.2f} occurring on day 3."
+            explanation = f"Simulating an unexpected emergency equipment expense of {curr_sym}{em_amt:,.2f} occurring in 3 days."
 
         elif req.scenario_type == "expense_increase":
-            sim_obligations[0]["amount"] = sim_obligations[0]["amount"] * 1.20
-            explanation = f"Simulating contractor payout increasing by 20% to {curr_sym}{sim_obligations[0]['amount']:,.2f}."
+            if sim_obligations:
+                sim_obligations[0]["amount"] = round(sim_obligations[0]["amount"] * 1.20, 2)
+                explanation = f"Simulating contractor payout ({sim_obligations[0]['payee_name']}) increasing by 20% to {curr_sym}{sim_obligations[0]['amount']:,.2f}."
+            else:
+                explanation = "Simulation requested 20% expense increase, but no active obligations exist to increase."
 
         elif req.scenario_type == "contractor_split":
-            orig = sim_obligations[0]["amount"]
-            sim_obligations[0]["amount"] = orig * 0.50
-            sim_obligations.append({
-                "amount": orig * 0.50,
-                "due_date": obl_due + datetime.timedelta(days=14),
-                "payee_name": f"{obligation.payee_name if obligation else 'Contractor'} (Part 2)"
-            })
-            explanation = f"Simulating contractor accepting 50% ({curr_sym}{orig*0.50:,.2f}) on Friday and remaining 50% in 14 days."
+            if sim_obligations:
+                split_pct = (req.contractor_split_pct if (req.contractor_split_pct is not None and 0 < req.contractor_split_pct < 100) else 50.0) / 100.0
+                orig = sim_obligations[0]["amount"]
+                part1 = round(orig * split_pct, 2)
+                part2 = round(orig - part1, 2)
+                sim_obligations[0]["amount"] = part1
+                obl_due_date = sim_obligations[0]["due_date"]
+                sim_obligations.append({
+                    "amount": part2,
+                    "due_date": obl_due_date + datetime.timedelta(days=14),
+                    "payee_name": f"{sim_obligations[0]['payee_name']} (Part 2)"
+                })
+                explanation = (
+                    f"Simulating {sim_obligations[0]['payee_name']} accepting {split_pct*100:.0f}% ({curr_sym}{part1:,.2f}) upfront "
+                    f"and remaining {100-split_pct*100:.0f}% ({curr_sym}{part2:,.2f}) deferred by 14 days."
+                )
+            else:
+                explanation = "Cannot simulate contractor split: no active contractor obligations exist in the account."
 
         # 3. Project Simulated Timeline
         proj_sim, sf_date_sim, sf_amt_sim = project_cashflow_timeline(
@@ -156,7 +198,12 @@ class SimulationService:
         )
 
         min_bal_sim = min(p["ending_balance"] for p in proj_sim) if proj_sim else starting_balance
-        p_shortfall_sim = 0.95 if sf_amt_sim > sf_amt_base else (0.15 if sf_amt_sim == 0 else 0.75)
+        if sf_amt_sim > 0:
+            tot_obl_sim = sum(o["amount"] for o in sim_obligations)
+            ratio_sim = sf_amt_sim / max(tot_obl_sim, 1.0)
+            p_shortfall_sim = min(0.98, max(0.55, round(0.55 + ratio_sim * 0.40, 2)))
+        else:
+            p_shortfall_sim = 0.05
 
         delta_sf = sf_amt_sim - sf_amt_base
         delta_min = min_bal_sim - min_bal_base

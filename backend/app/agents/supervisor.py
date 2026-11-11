@@ -61,19 +61,48 @@ class AgentSupervisor:
 
         # Step 2: Collector Agent
         collector = CollectorAgent()
-        invoices_list = [
-            {
-                "invoice_id": cp.client_id,
-                "paypal_invoice_id": f"INV-{cp.client_id}",
-                "client_id": cp.client_id,
-                "client_name": cp.client_name,
-                "amount": cp.invoice_amount,
-                "p_late": cp.p_late,
-                "relationship_weight": 1.0,
-                "pay_link": None
-            }
-            for cp in forecast_res.client_predictions
-        ]
+        from decimal import Decimal
+        from backend.app.models import Invoice
+        from backend.app.services.region_service import convert_currency_amount
+
+        open_invoices_db = self.db.query(Invoice).join(Invoice.client).filter(
+            Invoice.client.has(owner_id=owner.id),
+            Invoice.status.in_(["SENT", "DRAFT", "PARTIALLY_PAID"])
+        ).all()
+
+        invoices_list = []
+        for inv in open_invoices_db:
+            pred = next((p for p in forecast_res.client_predictions if getattr(p, "invoice_id", None) == inv.id), None)
+            if not pred:
+                pred = next((p for p in forecast_res.client_predictions if p.client_id == inv.client_id), None)
+
+            p_late = pred.p_late if pred else 0.5
+
+            hist_items = getattr(inv, "history_records", None) or getattr(inv, "payment_history", [])
+            paid_amount = sum(Decimal(str(h.amount)) for h in hist_items)
+            unpaid_dec = Decimal(str(inv.amount)) - paid_amount
+            if unpaid_dec <= Decimal("0"):
+                continue
+
+            inv_curr = (inv.currency or owner_curr).strip().upper()
+            if inv_curr != owner_curr:
+                conv = convert_currency_amount(unpaid_dec, inv_curr, owner_curr, round_minor_unit=True)
+                amt_in_owner = float(conv) if conv is not None else float(unpaid_dec)
+            else:
+                amt_in_owner = float(unpaid_dec)
+
+            invoices_list.append({
+                "invoice_id": inv.id,
+                "paypal_invoice_id": inv.paypal_invoice_id,
+                "client_id": inv.client_id,
+                "client_name": inv.client.name,
+                "amount": amt_in_owner,
+                "currency": inv_curr,
+                "p_late": p_late,
+                "relationship_weight": inv.client.relationship_weight,
+                "pay_link": inv.pay_link
+            })
+
         scored_targets = collector.select_targets_for_reminder(invoices_list, forecast_res.shortfall_amount or 1400.0)
         top_target = scored_targets[0] if scored_targets else None
         collector_summary = (
@@ -139,20 +168,25 @@ class AgentSupervisor:
         # Step 5: Financial Negotiation Agent
         negotiator = NegotiationAgent(self.db)
         try:
-            negotiator.generate_options(
+            neg_res = negotiator.generate_options(
                 owner=owner,
                 req=NegotiationGenerateRequest(target_type="client_discount", discount_pct=3.0)
             )
-        except Exception:
-            pass  # Non-blocking if owner has no open invoice for negotiation
-
-        steps_trace.append(AgentTraceStep(
-            agent_name="NegotiationAgent",
-            status="completed",
-            timestamp=now_str,
-            summary="Prepared negotiation draft templates across Professional, Friendly, and Urgent tones",
-            key_finding="Drafted multi-tone client negotiation messages ready for human authorization"
-        ))
+            steps_trace.append(AgentTraceStep(
+                agent_name="NegotiationAgent",
+                status="completed",
+                timestamp=now_str,
+                summary=f"Prepared negotiation draft templates across Professional, Friendly, and Urgent tones for {neg_res.recipient_name}",
+                key_finding=f"Drafted multi-tone client negotiation messages ready for human authorization"
+            ))
+        except Exception as e:
+            steps_trace.append(AgentTraceStep(
+                agent_name="NegotiationAgent",
+                status="skipped",
+                timestamp=now_str,
+                summary=f"Negotiation drafts skipped: {str(e)}",
+                key_finding="No eligible client/invoice for discount negotiation"
+            ))
 
         # Supervisory Multi-Criteria Plan Evaluation & Dynamic Selection
         if not has_shortfall:
@@ -193,33 +227,41 @@ class AgentSupervisor:
                     "residual": residual
                 })
 
-            scored_plans.sort(key=lambda x: x["score"], reverse=True)
-            best = scored_plans[0]
-            recommended = best["plan"].plan_type
-            confidence_score = round(min(max(best["score"], 0.70), 0.96), 2)
+            if scored_plans:
+                scored_plans.sort(key=lambda x: x["score"], reverse=True)
+                best = scored_plans[0]
+                recommended = best["plan"].plan_type
+                confidence_score = round(min(max(best["score"], 0.05), 0.98), 2)
 
-            target_name = top_target["client_name"] if top_target else "primary client"
-            payee_name = target_obl.payee_name if target_obl else "contractor"
-            best_cost = best["cost"]
+                target_name = top_target["client_name"] if top_target else "primary client"
+                payee_name = target_obl.payee_name if target_obl else "contractor"
+                best_cost = best["cost"]
 
-            if recommended == "B":
-                rec_reason = (
-                    f"Plan B (early settlement discount) is the optimal supervisory recommendation. "
-                    f"For a concession of {owner_sym}{best_cost:,.2f}, it creates an actionable incentive for {target_name} "
-                    f"to accelerate settlement within 48 hours, eliminating the projected {owner_sym}{forecast_res.shortfall_amount:,.2f} "
-                    f"deficit before {payee_name}'s scheduled payout."
-                )
-            elif recommended == "C":
-                rec_reason = (
-                    f"Plan C (contractor installment schedule) is the optimal supervisory recommendation. "
-                    f"It provides immediate cash relief by splitting {payee_name}'s payment with zero concession cost, "
-                    f"protecting current working capital until expected receivables clear."
-                )
+                if recommended == "B":
+                    rec_reason = (
+                        f"Plan B (early settlement discount) is the optimal supervisory recommendation. "
+                        f"For a concession of {owner_sym}{best_cost:,.2f}, it creates an actionable incentive for {target_name} "
+                        f"to accelerate settlement within 48 hours, eliminating the projected {owner_sym}{forecast_res.shortfall_amount:,.2f} "
+                        f"deficit before {payee_name}'s scheduled payout."
+                    )
+                elif recommended == "C":
+                    rec_reason = (
+                        f"Plan C (contractor installment schedule) is the optimal supervisory recommendation. "
+                        f"It provides immediate cash relief by splitting {payee_name}'s payment with zero concession cost, "
+                        f"protecting current working capital until expected receivables clear."
+                    )
+                else:
+                    rec_reason = (
+                        f"Plan A (direct invoice payment reminder) is the optimal supervisory recommendation. "
+                        f"With zero concession cost, prompting {target_name} provides the cleanest recovery path "
+                        f"to settle the {owner_sym}{forecast_res.shortfall_amount:,.2f} projected shortfall."
+                    )
             else:
+                recommended = "NONE"
+                confidence_score = 0.50
                 rec_reason = (
-                    f"Plan A (direct invoice payment reminder) is the optimal supervisory recommendation. "
-                    f"With zero concession cost, prompting {target_name} provides the cleanest recovery path "
-                    f"to settle the {owner_sym}{forecast_res.shortfall_amount:,.2f} projected shortfall."
+                    f"Shortfall of {owner_sym}{forecast_res.shortfall_amount:,.2f} detected, but no actionable rescue plans "
+                    "could be formulated due to lack of eligible receivables or unconsented split terms."
                 )
 
         # Persist Agent Workflow Run

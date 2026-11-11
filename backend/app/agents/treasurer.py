@@ -45,14 +45,23 @@ class TreasurerAgent:
             return None
 
         total = float(obligation.amount)
-        # Default 50/50 split or affordable portion
-        inst1 = round(total * 0.5, 2)
-        inst2 = round(total - inst1, 2)
+        if total <= 0:
+            return None
 
-        # Ensure inst1 is covered by starting balance
-        if starting_balance < inst1:
-            inst1 = max(round(starting_balance - min_reserve, 2), round(total * 0.25, 2))
-            inst2 = round(total - inst1, 2)
+        # Check cash available after preserving required reserve
+        available_cash = round(starting_balance - min_reserve, 2)
+        if available_cash <= 0:
+            return None
+
+        # Target 50/50 split or largest affordable portion bounded strictly by available cash
+        desired_inst1 = round(total * 0.5, 2)
+        inst1 = min(desired_inst1, available_cash)
+
+        # An installment is infeasible if it cannot provide at least 10% of obligation or is negligible (< 1.00)
+        if inst1 < round(total * 0.10, 2) or inst1 < 1.0:
+            return None
+
+        inst2 = round(total - inst1, 2)
 
         # Normalize to naive UTC datetimes to prevent offset-naive vs offset-aware comparison errors
         obl_due = obligation.due_date.replace(tzinfo=None) if obligation.due_date.tzinfo else obligation.due_date

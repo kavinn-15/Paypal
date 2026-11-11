@@ -1,9 +1,10 @@
+import datetime
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.db import get_db
-from backend.app.models import Owner, NegotiationDraft
+from backend.app.models import Owner, NegotiationDraft, Obligation
 from backend.app.auth.deps import get_verified_current_user
 from backend.app.agents.negotiator import NegotiationAgent
 from backend.app.schemas import (
@@ -128,6 +129,26 @@ def record_negotiation_response(
         raise HTTPException(status_code=400, detail="Outcome must be 'accepted' or 'declined'")
 
     draft.status = outcome
+
+    # Legitimately sync contractor consent when a contractor negotiation proposal is accepted
+    if draft.target_type == "contractor_split" and draft.obligation_id:
+        obl = db.query(Obligation).filter(
+            Obligation.id == draft.obligation_id,
+            Obligation.owner_id == current_user.id
+        ).first()
+        if obl:
+            if outcome == "accepted":
+                obl.split_allowed = True
+                obl.split_consent_recorded = True
+                obl.split_consent_source = "negotiation_response_accepted"
+                obl.split_consent_timestamp = datetime.datetime.utcnow()
+                obl.status = "split_agreed"
+            elif outcome == "declined":
+                obl.split_allowed = False
+                obl.split_consent_recorded = False
+                if obl.status == "split_agreed":
+                    obl.status = "pending"
+
     db.commit()
     db.refresh(draft)
 
@@ -135,7 +156,7 @@ def record_negotiation_response(
         db,
         actor="owner",
         event="NEGOTIATION_RESPONSE_RECORDED",
-        payload={"draft_id": draft.id, "outcome": outcome},
+        payload={"draft_id": draft.id, "outcome": outcome, "target_type": draft.target_type, "obligation_id": draft.obligation_id},
         owner_id=current_user.id
     )
     return draft
