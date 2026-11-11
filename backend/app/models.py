@@ -35,6 +35,9 @@ class Owner(Base):
     email_verification_token = Column(String(255), nullable=True, index=True)
     is_demo = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    terms_accepted = Column(Boolean, default=False, nullable=False)
+    terms_accepted_at = Column(DateTime, nullable=True)
+    token_version = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
 
@@ -383,6 +386,7 @@ class RefreshToken(Base):
     id = Column(Integer, primary_key=True, index=True)
     token = Column(String(255), unique=True, nullable=False, index=True)
     owner_id = Column(Integer, ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    family_id = Column(String(100), nullable=True, index=True)
     revoked = Column(Boolean, default=False, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
@@ -472,4 +476,42 @@ class PhoneOTP(Base):
     )
 
     owner = relationship("Owner", back_populates="phone_otps")
+
+
+class RateLimitAttempt(Base):
+    """
+    Database-backed rate limit tracker across multiple workers and restarts.
+    """
+    __tablename__ = "rate_limit_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(255), nullable=False, index=True)
+    attempt_time = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
+
+
+class ConsumedToken(Base):
+    """
+    Database-backed single-use token tracking (e.g. password reset jti) across workers.
+    """
+    __tablename__ = "consumed_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    jti = Column(String(255), unique=True, nullable=False, index=True)
+    consumed_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+
+class OAuthState(Base):
+    """
+    Cryptographically secure, persisted, single-use OAuth 2.0 / PKCE state records.
+    """
+    __tablename__ = "oauth_states"
+
+    id = Column(Integer, primary_key=True, index=True)
+    state = Column(String(255), unique=True, nullable=False, index=True)
+    code_verifier = Column(String(255), nullable=True)
+    consumed = Column(Boolean, default=False, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
 

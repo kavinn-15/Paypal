@@ -16,6 +16,7 @@ interface AuthContextType {
     name: string;
     email: string;
     password: string;
+    terms_accepted: boolean;
     phone_number?: string;
     phone_country_code?: string;
     currency?: string;
@@ -109,6 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     name: string;
     email: string;
     password: string;
+    terms_accepted: boolean;
     phone_number?: string;
     phone_country_code?: string;
     currency?: string;

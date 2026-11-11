@@ -64,7 +64,8 @@ async def test_phone_registration_and_e164_normalization():
             "password": "Password123!",
             "phone_number": raw_phone,
             "phone_country_code": "+91",
-            "country": "IN"
+            "country": "IN",
+            "terms_accepted": True
         })
         assert res.status_code == 200, res.text
         data = res.json()
@@ -86,7 +87,8 @@ async def test_invalid_phone_number_rejected():
             "email": "invalid.phone@example.org",
             "password": "Password123!",
             "phone_number": "12345",  # Too short to be valid
-            "country": "IN"
+            "country": "IN",
+            "terms_accepted": True
         })
         assert res.status_code == 400
         assert "Invalid phone number" in res.json()["detail"] or "Unable to parse" in res.json()["detail"]
@@ -111,7 +113,8 @@ async def test_duplicate_phone_number_rejected():
             "email": "user1.dup@test.org",
             "password": "Password123!",
             "phone_number": phone,
-            "country": "IN"
+            "country": "IN",
+            "terms_accepted": True
         })
         assert res1.status_code == 200
 
@@ -121,7 +124,8 @@ async def test_duplicate_phone_number_rejected():
             "email": "user2.dup@test.org",
             "password": "Password123!",
             "phone_number": phone,
-            "country": "IN"
+            "country": "IN",
+            "terms_accepted": True
         })
         assert res2.status_code == 400
         assert "already exists" in res2.json()["detail"].lower()
@@ -165,7 +169,8 @@ async def test_phone_otp_verification_success_and_single_use():
             "email": email,
             "password": "Password123!",
             "phone_number": phone,
-            "country": "IN"
+            "country": "IN",
+            "terms_accepted": True
         })
 
         # Fetch plain code from dev inbox
@@ -304,7 +309,8 @@ async def test_phone_login_with_password():
             "email": email,
             "password": password,
             "phone_number": phone,
-            "country": "IN"
+            "country": "IN",
+            "terms_accepted": True
         })
 
         # Login with correct phone & password
@@ -347,7 +353,8 @@ async def test_phone_login_with_otp_flow():
             "email": email,
             "password": password,
             "phone_number": phone,
-            "country": "IN"
+            "country": "IN",
+            "terms_accepted": True
         })
 
         # 1. Unverified phone cannot use OTP login
@@ -404,7 +411,8 @@ async def test_phone_password_reset_and_session_revocation():
             "email": email,
             "password": old_pwd,
             "phone_number": phone,
-            "country": "IN"
+            "country": "IN",
+            "terms_accepted": True
         })
         old_refresh = reg_res.json()["refresh_token"]
 
@@ -465,7 +473,8 @@ async def test_change_existing_phone_number_with_reauth():
             "email": email,
             "password": password,
             "phone_number": old_phone,
-            "country": "IN"
+            "country": "IN",
+            "terms_accepted": True
         })
         token = reg_res.json()["access_token"]
 
@@ -523,7 +532,8 @@ async def test_email_only_existing_user_compatibility_and_financial_isolation():
         reg_res = await client.post("/auth/register", json={
             "name": "Email Only User",
             "email": email,
-            "password": pwd
+            "password": pwd,
+            "terms_accepted": True
         })
         assert reg_res.status_code == 200
         assert reg_res.json()["phone_number"] is None

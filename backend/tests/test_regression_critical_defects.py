@@ -57,11 +57,22 @@ async def test_demo_clear_does_not_delete_real_user_records():
             "name": "David Real Client",
             "email": "david.real@enterprise.example.com",
             "password": "SecurePassword2026!",
-            "currency": "USD"
+            "currency": "USD",
+            "terms_accepted": True
         })
         assert res_reg.status_code == 200
         token_real = res_reg.json()["access_token"]
         headers_real = {"Authorization": f"Bearer {token_real}"}
+
+        # Mark verified so financial endpoint /obligations can be accessed
+        db = SessionLocal()
+        try:
+            u_real = db.query(Owner).filter(Owner.email == "david.real@enterprise.example.com").first()
+            if u_real:
+                u_real.email_verified = True
+                db.commit()
+        finally:
+            db.close()
 
         # 2. Real user creates an obligation
         res_obl = await client.post("/obligations", json={
@@ -75,11 +86,19 @@ async def test_demo_clear_does_not_delete_real_user_records():
         assert res_obl.status_code == 201
         real_obl_id = res_obl.json()["id"]
 
-        # 3. Call /demo/clear
-        res_clear = await client.post("/demo/clear", headers=headers_real)
+        # 3. Verify real user cannot call /demo/clear (403 Forbidden)
+        res_clear_unauth = await client.post("/demo/clear", headers=headers_real)
+        assert res_clear_unauth.status_code == 403
+
+        # 4. Authorized demo user calls /demo/clear
+        res_demo_login = await client.post("/auth/demo-login")
+        assert res_demo_login.status_code == 200
+        headers_demo = {"Authorization": f"Bearer {res_demo_login.json()['access_token']}"}
+
+        res_clear = await client.post("/demo/clear", headers=headers_demo)
         assert res_clear.status_code == 200
 
-        # 4. Verify real user's obligation is 100% preserved
+        # 5. Verify real user's obligation is 100% preserved
         res_check = await client.get(f"/obligations/{real_obl_id}", headers=headers_real)
         assert res_check.status_code == 200
         assert res_check.json()["payee_name"] == "Critical Supplier Inc"
@@ -139,10 +158,18 @@ async def test_negotiator_cross_tenant_rejection():
             "name": "Tenant B",
             "email": "tenant.b@crosscheck.example.com",
             "password": "StrongPassword2026!",
-            "currency": "USD"
+            "currency": "USD",
+            "terms_accepted": True
         })
         token_b = res_reg_b.json()["access_token"]
         headers_b = {"Authorization": f"Bearer {token_b}"}
+
+        # Mark User B verified so financial endpoints are accessible
+        db_b = SessionLocal()
+        user_b = db_b.query(Owner).filter(Owner.email == "tenant.b@crosscheck.example.com").first()
+        user_b.email_verified = True
+        db_b.commit()
+        db_b.close()
 
         # User B attempts to generate negotiation targeting User A's client_id -> 400 Bad Request
         res_neg = await client.post("/negotiate/generate", json={

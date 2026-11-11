@@ -4,7 +4,7 @@ from typing import List
 from backend.app.db import get_db
 from backend.app.models import Obligation, Owner
 from backend.app.schemas import ObligationCreate, ObligationOut
-from backend.app.auth.deps import get_current_user
+from backend.app.auth.deps import get_verified_current_user
 from backend.app.guardrail.audit import append_audit_log
 
 router = APIRouter(prefix="/obligations", tags=["Obligations"])
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/obligations", tags=["Obligations"])
 @router.get("", response_model=List[ObligationOut])
 def list_obligations(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """Lists obligations belonging strictly to the authenticated owner."""
     return db.query(Obligation).filter(
@@ -25,7 +25,7 @@ def list_obligations(
 def get_obligation(
     obligation_id: int,
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """Retrieves a single obligation with strict ownership check."""
     obl = db.query(Obligation).filter(
@@ -41,7 +41,7 @@ def get_obligation(
 def create_obligation(
     payload: ObligationCreate,
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """Creates a new contractor payment obligation for the authenticated user."""
     obl = Obligation(
@@ -80,7 +80,7 @@ def create_obligation(
 def delete_obligation(
     obligation_id: int,
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """Deletes an obligation belonging to the authenticated owner."""
     obl = db.query(Obligation).filter(

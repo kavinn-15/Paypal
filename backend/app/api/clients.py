@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 from backend.app.db import get_db
 from backend.app.models import Client, Invoice, PaymentHistory, Owner
-from backend.app.auth.deps import get_current_user
+from backend.app.auth.deps import get_verified_current_user
 
 router = APIRouter(prefix="/clients", tags=["Clients & Payment Patterns"])
 
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/clients", tags=["Clients & Payment Patterns"])
 @router.get("")
 def list_clients_with_patterns(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Returns clients and behavioral payment metrics scoped strictly to the authenticated user.
@@ -64,7 +64,7 @@ def list_clients_with_patterns(
 def get_client(
     client_id: int,
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """Retrieves a single client profile with strict ownership verification."""
     client = db.query(Client).filter(

@@ -38,11 +38,22 @@ async def test_user_isolation_and_id_manipulation():
             "name": "Attacker User",
             "email": "attacker@evilcorp.example.com",
             "password": "EvilPassword123!",
-            "currency": "USD"
+            "currency": "USD",
+            "terms_accepted": True
         })
         assert res_reg_b.status_code == 200
         token_b = res_reg_b.json()["access_token"]
         headers_b = {"Authorization": f"Bearer {token_b}"}
+
+        # Verify User B email so financial endpoints are accessible
+        db = SessionLocal()
+        try:
+            ub = db.query(Owner).filter(Owner.email == "attacker@evilcorp.example.com").first()
+            if ub:
+                ub.email_verified = True
+                db.commit()
+        finally:
+            db.close()
 
         # 3. User B tries to access User A's action -> 404 (or 403)
         res_b_get_act = await client.get(f"/actions/{action_a_id}", headers=headers_b)
@@ -108,7 +119,8 @@ async def test_token_refresh_and_logout_revocation():
             "name": "Refresh Tester",
             "email": "refresh.tester@example.com",
             "password": "StrongPassword2026!",
-            "currency": "USD"
+            "currency": "USD",
+            "terms_accepted": True
         })
         assert res_reg.status_code == 200
         auth_data = res_reg.json()

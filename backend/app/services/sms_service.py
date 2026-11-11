@@ -34,6 +34,9 @@ class ConsoleSMSProvider(SMSProviderBase):
     """
 
     def send_sms(self, to_phone: str, message: str, template_id: Optional[str] = None, variables: Optional[Dict[str, str]] = None) -> bool:
+        if not settings.DEV_MODE:
+            logger.error("SMS dispatch failure: Console provider is prohibited in production mode. Configure a valid SMS provider (twilio, msg91, exotel).")
+            return False
         logger.info(
             f"\n"
             f"========================= [SMS DISPATCH - CONSOLE] =========================\n"

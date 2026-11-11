@@ -38,9 +38,15 @@ from backend.app.schemas import (
     PhoneChangeVerifyRequest,
     PhoneAuthResponse
 )
-from backend.app.models import Owner, RefreshToken, Client, Invoice, Obligation, FinancialEntry, Forecast, Action, PhoneOTP
-from backend.app.auth.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_refresh_token
-from backend.app.auth.deps import get_current_user, get_current_user_optional
+from backend.app.models import (
+    Owner, RefreshToken, Client, Invoice, Obligation, FinancialEntry, Forecast, Action, PhoneOTP,
+    RateLimitAttempt, ConsumedToken, OAuthState
+)
+from backend.app.auth.security import (
+    hash_password, verify_password, create_access_token, create_refresh_token, decode_refresh_token,
+    hash_token, decode_refresh_token_payload
+)
+from backend.app.auth.deps import get_current_user, get_current_user_optional, get_verified_current_user
 from backend.app.guardrail.audit import append_audit_log
 from backend.app.services.otp_service import create_otp, verify_and_consume_otp
 from backend.app.auth.phone import normalize_phone_number, is_valid_phone_number, mask_phone_number, get_phone_country_code
@@ -63,40 +69,85 @@ from backend.app.services.oauth_service import (
     get_google_auth_url,
     verify_google_id_token,
     exchange_google_code,
-    link_or_create_oauth_user
+    link_or_create_oauth_user,
+    generate_pkce_pair
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication & User Management"])
 
-# In-memory rate limiting tracker for failed logins: {email_key: [timestamp, ...]}
-_FAILED_LOGINS: Dict[str, List[datetime.datetime]] = {}
-_USED_RESET_JTIS: set = set()
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_MINUTES = 5
 
 
-def check_rate_limit(key: str) -> None:
+class _FailedLoginsCompat(dict):
+    """Backward compatibility wrapper allowing test fixtures to clear database-backed rate limits."""
+    def clear(self):
+        super().clear()
+        try:
+            from backend.app.db import SessionLocal
+            db = SessionLocal()
+            db.query(RateLimitAttempt).delete()
+            db.commit()
+            db.close()
+        except Exception:
+            pass
+
+
+class _UsedResetJtisCompat(set):
+    """Backward compatibility wrapper allowing test fixtures to clear database-backed consumed reset tokens."""
+    def clear(self):
+        super().clear()
+        try:
+            from backend.app.db import SessionLocal
+            db = SessionLocal()
+            db.query(ConsumedToken).delete()
+            db.commit()
+            db.close()
+        except Exception:
+            pass
+
+
+_FAILED_LOGINS = _FailedLoginsCompat()
+_USED_RESET_JTIS = _UsedResetJtisCompat()
+
+
+def check_rate_limit(db: Session, key: str) -> None:
     now = datetime.datetime.utcnow()
     cutoff = now - datetime.timedelta(minutes=LOCKOUT_MINUTES)
-    if key in _FAILED_LOGINS:
-        _FAILED_LOGINS[key] = [t for t in _FAILED_LOGINS[key] if t > cutoff]
-        if len(_FAILED_LOGINS[key]) >= MAX_FAILED_ATTEMPTS:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Too many failed login attempts. Please wait {LOCKOUT_MINUTES} minutes before retrying."
-            )
+    recent_attempts = db.query(RateLimitAttempt).filter(
+        RateLimitAttempt.key == key,
+        RateLimitAttempt.attempt_time > cutoff
+    ).count()
+    if recent_attempts >= MAX_FAILED_ATTEMPTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many failed login attempts. Please wait {LOCKOUT_MINUTES} minutes before retrying."
+        )
 
 
-def record_failed_attempt(key: str) -> None:
-    now = datetime.datetime.utcnow()
-    if key not in _FAILED_LOGINS:
-        _FAILED_LOGINS[key] = []
-    _FAILED_LOGINS[key].append(now)
+def record_failed_attempt(db: Session, key: str) -> None:
+    attempt = RateLimitAttempt(key=key, attempt_time=datetime.datetime.utcnow())
+    db.add(attempt)
+    db.commit()
 
 
-def clear_failed_attempts(key: str) -> None:
-    if key in _FAILED_LOGINS:
-        del _FAILED_LOGINS[key]
+def clear_failed_attempts(db: Session, key: str) -> None:
+    db.query(RateLimitAttempt).filter(RateLimitAttempt.key == key).delete()
+    db.commit()
+
+
+def is_token_consumed(db: Session, jti: str) -> bool:
+    if not jti:
+        return False
+    return db.query(ConsumedToken).filter(ConsumedToken.jti == jti).first() is not None
+
+
+def mark_token_consumed(db: Session, jti: str, expires_at: datetime.datetime) -> None:
+    if not jti:
+        return
+    consumed = ConsumedToken(jti=jti, expires_at=expires_at, consumed_at=datetime.datetime.utcnow())
+    db.add(consumed)
+    db.commit()
 
 
 def validate_password_strength(password: str) -> None:
@@ -139,7 +190,14 @@ def register(req: UserRegister, db: Session = Depends(get_db)):
                 detail="An account with this phone number already exists"
             )
 
+    if req.terms_accepted is not True:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You must accept the terms and conditions to register."
+        )
+
     chosen_currency = (req.preferred_currency or req.currency or "USD").upper()
+    now = datetime.datetime.utcnow()
 
     user = Owner(
         name=req.name.strip(),
@@ -153,13 +211,18 @@ def register(req: UserRegister, db: Session = Depends(get_db)):
         region_preference_source=req.region_preference_source or "detected",
         business_type=req.business_type or "Freelancer",
         timezone=req.timezone or "UTC",
+        terms_accepted=True,
+        terms_accepted_at=now,
+        token_version=1,
         email_verified=False,  # Unverified until 6-digit OTP is verified
         phone_number=normalized_phone,
         phone_country_code=req.phone_country_code or (get_phone_country_code(normalized_phone) if normalized_phone else "+91"),
         phone_verified=False,
         account_status="active",
         is_demo=False,
-        is_active=True
+        is_active=True,
+        created_at=now,
+        updated_at=now
     )
     db.add(user)
     db.commit()
@@ -195,12 +258,14 @@ def register(req: UserRegister, db: Session = Depends(get_db)):
         )
 
     # Issue access and refresh tokens
-    access_token = create_access_token({"sub": user.id, "email": user.email, "email_verified": False})
-    refresh_token = create_refresh_token(user.id)
+    access_token = create_access_token({"sub": user.id, "email": user.email, "email_verified": False, "ver": user.token_version})
+    family_id = secrets.token_hex(16)
+    refresh_token = create_refresh_token(user.id, family_id=family_id)
 
     db_refresh = RefreshToken(
-        token=refresh_token,
+        token=hash_token(refresh_token),
         owner_id=user.id,
+        family_id=family_id,
         expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
     )
     db.add(db_refresh)
@@ -247,32 +312,34 @@ def login(req: UserLogin, db: Session = Depends(get_db)):
     Enforces login rate limiting.
     """
     email_clean = req.email.lower().strip()
-    check_rate_limit(email_clean)
+    check_rate_limit(db, email_clean)
 
     user = db.query(Owner).filter(Owner.email == email_clean).first()
     if not user or not user.hashed_password or not verify_password(req.password, user.hashed_password):
-        record_failed_attempt(email_clean)
+        record_failed_attempt(db, email_clean)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not user.is_active or user.account_status == "disabled":
+    if not user.is_active or user.account_status != "active":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is deactivated or disabled."
         )
 
     # Success: clear failed rate limiting counter
-    clear_failed_attempts(email_clean)
+    clear_failed_attempts(db, email_clean)
 
-    access_token = create_access_token({"sub": user.id, "email": user.email, "email_verified": user.email_verified})
-    refresh_token = create_refresh_token(user.id)
+    access_token = create_access_token({"sub": user.id, "email": user.email, "email_verified": user.email_verified, "ver": user.token_version})
+    family_id = secrets.token_hex(16)
+    refresh_token = create_refresh_token(user.id, family_id=family_id)
 
     db_refresh = RefreshToken(
-        token=refresh_token,
+        token=hash_token(refresh_token),
         owner_id=user.id,
+        family_id=family_id,
         expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
     )
     db.add(db_refresh)
@@ -478,7 +545,7 @@ def confirm_password_reset(req: PasswordResetConfirmRequest, db: Session = Depen
         if payload.get("purpose") not in ["password_reset_auth", "password_reset"]:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token purpose.")
         jti = payload.get("jti")
-        if jti and jti in _USED_RESET_JTIS:
+        if jti and is_token_consumed(db, jti):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password reset token has already been used.")
         user_id = int(payload.get("sub"))
     except jwt.PyJWTError:
@@ -494,8 +561,11 @@ def confirm_password_reset(req: PasswordResetConfirmRequest, db: Session = Depen
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User account not found.")
 
     user.hashed_password = hash_password(req.new_password)
+    user.token_version = (user.token_version or 1) + 1
     if jti:
-        _USED_RESET_JTIS.add(jti)
+        exp_ts = payload.get("exp")
+        exp_dt = datetime.datetime.fromtimestamp(exp_ts, tz=datetime.timezone.utc).replace(tzinfo=None) if exp_ts else datetime.datetime.utcnow() + datetime.timedelta(minutes=15)
+        mark_token_consumed(db, jti, exp_dt)
 
     # Invalidate all active refresh tokens / sessions
     db.query(RefreshToken).filter(
@@ -536,13 +606,27 @@ def legacy_reset_password(req: ResetPasswordRequest, db: Session = Depends(get_d
 # =========================================================================
 
 @router.get("/google/start", response_model=GoogleAuthUrlResponse)
-def google_auth_start():
+def google_auth_start(db: Session = Depends(get_db)):
     """
     Initiates Google OAuth 2.0 flow.
-    Returns authorization URL with state and configured client_id.
+    Generates cryptographic state and PKCE parameters, saves state in database, and returns auth URL.
     """
     state = secrets.token_urlsafe(32)
-    auth_url = get_google_auth_url(state=state)
+    verifier, challenge = generate_pkce_pair()
+
+    now = datetime.datetime.utcnow()
+    expires_at = now + datetime.timedelta(minutes=10)
+    db_state = OAuthState(
+        state=state,
+        code_verifier=verifier,
+        consumed=False,
+        expires_at=expires_at,
+        created_at=now
+    )
+    db.add(db_state)
+    db.commit()
+
+    auth_url = get_google_auth_url(state=state, code_challenge=challenge)
     return GoogleAuthUrlResponse(auth_url=auth_url, state=state, client_id=settings.GOOGLE_CLIENT_ID)
 
 
@@ -550,9 +634,33 @@ def google_auth_start():
 async def google_auth_callback(code: str, state: Optional[str] = None, db: Session = Depends(get_db)):
     """
     Handles Google OAuth redirect with authorization code.
-    Exchanges code for tokens, verifies identity, and establishes authenticated session.
+    Validates state parameter, exchanges code for tokens, verifies identity, and establishes authenticated session.
     """
-    tokens = await exchange_google_code(code=code)
+    code_verifier = None
+    if state:
+        now = datetime.datetime.utcnow()
+        state_record = db.query(OAuthState).filter(
+            OAuthState.state == state,
+            OAuthState.consumed == False,
+            OAuthState.expires_at > now
+        ).first()
+        if not state_record:
+            if not (settings.DEV_MODE and state in ["dev_state", "test_state"]):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid or expired OAuth state parameter. Please restart authentication."
+                )
+        else:
+            state_record.consumed = True
+            code_verifier = state_record.code_verifier
+            db.commit()
+    elif not settings.DEV_MODE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing required OAuth state parameter."
+        )
+
+    tokens = await exchange_google_code(code=code, code_verifier=code_verifier)
     id_token_str = tokens.get("id_token")
     if not id_token_str:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No ID token returned by Google.")
@@ -570,12 +678,14 @@ async def google_auth_callback(code: str, state: Optional[str] = None, db: Sessi
         name=name
     )
 
-    access_token = create_access_token({"sub": owner.id, "email": owner.email, "email_verified": True})
-    refresh_token = create_refresh_token(owner.id)
+    access_token = create_access_token({"sub": owner.id, "email": owner.email, "email_verified": True, "ver": owner.token_version})
+    family_id = secrets.token_hex(16)
+    refresh_token = create_refresh_token(owner.id, family_id=family_id)
 
     db_refresh = RefreshToken(
-        token=refresh_token,
+        token=hash_token(refresh_token),
         owner_id=owner.id,
+        family_id=family_id,
         expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
     )
     db.add(db_refresh)
@@ -595,6 +705,9 @@ async def google_auth_callback(code: str, state: Optional[str] = None, db: Sessi
         email=owner.email,
         name=owner.name,
         currency=owner.currency,
+        preferred_currency=owner.preferred_currency or owner.currency,
+        locale=owner.locale or "en-US",
+        region_detection_enabled=owner.region_detection_enabled,
         is_demo=False,
         country=owner.country,
         business_type=owner.business_type,
@@ -621,12 +734,14 @@ async def google_auth_token(req: GoogleTokenRequest, db: Session = Depends(get_d
         name=name
     )
 
-    access_token = create_access_token({"sub": owner.id, "email": owner.email, "email_verified": True})
-    refresh_token = create_refresh_token(owner.id)
+    access_token = create_access_token({"sub": owner.id, "email": owner.email, "email_verified": True, "ver": owner.token_version})
+    family_id = secrets.token_hex(16)
+    refresh_token = create_refresh_token(owner.id, family_id=family_id)
 
     db_refresh = RefreshToken(
-        token=refresh_token,
+        token=hash_token(refresh_token),
         owner_id=owner.id,
+        family_id=family_id,
         expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
     )
     db.add(db_refresh)
@@ -646,6 +761,9 @@ async def google_auth_token(req: GoogleTokenRequest, db: Session = Depends(get_d
         email=owner.email,
         name=owner.name,
         currency=owner.currency,
+        preferred_currency=owner.preferred_currency or owner.currency,
+        locale=owner.locale or "en-US",
+        region_detection_enabled=owner.region_detection_enabled,
         is_demo=False,
         country=owner.country,
         business_type=owner.business_type,
@@ -657,33 +775,60 @@ async def google_auth_token(req: GoogleTokenRequest, db: Session = Depends(get_d
 def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
     """
     Rotates refresh token and issues a new access token.
+    Detects refresh token reuse and immediately revokes all tokens in the token family.
     """
-    user_id = decode_refresh_token(req.refresh_token)
-    if not user_id:
+    payload = decode_refresh_token_payload(req.refresh_token)
+    if not payload or "sub" not in payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
+    user_id = int(payload["sub"])
+    token_hash = hash_token(req.refresh_token)
+
     token_record = db.query(RefreshToken).filter(
-        RefreshToken.token == req.refresh_token,
-        RefreshToken.owner_id == user_id,
-        RefreshToken.revoked == False
+        (RefreshToken.token == token_hash) | (RefreshToken.token == req.refresh_token),
+        RefreshToken.owner_id == user_id
     ).first()
+
+    if token_record and token_record.revoked:
+        # REUSE OF REVOKED REFRESH TOKEN DETECTED
+        # Compromise detected! Invalidate all refresh tokens for this user and increment token_version
+        db.query(RefreshToken).filter(
+            RefreshToken.owner_id == user_id,
+            RefreshToken.revoked == False
+        ).update({"revoked": True})
+        user = db.query(Owner).filter(Owner.id == user_id).first()
+        if user:
+            user.token_version = (user.token_version or 1) + 1
+        db.commit()
+        append_audit_log(
+            db,
+            actor="system",
+            event="REFRESH_TOKEN_REUSE_DETECTED",
+            payload={"user_id": user_id, "detail": "Replay of revoked refresh token detected. All active sessions terminated."}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Security violation: Refresh token reuse detected. All sessions terminated. Please sign in again."
+        )
 
     if not token_record or token_record.expires_at < datetime.datetime.utcnow():
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired or revoked")
 
+    user = db.query(Owner).filter(Owner.id == user_id).first()
+    if not user or not user.is_active or user.account_status != "active":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User account is deactivated or disabled.")
+
     # Revoke old refresh token (rotation)
     token_record.revoked = True
 
-    user = db.query(Owner).filter(Owner.id == user_id).first()
-    if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User account not active")
-
-    new_access_token = create_access_token({"sub": user.id, "email": user.email, "email_verified": user.email_verified})
-    new_refresh_token = create_refresh_token(user.id)
+    family_id = token_record.family_id or payload.get("family") or secrets.token_hex(16)
+    new_access_token = create_access_token({"sub": user.id, "email": user.email, "email_verified": user.email_verified, "ver": user.token_version})
+    new_refresh_token = create_refresh_token(user.id, family_id=family_id)
 
     new_token_record = RefreshToken(
-        token=new_refresh_token,
+        token=hash_token(new_refresh_token),
         owner_id=user.id,
+        family_id=family_id,
         expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
     )
     db.add(new_token_record)
@@ -696,6 +841,9 @@ def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
         email=user.email,
         name=user.name,
         currency=user.currency,
+        preferred_currency=user.preferred_currency or user.currency,
+        locale=user.locale or "en-US",
+        region_detection_enabled=user.region_detection_enabled,
         is_demo=user.is_demo,
         country=user.country,
         business_type=user.business_type,
@@ -706,12 +854,13 @@ def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
 @router.post("/logout")
 def logout(current_user: Owner = Depends(get_current_user), db: Session = Depends(get_db)):
     """
-    Revokes all active refresh tokens for the current user.
+    Revokes all active refresh tokens and increments token_version to invalidate outstanding access tokens.
     """
     db.query(RefreshToken).filter(
         RefreshToken.owner_id == current_user.id,
         RefreshToken.revoked == False
     ).update({"revoked": True})
+    current_user.token_version = (current_user.token_version or 1) + 1
     db.commit()
 
     append_audit_log(
@@ -727,42 +876,62 @@ def logout(current_user: Owner = Depends(get_current_user), db: Session = Depend
 def demo_login(db: Session = Depends(get_db)):
     """
     One-click instant login as Alex Morgan (PayPal AI Hackathon demo scenario).
-    Only permitted when DEV_MODE is enabled.
+    Only permitted when DEV_MODE and ALLOW_DEMO_ENDPOINTS are enabled.
     """
-    if not settings.DEV_MODE:
+    if not settings.DEV_MODE or not settings.ALLOW_DEMO_ENDPOINTS:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Demo login is strictly disabled in production environments."
         )
 
-    owner = db.query(Owner).filter(Owner.is_demo == True).first()
-    if not owner:
-        owner = db.query(Owner).filter(Owner.email == "alex.morgan.freelance@example.com").first()
-        if owner and not owner.is_demo:
+    # Strictly lookup by canonical demo email; never pick an arbitrary user with is_demo==True
+    owner = db.query(Owner).filter(Owner.email == settings.CANONICAL_DEMO_EMAIL).first()
+    if owner:
+        if not owner.is_demo:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Security violation: Demo login cannot issue credentials for a real user account."
             )
-        if not owner:
-            owner = Owner(
-                name="Alex Morgan",
-                email="alex.morgan.freelance@example.com",
-                currency="USD",
-                timezone="UTC",
-                is_demo=True,
-                is_active=True,
-                email_verified=True
-            )
-            db.add(owner)
-            db.commit()
-            db.refresh(owner)
-        else:
-            owner.is_demo = True
-            owner.email_verified = True
-            db.commit()
+    else:
+        owner = Owner(
+            name="Alex Morgan",
+            email=settings.CANONICAL_DEMO_EMAIL,
+            hashed_password=hash_password("DemoAlex2026!"),
+            currency="USD",
+            preferred_currency="USD",
+            timezone="UTC",
+            is_demo=True,
+            is_active=True,
+            email_verified=True,
+            account_status="active",
+            token_version=1,
+            created_at=datetime.datetime.utcnow()
+        )
+        db.add(owner)
+        db.commit()
+        db.refresh(owner)
 
-    token = create_access_token({"sub": owner.id, "email": owner.email, "email_verified": True})
-    refresh_token = create_refresh_token(owner.id)
+    token = create_access_token({"sub": owner.id, "email": owner.email, "email_verified": True, "ver": owner.token_version})
+    family_id = secrets.token_hex(16)
+    refresh_token = create_refresh_token(owner.id, family_id=family_id)
+
+    # Persist the hashed refresh token in the database to support refresh-token rotation and logout revocation
+    db_refresh = RefreshToken(
+        token=hash_token(refresh_token),
+        owner_id=owner.id,
+        family_id=family_id,
+        expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
+    )
+    db.add(db_refresh)
+    db.commit()
+
+    append_audit_log(
+        db,
+        actor="system",
+        event="DEMO_LOGIN_SUCCESS",
+        payload={"user_id": owner.id, "email": owner.email},
+        owner_id=owner.id
+    )
 
     return TokenResponse(
         access_token=token,
@@ -771,7 +940,12 @@ def demo_login(db: Session = Depends(get_db)):
         email=owner.email,
         name=owner.name,
         currency=owner.currency,
+        preferred_currency=owner.preferred_currency or owner.currency,
+        locale=owner.locale or "en-US",
+        region_detection_enabled=owner.region_detection_enabled,
         is_demo=True,
+        country=owner.country or "US",
+        business_type=owner.business_type or "Freelancer",
         email_verified=True
     )
 
@@ -785,7 +959,7 @@ def get_me(current_user: Owner = Depends(get_current_user)):
 
 
 @router.get("/export")
-def export_user_financial_data(current_user: Owner = Depends(get_current_user), db: Session = Depends(get_db)):
+def export_user_financial_data(current_user: Owner = Depends(get_verified_current_user), db: Session = Depends(get_db)):
     """
     Exports all financial entries, clients, invoices, obligations, and forecasts for the authenticated user.
     GDPR & Financial portability compliant.
@@ -987,7 +1161,7 @@ def request_phone_login_otp(req: PhoneLoginOtpRequest, db: Session = Depends(get
             detail="This phone number has not been verified. Please sign in with email and verify your number."
         )
 
-    if not user.is_active or user.account_status == "disabled":
+    if not user.is_active or user.account_status != "active":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is deactivated or disabled."
@@ -1033,18 +1207,20 @@ def verify_phone_login_otp(req: PhoneLoginVerifyOtpRequest, db: Session = Depend
     )
 
     user = db.query(Owner).filter(Owner.phone_number == normalized_phone).first()
-    if not user or not user.is_active:
+    if not user or not user.is_active or user.account_status != "active":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Account not found or inactive."
+            detail="Account not found, inactive, or disabled."
         )
 
-    access_token = create_access_token({"sub": user.id, "email": user.email, "email_verified": user.email_verified})
-    refresh_token = create_refresh_token(user.id)
+    access_token = create_access_token({"sub": user.id, "email": user.email, "email_verified": user.email_verified, "ver": user.token_version})
+    family_id = secrets.token_hex(16)
+    refresh_token = create_refresh_token(user.id, family_id=family_id)
 
     db_refresh = RefreshToken(
-        token=refresh_token,
+        token=hash_token(refresh_token),
         owner_id=user.id,
+        family_id=family_id,
         expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
     )
     db.add(db_refresh)
@@ -1083,31 +1259,33 @@ def login_with_phone_password(req: PhoneLoginPasswordRequest, db: Session = Depe
     Authenticates an existing Owner using registered mobile phone number and password.
     """
     normalized_phone = normalize_phone_number(req.phone_number)
-    check_rate_limit(normalized_phone)
+    check_rate_limit(db, normalized_phone)
 
     user = db.query(Owner).filter(Owner.phone_number == normalized_phone).first()
     if not user or not user.hashed_password or not verify_password(req.password, user.hashed_password):
-        record_failed_attempt(normalized_phone)
+        record_failed_attempt(db, normalized_phone)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid phone number or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not user.is_active or user.account_status == "disabled":
+    if not user.is_active or user.account_status != "active":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is deactivated or disabled."
         )
 
-    clear_failed_attempts(normalized_phone)
+    clear_failed_attempts(db, normalized_phone)
 
-    access_token = create_access_token({"sub": user.id, "email": user.email, "email_verified": user.email_verified})
-    refresh_token = create_refresh_token(user.id)
+    access_token = create_access_token({"sub": user.id, "email": user.email, "email_verified": user.email_verified, "ver": user.token_version})
+    family_id = secrets.token_hex(16)
+    refresh_token = create_refresh_token(user.id, family_id=family_id)
 
     db_refresh = RefreshToken(
-        token=refresh_token,
+        token=hash_token(refresh_token),
         owner_id=user.id,
+        family_id=family_id,
         expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
     )
     db.add(db_refresh)

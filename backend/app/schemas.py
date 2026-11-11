@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, EmailStr, ConfigDict
+from pydantic import BaseModel, Field, EmailStr, ConfigDict, field_validator
 
 
 # ==========================================
@@ -19,7 +19,7 @@ class UserRegister(BaseModel):
     country: Optional[str] = Field(default="US", max_length=50)
     business_type: Optional[str] = Field(default="Freelancer", max_length=50)
     timezone: str = Field(default="UTC", max_length=50)
-    terms_accepted: Optional[bool] = Field(default=True)
+    terms_accepted: Optional[bool] = Field(default=None, description="Must explicitly accept terms and conditions")
     locale: Optional[str] = Field(default="en-US", max_length=10)
     region_preference_source: Optional[str] = Field(default="detected", max_length=30)
 

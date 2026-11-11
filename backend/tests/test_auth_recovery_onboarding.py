@@ -32,7 +32,8 @@ async def test_registration_with_extended_fields():
             "password": "SecurePassword123!",
             "country": "US",
             "business_type": "Agency",
-            "preferred_currency": "USD"
+            "preferred_currency": "USD",
+            "terms_accepted": True
         })
         assert res.status_code == 200, res.text
         data = res.json()
@@ -53,7 +54,8 @@ async def test_registration_duplicate_email_rejected():
             "name": "First User",
             "email": "duplicate@test.org",
             "password": "Password1234!",
-            "country": "US"
+            "country": "US",
+            "terms_accepted": True
         }
         # First registration or cleanup
         db = SessionLocal()
@@ -109,7 +111,8 @@ async def test_login_flow_and_bad_credentials():
         await client.post("/auth/register", json={
             "name": "Login Test",
             "email": email,
-            "password": "ValidPassword999!"
+            "password": "ValidPassword999!",
+            "terms_accepted": True
         })
 
         # Bad password
@@ -159,7 +162,8 @@ async def test_password_recovery_and_reset_flow():
         await client.post("/auth/register", json={
             "name": "Recovery User",
             "email": email,
-            "password": "OriginalPassword123!"
+            "password": "OriginalPassword123!",
+            "terms_accepted": True
         })
 
         # Request forgot password
@@ -224,7 +228,8 @@ async def test_multi_tenant_data_isolation():
         res_a = await client.post("/auth/register", json={
             "name": "Alice User",
             "email": "alice@freelance.org",
-            "password": "AliceSecret123!"
+            "password": "AliceSecret123!",
+            "terms_accepted": True
         })
         token_a = res_a.json()["access_token"]
 
@@ -232,9 +237,16 @@ async def test_multi_tenant_data_isolation():
         res_b = await client.post("/auth/register", json={
             "name": "Bob User",
             "email": "bob@freelance.org",
-            "password": "BobSecret123!"
+            "password": "BobSecret123!",
+            "terms_accepted": True
         })
         token_b = res_b.json()["access_token"]
+
+        # Mark Alice and Bob verified so financial endpoints are accessible
+        db_ver = SessionLocal()
+        db_ver.query(Owner).filter(Owner.email.in_(["alice@freelance.org", "bob@freelance.org"])).update({"email_verified": True})
+        db_ver.commit()
+        db_ver.close()
 
         # Alice creates an obligation
         create_res = await client.post(

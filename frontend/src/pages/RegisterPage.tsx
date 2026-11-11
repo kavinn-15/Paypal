@@ -219,6 +219,7 @@ export const RegisterPage: React.FC = () => {
         business_type: businessType,
         preferred_currency: preferredCurrency,
         currency: preferredCurrency,
+        terms_accepted: termsAccepted,
       });
 
       // Mark newly registered user for guided onboarding wizard

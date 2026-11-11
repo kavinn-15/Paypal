@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     APPROVAL_SECRET: str = Field(default="cashflow-lifeline-sandbox-hmac-secret-key-32bytes")
     JWT_SECRET: str = Field(default="cashflow-lifeline-jwt-super-secure-token-secret-2026")
     JWT_ALGORITHM: str = Field(default="HS256")
-    JWT_EXPIRE_MINUTES: int = Field(default=1440)  # 24 hours
+    JWT_EXPIRE_MINUTES: int = Field(default=30)  # 30 minutes access token
     JWT_REFRESH_EXPIRE_DAYS: int = Field(default=7)  # 7 days
     PUBLIC_BASE_URL: str = Field(default="http://localhost:8000")
     APP_BASE_URL: str = Field(default="http://localhost:5173")
@@ -94,8 +94,9 @@ class Settings(BaseSettings):
     MAX_DISCOUNT_PCT: float = Field(default=5.0)  # maximum 5% early payment discount
     MAX_PAYOUT_AMOUNT: float = Field(default=10000.0)  # max single payout
     ALLOWED_CURRENCIES: str = Field(default="USD,EUR,GBP,CAD,INR")
-    DEV_MODE: bool = Field(default=True)
+    DEV_MODE: bool = Field(default=False)
     ALLOW_DEMO_ENDPOINTS: bool = Field(default=True)
+    CANONICAL_DEMO_EMAIL: str = Field(default="alex.morgan.freelance@example.com")
     PORT: int = Field(default=8000)
 
     # Regional Detection & Geolocation Configuration

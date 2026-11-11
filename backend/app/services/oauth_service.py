@@ -57,7 +57,12 @@ async def verify_google_id_token(id_token_str: str) -> Dict[str, Any]:
         )
 
     # In local testing/mock mode if token is prefixed with "mock_google_token"
-    if settings.DEV_MODE and (id_token_str.startswith("mock_google_token") or id_token_str.startswith("mock_google:")):
+    if id_token_str.startswith("mock_google_token") or id_token_str.startswith("mock_google:"):
+        if not settings.DEV_MODE:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Mock Google tokens are strictly prohibited in production mode."
+            )
         if ":" in id_token_str:
             parts = id_token_str.split(":")
             sub = parts[1] if len(parts) > 1 else "google_sub_123"
@@ -121,7 +126,12 @@ async def verify_google_id_token(id_token_str: str) -> Dict[str, Any]:
 
 async def exchange_google_code(code: str, code_verifier: Optional[str] = None) -> Dict[str, Any]:
     """Exchanges an authorization code for Google tokens."""
-    if settings.DEV_MODE and (code.startswith("mock_google_") or not settings.GOOGLE_CLIENT_ID or "placeholder" in (settings.GOOGLE_CLIENT_ID or "")):
+    if code.startswith("mock_google_"):
+        if not settings.DEV_MODE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Mock Google authorization codes are strictly prohibited in production mode."
+            )
         sub = "dev_google_user_101"
         email = "google.dev.user@example.com"
         return {
@@ -130,6 +140,23 @@ async def exchange_google_code(code: str, code_verifier: Optional[str] = None) -
             "expires_in": 3600,
             "token_type": "Bearer"
         }
+
+    if settings.DEV_MODE and (not settings.GOOGLE_CLIENT_ID or "placeholder" in (settings.GOOGLE_CLIENT_ID or "")):
+        sub = "dev_google_user_101"
+        email = "google.dev.user@example.com"
+        return {
+            "access_token": "mock_google_access_token",
+            "id_token": f"mock_google:{sub}:{email}",
+            "expires_in": 3600,
+            "token_type": "Bearer"
+        }
+
+    if not settings.DEV_MODE:
+        if not settings.GOOGLE_CLIENT_ID or "placeholder" in settings.GOOGLE_CLIENT_ID.lower() or not settings.GOOGLE_CLIENT_SECRET or "placeholder" in settings.GOOGLE_CLIENT_SECRET.lower():
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Google OAuth is not configured for production. Valid GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are required."
+            )
 
     token_url = "https://oauth2.googleapis.com/token"
     data = {
@@ -201,10 +228,10 @@ def link_or_create_oauth_user(
     owner = db.query(Owner).filter(Owner.email == email_clean).first()
     if owner:
         # Check if owner is active
-        if not owner.is_active or owner.account_status == "disabled":
+        if not owner.is_active or owner.account_status != "active":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="User account is deactivated."
+                detail="User account is deactivated or disabled."
             )
         # Link OAuth identity to existing owner
         new_link = OAuthIdentity(
@@ -231,6 +258,9 @@ def link_or_create_oauth_user(
         preferred_currency="USD",
         country="US",
         business_type="Freelancer",
+        terms_accepted=True,
+        terms_accepted_at=now,
+        token_version=1,
         email_verified=True,  # Verified by Google/OAuth provider
         email_verified_at=now,
         account_status="active",

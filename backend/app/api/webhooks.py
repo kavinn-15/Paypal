@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 
 from backend.app.db import get_db
 from backend.app.config import settings
-from backend.app.auth.deps import get_current_user
+from backend.app.auth.deps import get_verified_current_user
 from backend.app.models import WebhookEvent, Invoice, Owner
 from backend.app.paypal.client import paypal_client
 from backend.app.events.queue import event_queue
@@ -101,7 +101,7 @@ async def receive_paypal_webhook(
 def simulate_webhook_event(
     payload: SimulateWebhookRequest,
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     DEV_MODE ONLY: Simulates a confirmed client payment event for the authenticated user.

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.db import get_db
 from backend.app.models import Owner, NegotiationDraft
-from backend.app.auth.deps import get_current_user
+from backend.app.auth.deps import get_verified_current_user
 from backend.app.agents.negotiator import NegotiationAgent
 from backend.app.schemas import (
     NegotiationGenerateRequest, NegotiationTonesResponse, NegotiationDraftOut, NegotiationDraftUpdate
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/negotiate", tags=["Financial Negotiation Agent"])
 def generate_negotiation_options(
     req: NegotiationGenerateRequest,
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Generate personalized negotiation messages across 3 distinct tone styles:
@@ -37,7 +37,7 @@ def generate_negotiation_options(
 @router.get("/drafts", response_model=List[NegotiationDraftOut])
 def list_drafts(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Retrieve all negotiation message drafts for the authenticated user.
@@ -52,7 +52,7 @@ def update_draft(
     draft_id: int,
     req: NegotiationDraftUpdate,
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Allows user to edit and customize a negotiation draft before approving or sending.
@@ -80,7 +80,7 @@ def update_draft(
 def approve_draft(
     draft_id: int,
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Human-in-the-loop approval of a negotiation draft before dispatch.
@@ -111,7 +111,7 @@ def record_negotiation_response(
     draft_id: int,
     outcome: str = "accepted",  # accepted | declined
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Records recipient response to an approved negotiation proposal (accepted or declined).

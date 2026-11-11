@@ -17,14 +17,18 @@ def get_current_user_optional(
 ) -> Optional[Owner]:
     """
     Extracts the current user if a valid JWT is provided.
-    If no token is provided, returns None.
+    If no token is provided or account is disabled/revoked, returns None.
     """
     if credentials and credentials.credentials:
         payload = decode_access_token(credentials.credentials)
         if payload and "sub" in payload:
             user_id = payload.get("sub")
             user = db.query(Owner).filter(Owner.id == user_id).first()
-            if user:
+            if user and user.is_active and user.account_status == "active":
+                token_ver = payload.get("ver")
+                if token_ver is not None and getattr(user, "token_version", 1) is not None:
+                    if token_ver < getattr(user, "token_version", 1):
+                        return None
                 return user
     return None
 
@@ -35,7 +39,7 @@ def get_current_user(
 ) -> Owner:
     """
     Enforces authentication across all protected financial endpoints.
-    Strictly verifies JWT Bearer token and rejects unauthenticated or expired requests.
+    Strictly verifies JWT Bearer token and rejects unauthenticated, deactivated, or expired requests.
     Zero implicit first-user fallback.
     """
     if not credentials or not credentials.credentials:
@@ -62,11 +66,20 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not user.is_active:
+    if not user.is_active or user.account_status != "active":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is deactivated."
+            detail="User account is deactivated or disabled."
         )
+
+    token_ver = payload.get("ver")
+    if token_ver is not None and getattr(user, "token_version", 1) is not None:
+        if token_ver < getattr(user, "token_version", 1):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session has been terminated or password changed. Please log in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     return user
 

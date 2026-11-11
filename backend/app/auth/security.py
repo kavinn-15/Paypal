@@ -1,14 +1,21 @@
 import datetime
 import uuid
+import hashlib
 import bcrypt
 import jwt
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, VerificationError
 from backend.app.config import settings
 
 # RFC 9106 recommended Argon2id parameters
 _argon2_hasher = PasswordHasher(time_cost=2, memory_cost=65536, parallelism=1)
+
+
+def hash_token(token: str) -> str:
+    """Computes SHA-256 hash of a token string for safe database storage."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
 
 
 def hash_password(password: str) -> str:
@@ -49,13 +56,14 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[datetime.t
     return encoded_jwt
 
 
-def create_refresh_token(user_id: int) -> str:
+def create_refresh_token(user_id: int, family_id: Optional[str] = None) -> str:
     """Creates a longer-lived refresh token for token rotation."""
     now = datetime.datetime.now(datetime.timezone.utc)
     expire = now + datetime.timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
     payload = {
         "sub": str(user_id),
         "type": "refresh",
+        "family": family_id or uuid.uuid4().hex,
         "exp": expire,
         "iat": now,
         "jti": uuid.uuid4().hex,
@@ -69,6 +77,17 @@ def decode_refresh_token(token: str) -> Optional[int]:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         if payload.get("type") == "refresh" and "sub" in payload:
             return int(payload["sub"])
+        return None
+    except jwt.PyJWTError:
+        return None
+
+
+def decode_refresh_token_payload(token: str) -> Optional[Dict[str, Any]]:
+    """Decodes full refresh token payload including family and jti."""
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        if payload.get("type") == "refresh":
+            return payload
         return None
     except jwt.PyJWTError:
         return None

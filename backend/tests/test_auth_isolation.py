@@ -31,7 +31,8 @@ async def test_auth_registration_and_login_flow():
             "email": "sarah.connor@example.com",
             "password": "Password123!",
             "currency": "USD",
-            "timezone": "America/New_York"
+            "timezone": "America/New_York",
+            "terms_accepted": True
         }
         res_reg = await client.post("/auth/register", json=reg_payload)
         assert res_reg.status_code == 200

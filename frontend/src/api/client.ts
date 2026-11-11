@@ -253,6 +253,7 @@ export const api = {
     name: string;
     email: string;
     password: string;
+    terms_accepted: boolean;
     phone_number?: string;
     phone_country_code?: string;
     currency?: string;

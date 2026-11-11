@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.db import get_db
 from backend.app.models import Owner, AgentWorkflowRun
-from backend.app.auth.deps import get_current_user
+from backend.app.auth.deps import get_verified_current_user
 from backend.app.agents.supervisor import AgentSupervisor
 from backend.app.schemas import SupervisorRunResponse
 
@@ -16,7 +16,7 @@ def run_supervisor_workflow(
     obligation_id: Optional[int] = Query(None, description="Target obligation ID"),
     starting_balance: Optional[float] = Query(None, description="Current starting balance (defaults to authoritative reconciled ledger)"),
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Triggers the Autonomous Agent Orchestrator:
@@ -38,7 +38,7 @@ def run_supervisor_workflow(
 @router.get("/runs")
 def list_supervisor_runs(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     List past supervisory workflow runs and agent execution traces.
@@ -53,7 +53,7 @@ def list_supervisor_runs(
 def get_supervisor_run(
     run_id: str,
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Retrieve specific supervisor workflow run trace for authenticated user.

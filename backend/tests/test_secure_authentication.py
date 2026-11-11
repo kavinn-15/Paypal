@@ -43,7 +43,8 @@ async def test_registration_success_issues_otp_and_unverified_token():
             "password": "SecurePassword2026!",
             "country": "GB",
             "business_type": "Agency",
-            "preferred_currency": "GBP"
+            "preferred_currency": "GBP",
+            "terms_accepted": True
         })
         assert res.status_code == 200, res.text
         data = res.json()
@@ -83,7 +84,8 @@ async def test_duplicate_email_registration_rejected():
         payload = {
             "name": "Original User",
             "email": email,
-            "password": "ValidPassword123!"
+            "password": "ValidPassword123!",
+            "terms_accepted": True
         }
         res1 = await client.post("/auth/register", json=payload)
         assert res1.status_code == 200
@@ -110,7 +112,8 @@ async def test_email_otp_verification_success_and_single_use():
         await client.post("/auth/register", json={
             "name": "OTP User",
             "email": email,
-            "password": "ValidPassword123!"
+            "password": "ValidPassword123!",
+            "terms_accepted": True
         })
 
         # Inject a known code hash for deterministic verification testing
@@ -174,7 +177,8 @@ async def test_email_otp_wrong_code_and_attempt_limits():
         await client.post("/auth/register", json={
             "name": "Attempts User",
             "email": email,
-            "password": "ValidPassword123!"
+            "password": "ValidPassword123!",
+            "terms_accepted": True
         })
 
         # Inject known OTP
@@ -228,7 +232,8 @@ async def test_email_otp_expired_code_rejected():
         await client.post("/auth/register", json={
             "name": "Expired OTP User",
             "email": email,
-            "password": "ValidPassword123!"
+            "password": "ValidPassword123!",
+            "terms_accepted": True
         })
 
         # Expire the OTP record in the DB
@@ -267,7 +272,8 @@ async def test_otp_purpose_separation():
         await client.post("/auth/register", json={
             "name": "Purpose User",
             "email": email,
-            "password": "ValidPassword123!"
+            "password": "ValidPassword123!",
+            "terms_accepted": True
         })
 
         code = "555555"
@@ -309,7 +315,8 @@ async def test_password_reset_flow_with_otp_and_session_revocation():
         reg_res = await client.post("/auth/register", json={
             "name": "Reset User",
             "email": email,
-            "password": old_password
+            "password": old_password,
+            "terms_accepted": True
         })
         old_refresh_token = reg_res.json()["refresh_token"]
 
@@ -426,7 +433,8 @@ async def test_google_oauth_safe_account_linking():
         reg_res = await client.post("/auth/register", json={
             "name": "Existing User",
             "email": email,
-            "password": "Password123!"
+            "password": "Password123!",
+            "terms_accepted": True
         })
         owner_id = reg_res.json()["user_id"]
 

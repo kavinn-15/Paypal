@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.db import get_db
 from backend.app.models import Owner
-from backend.app.auth.deps import get_current_user
+from backend.app.auth.deps import get_verified_current_user
 from backend.app.schemas import SimulationScenarioRequest, WhatIfComparisonResponse
 from backend.app.services.simulation_service import SimulationService
 from backend.app.services.financial_service import FinancialService
@@ -17,7 +17,7 @@ def run_simulation(
     req: SimulationScenarioRequest,
     starting_balance: Optional[float] = Query(None, description="Starting cash balance (defaults to authoritative reconciled ledger)"),
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Run an intelligent What-If financial simulation:

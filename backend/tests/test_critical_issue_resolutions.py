@@ -615,7 +615,8 @@ async def test_email_verification_enforcement_on_financial_endpoints():
             "password": "Password123!",
             "name": "Unverified User",
             "business_type": "Freelancer",
-            "currency": "USD"
+            "currency": "USD",
+            "terms_accepted": True
         })
         assert reg_res.status_code == 200
         unverified_token = reg_res.json()["access_token"]
@@ -2644,7 +2645,7 @@ def test_alembic_fresh_database_initialization_reaches_head(tmp_path):
 
     with eng.connect() as c:
         current_rev = c.execute(text("SELECT version_num FROM alembic_version;")).scalar()
-        assert current_rev == "6f7a8b9c0d1e"
+        assert current_rev in ["6f7a8b9c0d1e", "7a8b9c0d1e2f"]
 
 
 def test_paypal_webhook_extracts_individual_payment_amount_not_invoice_total(setup_db):

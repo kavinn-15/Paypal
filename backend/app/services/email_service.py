@@ -1,5 +1,6 @@
 import logging
 import smtplib
+import html
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
@@ -11,6 +12,8 @@ logger = logging.getLogger("email_service")
 
 def render_verification_email(name: str, otp_code: str) -> str:
     """HTML email template for new account email verification."""
+    safe_name = html.escape(name.strip()) if (name and name.strip()) else "Partner"
+    safe_otp = html.escape(otp_code.strip())
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -33,12 +36,12 @@ def render_verification_email(name: str, otp_code: str) -> str:
   <div class="container">
     <div class="logo">CL <span style="font-weight: 300;">| Cashflow Lifeline</span><span class="badge">PayPal AI</span></div>
     <h1>Verify Your Business Email</h1>
-    <p>Hello {name or 'Partner'},</p>
+    <p>Hello {safe_name},</p>
     <p>Thank you for registering with Cashflow Lifeline. Please enter the single-use 6-digit verification code below to verify your email and unlock your financial cashflow dashboard.</p>
     
     <div class="otp-box">
       <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #7ea1f3; margin-bottom: 8px;">Verification Code</div>
-      <div class="otp-code">{otp_code}</div>
+      <div class="otp-code">{safe_otp}</div>
       <div style="font-size: 11px; color: #94a3b8; margin-top: 8px;">Expires in {settings.OTP_EXPIRE_MINUTES} minutes &bull; Single-use only</div>
     </div>
 
@@ -57,6 +60,8 @@ def render_verification_email(name: str, otp_code: str) -> str:
 
 def render_password_reset_email(name: str, otp_code: str) -> str:
     """HTML email template for password reset OTP."""
+    safe_name = html.escape(name.strip()) if (name and name.strip()) else "Partner"
+    safe_otp = html.escape(otp_code.strip())
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -79,12 +84,12 @@ def render_password_reset_email(name: str, otp_code: str) -> str:
   <div class="container">
     <div class="logo">CL <span style="font-weight: 300;">| Cashflow Lifeline</span><span class="badge">Security Alert</span></div>
     <h1>Password Recovery Request</h1>
-    <p>Hello {name or 'Partner'},</p>
+    <p>Hello {safe_name},</p>
     <p>A password reset request was initiated for your Cashflow Lifeline account. Use the following 6-digit code to complete the verification step:</p>
     
     <div class="otp-box">
       <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #7ea1f3; margin-bottom: 8px;">Password Reset Code</div>
-      <div class="otp-code">{otp_code}</div>
+      <div class="otp-code">{safe_otp}</div>
       <div style="font-size: 11px; color: #94a3b8; margin-top: 8px;">Expires in {settings.OTP_EXPIRE_MINUTES} minutes &bull; Single-use only</div>
     </div>
 
@@ -103,6 +108,7 @@ def render_password_reset_email(name: str, otp_code: str) -> str:
 
 def render_password_changed_email(name: str) -> str:
     """HTML email template confirming successful password change."""
+    safe_name = html.escape(name.strip()) if (name and name.strip()) else "Partner"
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -123,7 +129,7 @@ def render_password_changed_email(name: str) -> str:
     <div class="logo">CL <span style="font-weight: 300;">| Cashflow Lifeline</span></div>
     <h1>Security Confirmation</h1>
     <div class="success-badge">&check; Password Successfully Updated</div>
-    <p>Hello {name or 'Partner'},</p>
+    <p>Hello {safe_name},</p>
     <p>The password for your Cashflow Lifeline account has been successfully updated. All existing sessions and active refresh tokens have been revoked as a security safeguard.</p>
     <p>If you made this change, no further action is required.</p>
     <p style="color: #f87171; font-weight: 600;">If you did NOT make this change, please contact your security administrator immediately.</p>
@@ -137,6 +143,8 @@ def render_password_changed_email(name: str) -> str:
 
 def render_oauth_login_alert_email(name: str, provider: str) -> str:
     """HTML email template notifying user of a newly linked OAuth identity."""
+    safe_name = html.escape(name.strip()) if (name and name.strip()) else "Partner"
+    safe_provider = html.escape(provider.strip())
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -155,8 +163,8 @@ def render_oauth_login_alert_email(name: str, provider: str) -> str:
   <div class="container">
     <div class="logo">CL <span style="font-weight: 300;">| Cashflow Lifeline</span></div>
     <h1>New Sign-In Method Linked</h1>
-    <p>Hello {name or 'Partner'},</p>
-    <p>Your Cashflow Lifeline account was recently connected to a <strong>{provider.title()}</strong> identity for single-sign-on access.</p>
+    <p>Hello {safe_name},</p>
+    <p>Your Cashflow Lifeline account was recently connected to a <strong>{safe_provider.title()}</strong> identity for single-sign-on access.</p>
     <p>If you authorized this connection, no action is needed.</p>
   </div>
   <div class="footer">
@@ -251,6 +259,9 @@ def send_email(to_email: str, subject: str, html_content: str, text_content: Opt
 
     # 4. Console Logger / Development Sandbox Mode (Default)
     else:
+        if not settings.DEV_MODE:
+            logger.error(f"Email dispatch failure: Console provider is prohibited in production mode. Configure a valid EMAIL_PROVIDER (smtp, resend, sendgrid).")
+            return False
         logger.info(
             f"\n"
             f"========================= [DEVELOPMENT EMAIL DISPATCH] =========================\n"

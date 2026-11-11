@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from backend.app.db import get_db
 from backend.app.models import RescuePlan, Owner
 from backend.app.schemas import RescuePlanOut, ActionOut, DailyProjection
-from backend.app.auth.deps import get_current_user
+from backend.app.auth.deps import get_verified_current_user
 
 router = APIRouter(prefix="/plans", tags=["Rescue Plans"])
 
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/plans", tags=["Rescue Plans"])
 def get_plan(
     plan_id: int,
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """Retrieves a specific rescue plan with user ownership validation."""
     plan = db.query(RescuePlan).filter(

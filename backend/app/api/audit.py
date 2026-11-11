@@ -4,7 +4,7 @@ from typing import List
 from backend.app.db import get_db
 from backend.app.models import AuditLog, Owner
 from backend.app.schemas import AuditLogOut, AuditVerifyResponse
-from backend.app.auth.deps import get_current_user
+from backend.app.auth.deps import get_verified_current_user
 from backend.app.guardrail.audit import verify_audit_chain
 
 router = APIRouter(prefix="/audit", tags=["Audit Log & Integrity"])
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/audit", tags=["Audit Log & Integrity"])
 @router.get("", response_model=List[AuditLogOut])
 def list_audit_logs(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """Returns chronological audit log entries strictly scoped to the authenticated user."""
     return db.query(AuditLog).filter(
@@ -24,7 +24,7 @@ def list_audit_logs(
 @router.get("/verify", response_model=AuditVerifyResponse)
 def verify_audit_log_chain(
     db: Session = Depends(get_db),
-    current_user: Owner = Depends(get_current_user)
+    current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Verifies the cryptographic SHA-256 hash chain of the entire audit log from Genesis to Tip.

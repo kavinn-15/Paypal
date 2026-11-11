@@ -14,6 +14,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState('USD');
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -22,6 +23,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (tab === 'register' && !termsAccepted) {
+      setError('You must accept the terms and conditions to register.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -29,7 +36,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         const res = await api.login(email, password);
         onSuccess(res);
       } else {
-        const res = await api.register({ name, email, password, currency });
+        const res = await api.register({
+          name,
+          email,
+          password,
+          currency,
+          terms_accepted: termsAccepted,
+        });
         onSuccess(res);
       }
     } catch (err: any) {
@@ -162,22 +175,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             </div>
 
             {tab === 'register' && (
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-sardine-slate mb-1">
-                  Base Operating Currency
-                </label>
-                <select
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-electric focus:ring-1 focus:ring-electric bg-white"
-                >
-                  <option value="USD">USD ($ - United States Dollar)</option>
-                  <option value="EUR">EUR (€ - Euro)</option>
-                  <option value="GBP">GBP (£ - British Pound)</option>
-                  <option value="CAD">CAD ($ - Canadian Dollar)</option>
-                  <option value="AUD">AUD ($ - Australian Dollar)</option>
-                </select>
-              </div>
+              <>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-sardine-slate mb-1">
+                    Base Operating Currency
+                  </label>
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-electric focus:ring-1 focus:ring-electric bg-white"
+                  >
+                    <option value="USD">USD ($ - United States Dollar)</option>
+                    <option value="EUR">EUR (€ - Euro)</option>
+                    <option value="GBP">GBP (£ - British Pound)</option>
+                    <option value="CAD">CAD ($ - Canadian Dollar)</option>
+                    <option value="AUD">AUD ($ - Australian Dollar)</option>
+                  </select>
+                </div>
+
+                <div className="flex items-start space-x-2 pt-1">
+                  <input
+                    id="modal-terms-checkbox"
+                    type="checkbox"
+                    required
+                    checked={termsAccepted}
+                    onChange={(e) => setTermsAccepted(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-electric focus:ring-electric"
+                  />
+                  <label htmlFor="modal-terms-checkbox" className="text-xs text-sardine-slate select-none">
+                    I agree to the <a href="/terms" target="_blank" rel="noreferrer" className="text-electric underline hover:text-electric/80">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noreferrer" className="text-electric underline hover:text-electric/80">Privacy Policy</a>
+                  </label>
+                </div>
+              </>
             )}
 
             <button
