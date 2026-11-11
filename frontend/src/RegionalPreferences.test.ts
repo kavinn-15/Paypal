@@ -243,5 +243,25 @@ describe('Regional Preferences & Currency Localization Tests', () => {
       expect(cached['INR']).toBe(86.50);
       expect(cached['EUR']).toBe(0.92);
     });
+
+    it('correctly converts base USD amounts to INR, EUR, and GBP with exchange rates', () => {
+      // 1800 USD balance -> INR at 86.50 = 155,700 INR
+      const inrBalance = convertAmount(1800, 'USD', 'INR', DEFAULT_EXCHANGE_RATES);
+      expect(inrBalance).toBe(155700);
+      const inrFormatted = formatCurrency(inrBalance, 'INR', 'en-IN');
+      expect(inrFormatted).toContain('1,55,700');
+
+      // 2450 USD obligation -> EUR at 0.92 = 2254 EUR
+      const eurObligation = convertAmount(2450, 'USD', 'EUR', DEFAULT_EXCHANGE_RATES);
+      expect(eurObligation).toBeCloseTo(2254, 1);
+      const eurFormatted = formatCurrency(eurObligation, 'EUR', 'de-DE');
+      expect(eurFormatted).toContain('2.254');
+
+      // 650 USD shortfall -> GBP at 0.79 = 513.50 GBP
+      const gbpShortfall = convertAmount(650, 'USD', 'GBP', DEFAULT_EXCHANGE_RATES);
+      expect(gbpShortfall).toBeCloseTo(513.5, 1);
+      const gbpFormatted = formatCurrency(gbpShortfall, 'GBP', 'en-GB');
+      expect(gbpFormatted).toContain('513.50');
+    });
   });
 });

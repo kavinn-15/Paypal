@@ -74,7 +74,7 @@ export const RegionalFooterSelector: React.FC<RegionalFooterSelectorProps> = ({
         return;
       }
 
-      // 3. Cached Detection (session / non-manual storage)
+      // 3. Cached Detection (session / non-manual storage - render immediately, then revalidate in background)
       const cachedDetected = getStoredDetectedRegion();
       if (cachedDetected && cachedDetected.country) {
         setSelectedCountry(cachedDetected.country);
@@ -82,10 +82,9 @@ export const RegionalFooterSelector: React.FC<RegionalFooterSelectorProps> = ({
         setSelectedFlag(cachedDetected.flag || '🌐');
         setSelectedCurrency(cachedDetected.currency);
         setSelectedSymbol(cachedDetected.symbol || '$');
-        return;
       }
 
-      // 4. Fresh Visitor: Auto detect silently
+      // 4. Auto detect / refresh region from server
       try {
         const detected = await api.detectRegion();
         if (detected && detected.detected && detected.country) {

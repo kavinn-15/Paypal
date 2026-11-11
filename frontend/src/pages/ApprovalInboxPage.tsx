@@ -140,7 +140,7 @@ export const ApprovalInboxPage: React.FC = () => {
                   </div>
 
                   <div className="text-sm font-semibold text-[var(--tx)] font-mono truncate">
-                    Target: {act.recipient} &mdash; {formatCurrency(act.amount, { currency: act.currency, showCode: true })}
+                    Target: {act.recipient} &mdash; {formatCurrency(act.amount, { fromCurrency: act.currency, showCode: true })}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--mu)] font-mono">

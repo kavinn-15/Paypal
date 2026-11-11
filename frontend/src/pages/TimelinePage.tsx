@@ -166,7 +166,7 @@ export const TimelinePage: React.FC = () => {
                 <span className={`font-mono font-semibold text-sm shrink-0 ${
                   item.direction === 'inflow' ? 'text-[var(--g)]' : 'text-[var(--tx)]'
                 }`}>
-                  {item.direction === 'inflow' ? '+' : '-'}{formatCurrency(item.amount, { currency: item.currency })}
+                  {item.direction === 'inflow' ? '+' : '-'}{formatCurrency(item.amount, { fromCurrency: item.currency })}
                 </span>
               </div>
 
@@ -227,7 +227,7 @@ export const TimelinePage: React.FC = () => {
                   <td className={`px-5 py-3.5 font-mono font-semibold text-sm text-right whitespace-nowrap ${
                     item.direction === 'inflow' ? 'text-[var(--g)]' : 'text-[var(--tx)]'
                   }`}>
-                    {item.direction === 'inflow' ? '+' : '-'}{formatCurrency(item.amount, { currency: item.currency })}
+                    {item.direction === 'inflow' ? '+' : '-'}{formatCurrency(item.amount, { fromCurrency: item.currency })}
                   </td>
                   <td className="px-5 py-3.5 font-mono text-[11px] text-[var(--dim)] truncate max-w-[140px]">
                     {item.reference_id || item.data_source}

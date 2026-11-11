@@ -509,12 +509,21 @@ def get_country_from_accept_language(accept_language: Optional[str]) -> Optional
 
 def get_country_from_timezone(timezone: Optional[str]) -> Optional[str]:
     """
-    Maps client timezone (e.g. 'Asia/Kolkata') to country code.
+    Maps client timezone (e.g. 'Asia/Kolkata', 'Asia/Calcutta') to country code.
     """
     if not timezone:
         return None
-    tz_clean = timezone.strip()
-    return TIMEZONE_COUNTRY_MAP.get(tz_clean)
+    tz_clean = timezone.strip().replace("+", " ")
+    if tz_clean in TIMEZONE_COUNTRY_MAP:
+        return TIMEZONE_COUNTRY_MAP[tz_clean]
+    tz_lower = tz_clean.lower()
+    for k, v in TIMEZONE_COUNTRY_MAP.items():
+        if k.lower() == tz_lower:
+            return v
+    # Handle common sub-patterns or aliases
+    if "kolkata" in tz_lower or "calcutta" in tz_lower or tz_lower == "ist":
+        return "IN"
+    return None
 
 
 async def lookup_ip_geolocation(ip: str) -> Optional[Dict[str, Any]]:
@@ -687,7 +696,17 @@ async def detect_region_info(
                 status="success"
             )
 
-    # 4. Browser Locale (Weak Fallback)
+    # 4. Browser Timezone (Direct device clock mapping from client timezone)
+    tz_country = get_country_from_timezone(timezone)
+    if tz_country and tz_country in COUNTRIES_DB:
+        return _build_detection_result(
+            country_code=tz_country,
+            detection_method="browser_timezone",
+            confidence=0.75,
+            status="fallback"
+        )
+
+    # 5. Browser Locale (Weak Fallback from Accept-Language)
     accept_lang = headers.get("accept-language")
     lang_country = get_country_from_accept_language(accept_lang)
     if lang_country and lang_country in COUNTRIES_DB:
@@ -695,16 +714,6 @@ async def detect_region_info(
             country_code=lang_country,
             detection_method="browser_locale",
             confidence=0.60,
-            status="fallback"
-        )
-
-    # 5. Browser Timezone (Weak Fallback)
-    tz_country = get_country_from_timezone(timezone)
-    if tz_country and tz_country in COUNTRIES_DB:
-        return _build_detection_result(
-            country_code=tz_country,
-            detection_method="browser_timezone",
-            confidence=0.55,
             status="fallback"
         )
 

@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import { PhoneInput } from '../components/PhoneInput';
+import { RegionalFooterSelector } from '../components/RegionalFooterSelector';
 import {
   Eye,
   EyeOff,
@@ -649,9 +650,12 @@ export const LoginPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Footer info */}
-      <div className="py-6 text-center text-xs text-[var(--dim)]">
-        PayPal AI Hackathon 2026 &bull; Strict multi-tenant isolation &bull; Encrypted sessions
+      {/* Regional Selector & Footer info */}
+      <div className="py-6 flex flex-col items-center justify-center gap-3">
+        <RegionalFooterSelector />
+        <div className="text-center text-xs text-[var(--dim)]">
+          PayPal AI Hackathon 2026 &bull; Strict multi-tenant isolation &bull; Encrypted sessions
+        </div>
       </div>
     </div>
   );
