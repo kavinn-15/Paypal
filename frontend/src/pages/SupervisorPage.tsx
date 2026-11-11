@@ -8,14 +8,16 @@ export const SupervisorPage: React.FC = () => {
   const { formatCurrency } = useRegionalPreferences();
   const [runData, setRunData] = useState<SupervisorRunResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const executeWorkflow = async () => {
     try {
       setIsLoading(true);
+      setError(null);
       const res = await api.runSupervisor();
       setRunData(res);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      setError(err.message || 'Multi-agent supervisor execution failed.');
     } finally {
       setIsLoading(false);
     }
@@ -52,6 +54,22 @@ export const SupervisorPage: React.FC = () => {
           <span>{isLoading ? 'Orchestrating Agents...' : 'Re-run Supervisor'}</span>
         </button>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="p-3.5 rounded-[14px] bg-[var(--r)]/15 border border-[var(--r)]/30 text-[var(--r)] text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={executeWorkflow}
+            className="font-semibold underline hover:opacity-80 cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Supervisory Recommendation Banner */}
       {runData && (

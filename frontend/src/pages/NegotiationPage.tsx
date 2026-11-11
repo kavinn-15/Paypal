@@ -7,12 +7,15 @@ export const NegotiationPage: React.FC = () => {
   const [targetType, setTargetType] = useState<'client_discount' | 'contractor_split'>('client_discount');
   const [tonesData, setTonesData] = useState<NegotiationTonesResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [approvingId, setApprovingId] = useState<number | null>(null);
   const [approvedIds, setApprovedIds] = useState<number[]>([]);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchNegotiations = async (type: 'client_discount' | 'contractor_split') => {
     try {
       setIsLoading(true);
+      setError(null);
       setTargetType(type);
       const res = await api.generateNegotiation({
         target_type: type,
@@ -20,8 +23,8 @@ export const NegotiationPage: React.FC = () => {
         split_pct: 50.0,
       });
       setTonesData(res);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      setError(err.message || 'Failed to generate negotiation drafts.');
     } finally {
       setIsLoading(false);
     }
@@ -33,10 +36,14 @@ export const NegotiationPage: React.FC = () => {
 
   const handleApprove = async (draftId: number) => {
     try {
+      setApprovingId(draftId);
+      setError(null);
       await api.approveNegotiationDraft(draftId);
       setApprovedIds((prev) => [...prev, draftId]);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      setError(err.message || 'Failed to approve negotiation draft.');
+    } finally {
+      setApprovingId(null);
     }
   };
 
@@ -91,8 +98,32 @@ export const NegotiationPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Error Alert */}
+      {error && (
+        <div className="p-3.5 rounded-[14px] bg-[var(--r)]/15 border border-[var(--r)]/30 text-[var(--r)] text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={() => fetchNegotiations(targetType)}
+            className="font-semibold underline hover:opacity-80 cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {isLoading && (
+        <div className="py-16 text-center">
+          <div className="animate-spin w-8 h-8 border-2 border-[var(--o1)] border-t-transparent rounded-full mx-auto"></div>
+          <p className="text-xs text-[var(--mu)] mt-3">Synthesizing personalized drafts from ledger...</p>
+        </div>
+      )}
+
       {/* Context Banner */}
-      {tonesData && (
+      {!isLoading && tonesData && (
         <div className="ignara-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full overflow-hidden ignara-stagger-1 border border-[var(--line)] bg-[var(--card)]">
           <div className="space-y-1">
             <span className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--o1)] block">
@@ -172,11 +203,17 @@ export const NegotiationPage: React.FC = () => {
 
                 <button
                   onClick={() => handleApprove(draft.id)}
-                  disabled={isApproved}
-                  className={isApproved ? "px-3.5 py-2 text-xs font-semibold rounded-[14px] bg-[var(--g)]/15 text-[var(--g)] border border-[var(--g)]/30 flex items-center space-x-1.5" : "ignara-btn-primary text-xs"}
+                  disabled={isApproved || approvingId === draft.id}
+                  className={
+                    isApproved
+                      ? 'px-3.5 py-2 text-xs font-semibold rounded-[14px] bg-[var(--g)]/15 text-[var(--g)] border border-[var(--g)]/30 flex items-center space-x-1.5'
+                      : 'ignara-btn-primary text-xs disabled:opacity-50'
+                  }
                 >
-                  <UserCheck className="w-3.5 h-3.5" />
-                  <span>{isApproved ? 'Approved' : 'Approve Draft'}</span>
+                  <UserCheck className={`w-3.5 h-3.5 ${approvingId === draft.id ? 'animate-spin' : ''}`} />
+                  <span>
+                    {isApproved ? 'Approved' : approvingId === draft.id ? 'Authorizing...' : 'Approve Draft'}
+                  </span>
                 </button>
               </div>
             </div>

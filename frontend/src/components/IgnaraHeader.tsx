@@ -100,15 +100,16 @@ export const IgnaraHeader: React.FC<IgnaraHeaderProps> = ({
     day: 'numeric',
   }).format(new Date());
 
-  // User initials & display name
-  const displayName = currentUser?.name || currentUser?.email || 'Alex Rivera';
+  // User initials & display name from authenticated session
+  const displayName = currentUser?.name || currentUser?.email || 'User';
   const displayRole = currentUser?.is_demo ? 'Demo Sandbox' : 'Account Owner';
   const initials = displayName
     .split(' ')
+    .filter(Boolean)
     .map((n: string) => n[0])
     .slice(0, 2)
     .join('')
-    .toUpperCase() || 'AR';
+    .toUpperCase() || 'U';
 
   return (
     <header className="h-[68px] shrink-0 border-b border-[var(--line)] bg-[var(--side)]/80 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between gap-3 select-none z-30">

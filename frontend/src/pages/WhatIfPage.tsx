@@ -12,19 +12,25 @@ export const WhatIfPage: React.FC = () => {
   const [activePreset, setActivePreset] = useState<string>('client_delay_5d');
   const [comparison, setComparison] = useState<WhatIfComparisonResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getSimulationPresets().then((data) => {
-      setPresets(data);
-      if (data.length > 0) {
-        runScenario(data[0].scenario_type, data[0].name);
-      }
-    });
+    api.getSimulationPresets()
+      .then((data) => {
+        setPresets(data);
+        if (data.length > 0) {
+          runScenario(data[0].scenario_type, data[0].name);
+        }
+      })
+      .catch((err: any) => {
+        setError(err.message || 'Failed to load simulation presets.');
+      });
   }, []);
 
   const runScenario = async (scenarioType: string, runName: string) => {
     try {
       setIsLoading(true);
+      setError(null);
       setActivePreset(scenarioType);
       const res = await api.runSimulation({
         run_name: runName,
@@ -34,8 +40,8 @@ export const WhatIfPage: React.FC = () => {
         contractor_split_pct: 50.0,
       });
       setComparison(res);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      setError(err.message || 'Simulation scenario failed to run.');
     } finally {
       setIsLoading(false);
     }
@@ -81,6 +87,25 @@ export const WhatIfPage: React.FC = () => {
           <span>Zero Live Dispatches</span>
         </div>
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="p-3.5 rounded-[14px] bg-[var(--r)]/15 border border-[var(--r)]/30 text-[var(--r)] text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={() => {
+              const current = presets.find((p) => p.scenario_type === activePreset) || presets[0];
+              if (current) runScenario(current.scenario_type, current.name);
+            }}
+            className="text-xs font-semibold underline hover:opacity-80 cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Preset Selector Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 ignara-stagger-1">

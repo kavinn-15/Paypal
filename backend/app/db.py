@@ -61,8 +61,11 @@ def run_migrations():
         raise FileNotFoundError(f"alembic.ini not found at {ini_path}")
     alembic_cfg = Config(ini_path)
     alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
-    command.upgrade(alembic_cfg, "head")
-    logger.info("Database schema upgrade successfully verified via Alembic.")
+    try:
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Database schema upgrade successfully verified via Alembic.")
+    except Exception as e:
+        logger.warning(f"Alembic migration notice during worker startup: {e}")
 
 
 def init_db():

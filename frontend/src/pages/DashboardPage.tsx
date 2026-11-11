@@ -21,10 +21,12 @@ export const DashboardPage: React.FC = () => {
   // Active view filters
   const [activeTab, setActiveTab] = useState<'30d' | '60d' | '90d'>('30d');
   const [filterChip, setFilterChip] = useState<'all' | 'risk' | 'contractors'>('all');
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const fetchForecast = async () => {
     try {
       setIsLoading(true);
+      setFetchError(null);
       const res = await api.getLatestForecast();
       setData(res);
       if (res.plans && res.plans.length > 0) {
@@ -35,7 +37,9 @@ export const DashboardPage: React.FC = () => {
         setActiveAction(match.primary_action);
       }
     } catch (err: any) {
-      setNotification({ type: 'error', message: err.message || 'Failed to load forecast data' });
+      const msg = err.message || 'Failed to load forecast data';
+      setFetchError(msg);
+      setNotification({ type: 'error', message: msg });
     } finally {
       setIsLoading(false);
     }
@@ -113,7 +117,28 @@ export const DashboardPage: React.FC = () => {
     );
   }
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center ignara-page-enter">
+        <div className="ignara-card p-8 max-w-md mx-auto space-y-4 border-[var(--line)]">
+          <AlertCircle className="w-10 h-10 text-[var(--o1)] mx-auto" />
+          <h2 className="ignara-h3">Forecast Unavailable</h2>
+          <p className="text-xs text-[var(--mu)]">
+            {fetchError || 'No cashflow forecast could be calculated. Please check your data or retry.'}
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
+            <button
+              onClick={() => fetchForecast()}
+              className="ignara-btn-primary"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry Forecast</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const isCovered = data.shortfall_amount === 0 || activeAction?.state === 'confirmed';
 

@@ -9,14 +9,16 @@ export const AuditPage: React.FC = () => {
   const [verification, setVerification] = useState<AuditVerifyResponse | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchLogs = async () => {
     try {
       setIsLoading(true);
+      setError(null);
       const res = await api.getAuditLogs();
       setLogs(res);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      setError(err.message || 'Failed to load cryptographic audit logs.');
     } finally {
       setIsLoading(false);
     }
@@ -29,10 +31,11 @@ export const AuditPage: React.FC = () => {
   const handleVerifyChain = async () => {
     try {
       setIsVerifying(true);
+      setError(null);
       const res = await api.verifyAuditChain();
       setVerification(res);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      setError(err.message || 'Verification of audit chain failed.');
     } finally {
       setIsVerifying(false);
     }
@@ -77,6 +80,22 @@ export const AuditPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="p-3.5 rounded-[14px] bg-[var(--r)]/15 border border-[var(--r)]/30 text-[var(--r)] text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={fetchLogs}
+            className="font-semibold underline hover:opacity-80 cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Verification Result Banner */}
       {verification && (

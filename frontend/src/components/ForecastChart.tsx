@@ -29,7 +29,7 @@ export const ForecastChart: React.FC<ForecastChartProps> = ({
   obligationAmount,
 }) => {
   const [showUncertaintyBand, setShowUncertaintyBand] = useState(true);
-  const { currencySymbol, formatCurrency } = useRegionalPreferences();
+  const { formatCurrency } = useRegionalPreferences();
 
   const chartData = projections.map((p, idx) => {
     const planP = selectedPlan?.forecast_with_plan?.[idx];
@@ -153,7 +153,7 @@ export const ForecastChart: React.FC<ForecastChartProps> = ({
               tick={{ fontSize: 11, fill: 'var(--mu)', fontFamily: 'Outfit, sans-serif' }}
               tickLine={false}
               axisLine={{ stroke: 'var(--line)' }}
-              tickFormatter={(v) => `${currencySymbol}${v}`}
+              tickFormatter={(v) => formatCurrency(v, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
             />
             <Tooltip content={<CustomTooltip />} />
             <Legend

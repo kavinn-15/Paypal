@@ -14,14 +14,26 @@ export const ClientsPage: React.FC = () => {
   const { formatCurrency, currencySymbol } = useRegionalPreferences();
   const [clients, setClients] = useState<ClientData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState(searchParam);
+
+  const fetchClients = () => {
+    setIsLoading(true);
+    setError(null);
+    api.getClients()
+      .then(setClients)
+      .catch((err: any) => {
+        setError(err.message || 'Failed to load client behavioral models.');
+      })
+      .finally(() => setIsLoading(false));
+  };
 
   useEffect(() => {
     setLocalSearch(searchParam);
   }, [searchParam]);
 
   useEffect(() => {
-    api.getClients().then(setClients).finally(() => setIsLoading(false));
+    fetchClients();
   }, []);
 
   const getBehaviorBadge = (c: ClientData) => {
@@ -113,8 +125,7 @@ export const ClientsPage: React.FC = () => {
             <div className="text-left">
               <span className="text-[10px] uppercase font-semibold text-[var(--dim)] block leading-tight">Total Open</span>
               <span className="font-mono font-semibold text-sm text-[var(--tx)] leading-tight">
-                {currencySymbol}
-                <CountUp value={totalOpenInvoiced} prefix="" decimals={2} />
+                <CountUp value={totalOpenInvoiced} formatFn={(v) => formatCurrency(v)} />
               </span>
             </div>
           </div>
@@ -133,8 +144,44 @@ export const ClientsPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Loading State */}
+      {isLoading && (
+        <div className="py-16 text-center">
+          <div className="animate-spin w-8 h-8 border-2 border-[var(--o1)] border-t-transparent rounded-full mx-auto"></div>
+          <p className="text-xs text-[var(--mu)] mt-3">Loading client behavioral models...</p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && !isLoading && (
+        <div className="p-4 rounded-[14px] bg-[var(--r)]/15 border border-[var(--r)]/30 text-[var(--r)] text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={fetchClients}
+            className="font-semibold underline hover:opacity-80 cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!isLoading && !error && displayedClients.length === 0 && (
+        <div className="ignara-card p-10 text-center space-y-2">
+          <Users className="w-8 h-8 text-[var(--dim)] mx-auto" />
+          <h3 className="ignara-h3">No Clients Found</h3>
+          <p className="text-xs text-[var(--mu)]">
+            {localSearch ? `No client models match "${localSearch}".` : 'No client profiles have been recorded yet.'}
+          </p>
+        </div>
+      )}
+
       {/* 3-Column Item Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ignara-stagger-1">
+      {!isLoading && !error && displayedClients.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ignara-stagger-1">
         {displayedClients.map((c) => {
           const badge = getBehaviorBadge(c);
           const isPrimaryTarget = c.avg_delay_days >= 10;
@@ -254,6 +301,7 @@ export const ClientsPage: React.FC = () => {
           );
         })}
       </div>
+      )}
     </div>
   );
 };

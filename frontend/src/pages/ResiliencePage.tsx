@@ -7,18 +7,50 @@ import { CountUp } from '../components/CountUp';
 export const ResiliencePage: React.FC = () => {
   const [data, setData] = useState<ResilienceScoreResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchScore = () => {
+    setIsLoading(true);
+    setError(null);
+    api.getResilienceScore()
+      .then((res) => {
+        setData(res);
+      })
+      .catch((err: any) => {
+        setError(err.message || 'Failed to compute resilience score. Please verify backend connection.');
+      })
+      .finally(() => setIsLoading(false));
+  };
 
   useEffect(() => {
-    api.getResilienceScore()
-      .then(setData)
-      .finally(() => setIsLoading(false));
+    fetchScore();
   }, []);
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <div className="max-w-[1080px] mx-auto py-16 text-center ignara-page-enter">
         <div className="animate-spin w-8 h-8 border-2 border-[var(--o1)] border-t-transparent rounded-full mx-auto"></div>
         <p className="text-xs text-[var(--mu)] mt-3">Computing Resilience Dimensions...</p>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="max-w-[1080px] mx-auto py-12 px-4 ignara-page-enter">
+        <div className="ignara-card p-6 sm:p-8 text-center max-w-lg mx-auto border-[var(--r)]/30">
+          <AlertTriangle className="w-10 h-10 text-[var(--r)] mx-auto mb-3" />
+          <h2 className="ignara-h3 mb-2">Unable to Load Resilience Diagnostic</h2>
+          <p className="text-xs text-[var(--mu)] mb-6">
+            {error || 'Financial resilience data is currently unavailable for this account.'}
+          </p>
+          <button
+            onClick={fetchScore}
+            className="ignara-btn-primary mx-auto"
+          >
+            Retry Analysis
+          </button>
+        </div>
       </div>
     );
   }

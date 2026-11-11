@@ -8,6 +8,7 @@ export const ApprovalInboxPage: React.FC = () => {
   const { formatCurrency } = useRegionalPreferences();
   const [actions, setActions] = useState<Action[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [approvingId, setApprovingId] = useState<number | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,11 +39,14 @@ export const ApprovalInboxPage: React.FC = () => {
 
   const handleApprove = async (action: Action) => {
     try {
+      setApprovingId(action.id);
       await api.approveAction(action.id, action.approval_hash);
       setNotification(`Action #${action.id} signed and approved successfully!`);
       await fetchActions();
     } catch (err: any) {
       setNotification(`Approval failed: ${err.message}`);
+    } finally {
+      setApprovingId(null);
     }
   };
 
@@ -148,10 +152,11 @@ export const ApprovalInboxPage: React.FC = () => {
                 {isProposed && (
                   <button
                     onClick={() => handleApprove(act)}
-                    className="ignara-btn-primary w-full md:w-auto text-xs min-h-[44px]"
+                    disabled={approvingId === act.id}
+                    className="ignara-btn-primary w-full md:w-auto text-xs min-h-[44px] disabled:opacity-50"
                   >
-                    <Lock className="w-3.5 h-3.5" />
-                    <span>Sign &amp; Approve</span>
+                    <Lock className={`w-3.5 h-3.5 ${approvingId === act.id ? 'animate-spin' : ''}`} />
+                    <span>{approvingId === act.id ? 'Authorizing...' : 'Sign & Approve'}</span>
                   </button>
                 )}
               </div>

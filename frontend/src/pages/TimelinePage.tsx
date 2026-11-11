@@ -10,14 +10,24 @@ export const TimelinePage: React.FC = () => {
   const [summary, setSummary] = useState<FinancialSummaryResponse | null>(null);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchTimeline = () => {
+    setIsLoading(true);
+    setError(null);
     Promise.all([api.getFinancialSummary(), api.getFinancialTimeline()])
       .then(([sum, tl]) => {
         setSummary(sum);
         setTimeline(tl);
       })
+      .catch((err: any) => {
+        setError(err.message || 'Failed to load timeline and financial summary.');
+      })
       .finally(() => setIsLoading(false));
+  };
+
+  useEffect(() => {
+    fetchTimeline();
   }, []);
 
   const getStatusBadge = (status: string) => {
@@ -65,8 +75,32 @@ export const TimelinePage: React.FC = () => {
         </div>
       </div>
 
+      {/* Loading Indicator */}
+      {isLoading && (
+        <div className="py-16 text-center">
+          <div className="animate-spin w-8 h-8 border-2 border-[var(--o1)] border-t-transparent rounded-full mx-auto"></div>
+          <p className="text-xs text-[var(--mu)] mt-3">Loading financial timeline &amp; ledger balances...</p>
+        </div>
+      )}
+
+      {/* Error Banner */}
+      {error && !isLoading && (
+        <div className="p-4 rounded-[14px] bg-[var(--r)]/15 border border-[var(--r)]/30 text-[var(--r)] text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={fetchTimeline}
+            className="font-semibold underline hover:opacity-80 cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Authoritative Position Cards */}
-      {summary && (
+      {!isLoading && !error && summary && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 ignara-stagger-1">
           <div className="ignara-card p-4 sm:p-5 space-y-1 ignara-card-hover">
             <span className="text-[10px] uppercase font-semibold tracking-wider text-[var(--dim)] block">Confirmed Available Cash</span>
@@ -102,8 +136,20 @@ export const TimelinePage: React.FC = () => {
         </div>
       )}
 
+      {/* Empty State */}
+      {!isLoading && !error && timeline.length === 0 && (
+        <div className="ignara-card p-10 text-center space-y-2">
+          <Clock className="w-8 h-8 text-[var(--dim)] mx-auto" />
+          <h3 className="ignara-h3">No Financial Flows Recorded</h3>
+          <p className="text-xs text-[var(--mu)]">
+            Verified incoming and outgoing transactions will appear chronologically here.
+          </p>
+        </div>
+      )}
+
       {/* Chronological Table (Desktop: Full Table, Mobile: Responsive Card List) */}
-      <div className="ignara-card p-0 overflow-hidden ignara-stagger-2">
+      {!isLoading && !error && timeline.length > 0 && (
+        <div className="ignara-card p-0 overflow-hidden ignara-stagger-2">
         {/* Mobile View: Cards on screens < md */}
         <div className="block md:hidden divide-y divide-[var(--line)]">
           {timeline.map((item) => (
@@ -192,6 +238,7 @@ export const TimelinePage: React.FC = () => {
           </table>
         </div>
       </div>
+      )}
     </div>
   );
 };

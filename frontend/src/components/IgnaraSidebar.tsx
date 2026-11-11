@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
+import { api } from '../api/client';
 import {
   Flame,
   Activity,
@@ -42,11 +43,39 @@ export const IgnaraSidebar: React.FC<IgnaraSidebarProps> = ({
   isOpenMobile = false,
   onCloseMobile,
   onNewAction,
-  pendingInboxCount = 2,
+  pendingInboxCount = 0,
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { currencySymbol, formatCurrency } = useRegionalPreferences();
+  const [sidebarSummary, setSidebarSummary] = useState<{
+    confirmedBalance: number;
+    reserveTarget: number;
+    ratio: number;
+  } | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    api.getFinancialSummary()
+      .then((sum) => {
+        if (isMounted && sum) {
+          const ratio =
+            sum.reserve_coverage_ratio ??
+            (sum.emergency_reserve_target > 0
+              ? sum.current_confirmed_balance / sum.emergency_reserve_target
+              : 1);
+          setSidebarSummary({
+            confirmedBalance: sum.current_confirmed_balance,
+            reserveTarget: sum.emergency_reserve_target,
+            ratio: Math.min(100, Math.max(0, Math.round(ratio * 100))),
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [location.pathname]);
 
   const navGroups: NavGroupDef[] = [
     {
@@ -324,7 +353,7 @@ export const IgnaraSidebar: React.FC<IgnaraSidebarProps> = ({
                         <span>{item.label}</span>
                       </div>
 
-                      {item.badge !== undefined && (
+                      {item.badge !== undefined && Number(item.badge) > 0 && (
                         <span
                           className={`text-[11px] font-semibold px-2 py-0.5 rounded-full transition-colors ${
                             isActive
@@ -342,30 +371,30 @@ export const IgnaraSidebar: React.FC<IgnaraSidebarProps> = ({
             ))}
           </div>
 
-          {/* e) Bottom Card: "Today so far" */}
+          {/* e) Bottom Card: Real Confirmed Liquidity Position */}
           <div className="pt-3">
             <div className="p-3.5 rounded-[18px] bg-[var(--card)] border border-[var(--line)] flex items-center gap-3">
               {/* Conic-gradient 44px progress ring */}
               <div
                 className="w-11 h-11 rounded-full shrink-0 flex items-center justify-center p-[3px] relative shadow-inner"
                 style={{
-                  background: 'conic-gradient(var(--o1) 0% 72%, var(--line) 72% 100%)',
+                  background: `conic-gradient(var(--o1) 0% ${sidebarSummary?.ratio ?? 100}%, var(--line) ${sidebarSummary?.ratio ?? 100}% 100%)`,
                 }}
               >
                 <div className="w-full h-full rounded-full bg-[var(--card)] flex items-center justify-center text-[10px] font-bold text-[var(--tx)]">
-                  72%
+                  {sidebarSummary ? `${sidebarSummary.ratio}%` : '—'}
                 </div>
               </div>
 
               <div className="flex flex-col min-w-0">
                 <span className="text-[11px] uppercase font-semibold tracking-wider text-[var(--dim)]">
-                  Today so far
+                  Confirmed Balance
                 </span>
                 <span className="text-[14px] font-semibold text-[var(--tx)] truncate">
-                  {formatCurrency(1800)}
+                  {sidebarSummary !== null ? formatCurrency(sidebarSummary.confirmedBalance) : '—'}
                 </span>
                 <span className="text-[10px] text-[var(--mu)] truncate">
-                  Goal: {formatCurrency(2500)}
+                  {sidebarSummary?.reserveTarget ? `Target: ${formatCurrency(sidebarSummary.reserveTarget)}` : 'Liquidity Reserve Target'}
                 </span>
               </div>
             </div>
