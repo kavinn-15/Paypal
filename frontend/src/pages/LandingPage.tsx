@@ -354,7 +354,7 @@ export const LandingPage: React.FC = () => {
           </div>
 
           {/* Hero Dashboard Preview (Clearly Labeled Sample Data) */}
-          <div id="preview" className="mt-10 sm:mt-14 lg:mt-20 relative max-w-5xl mx-auto">
+          <div id="preview" className="scroll-mt-24 sm:scroll-mt-28 mt-10 sm:mt-14 lg:mt-20 relative max-w-5xl mx-auto">
             {/* Sample Data Disclaimer Badge */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 px-1 sm:px-2">
               <div className="flex items-center space-x-2">
@@ -541,7 +541,7 @@ export const LandingPage: React.FC = () => {
       </section>
 
       {/* 4. Features Section (10 Verified Capabilities) */}
-      <section id="features" className="py-20 lg:py-28 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
+      <section id="features" className="scroll-mt-24 sm:scroll-mt-28 py-20 lg:py-28 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="max-w-2xl mx-auto text-center space-y-4 mb-16">
           <span className="text-xs font-mono font-bold uppercase tracking-wider text-electric-400">
             Platform Capabilities
@@ -680,7 +680,7 @@ export const LandingPage: React.FC = () => {
       </section>
 
       {/* 5. How It Works (5-Step Workflow) */}
-      <section id="how-it-works" className="py-20 bg-ink-900/60 border-y border-ink-800">
+      <section id="how-it-works" className="scroll-mt-24 sm:scroll-mt-28 py-20 bg-ink-900/60 border-y border-ink-800">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-2xl mx-auto text-center space-y-4 mb-16">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-electric-400">
@@ -760,7 +760,7 @@ export const LandingPage: React.FC = () => {
       </section>
 
       {/* 6. Security Section */}
-      <section id="security" className="py-20 lg:py-28 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
+      <section id="security" className="scroll-mt-24 sm:scroll-mt-28 py-20 lg:py-28 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="max-w-2xl mx-auto text-center space-y-4 mb-16">
           <span className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-400">
             Safety &amp; Compliance Standards
@@ -825,7 +825,7 @@ export const LandingPage: React.FC = () => {
       </section>
 
       {/* 7. FAQ Section */}
-      <section id="faq" className="py-20 bg-ink-900/60 border-y border-ink-800">
+      <section id="faq" className="scroll-mt-24 sm:scroll-mt-28 py-20 bg-ink-900/60 border-y border-ink-800">
         <div className="max-w-[1000px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-14">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-electric-400">
