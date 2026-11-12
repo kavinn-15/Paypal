@@ -1,11 +1,16 @@
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
+from starlette.responses import JSONResponse
 
 from backend.app.config import settings
 from backend.app.db import init_db, get_db
 from backend.app.events.queue import event_queue
+
+logger = logging.getLogger(__name__)
 
 # Import routers
 from backend.app.api.auth import router as auth_router
@@ -49,16 +54,23 @@ async def lifespan(app: FastAPI):
         if len(settings.APPROVAL_SECRET) < 32 or "change" in settings.APPROVAL_SECRET.lower() or "default" in settings.APPROVAL_SECRET.lower():
             raise RuntimeError("CRITICAL SECURITY VIOLATION: Strong production APPROVAL_SECRET (>=32 chars) required.")
 
-    # Initialize database tables
-    init_db()
-
-    # Start in-process persisted webhook event queue worker
-    await event_queue.start()
+    # Initialize database tables and start event queue unless DATABASE_DISABLED is active
+    if not settings.DATABASE_DISABLED:
+        init_db()
+        # Start in-process persisted webhook event queue worker
+        await event_queue.start()
+    else:
+        logger.warning(
+            "TEMPORARY DEPLOYMENT MODE: DATABASE_DISABLED=true is active. "
+            "Database initialization, Alembic migrations, and persisted event queue worker skipped. "
+            "Database-dependent routes will return 503 Service Unavailable."
+        )
 
     yield
 
     # --- Shutdown ---
-    await event_queue.stop()
+    if not settings.DATABASE_DISABLED:
+        await event_queue.stop()
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -79,6 +91,15 @@ app = FastAPI(
 )
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+    logger.error(f"Unhandled SQLAlchemy database exception: {exc}")
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "Database service is temporarily unavailable. Database operations are currently postponed or failed."}
+    )
 
 # CORS configured with explicit allowed origins
 cors_origins = settings.allowed_origins_list
@@ -118,7 +139,8 @@ def health_check():
         "version": "2.0.0",
         "environment": "sandbox",
         "paypal_base_url": settings.PAYPAL_BASE_URL,
-        "dev_mode": settings.DEV_MODE
+        "dev_mode": settings.DEV_MODE,
+        "database_disabled": settings.DATABASE_DISABLED
     }
 
 

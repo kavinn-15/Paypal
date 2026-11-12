@@ -1,6 +1,7 @@
 import json
 import logging
 import ssl
+from fastapi import HTTPException, status
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from backend.app.config import settings
@@ -41,23 +42,53 @@ elif "mysql" in DATABASE_URL:
     if connect_args:
         engine_kwargs["connect_args"] = connect_args
 
-engine = create_engine(DATABASE_URL, **engine_kwargs)
+try:
+    engine = create_engine(DATABASE_URL, **engine_kwargs)
+except Exception as e:
+    if settings.DATABASE_DISABLED:
+        logger.warning(f"Engine creation fallback for DATABASE_DISABLED mode: {e}")
+        from sqlalchemy.pool import NullPool
+        engine = create_engine("sqlite:///:memory:", poolclass=NullPool)
+    else:
+        raise
 
 # Enable foreign keys and WAL mode for SQLite
-if DATABASE_URL.startswith("sqlite"):
+if str(engine.url).startswith("sqlite"):
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON;")
-        cursor.execute("PRAGMA journal_mode=WAL;")
-        cursor.close()
+        try:
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON;")
+            cursor.execute("PRAGMA journal_mode=WAL;")
+            cursor.close()
+        except Exception:
+            pass
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
 def get_db():
-    db = SessionLocal()
+    """
+    FastAPI database session dependency.
+    In DATABASE_DISABLED mode, immediately raises 503 Service Unavailable with a clear message
+    rather than attempting a connection and crashing.
+    """
+    if settings.DATABASE_DISABLED:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database service is temporarily unavailable (DATABASE_DISABLED mode is active). Database operations are currently postponed."
+        )
+
+    try:
+        db = SessionLocal()
+    except Exception as e:
+        logger.error(f"Failed to acquire database session: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Database service is temporarily unavailable. Could not connect to database: {e}"
+        )
+
     try:
         yield db
     finally:
@@ -68,7 +99,12 @@ def run_migrations():
     """
     Run Alembic migrations programmatically against the configured database.
     Authoritative schema migration mechanism. Fails fast if migration fails.
+    Skipped entirely when DATABASE_DISABLED is active.
     """
+    if settings.DATABASE_DISABLED:
+        logger.warning("run_migrations() skipped: DATABASE_DISABLED mode is active.")
+        return
+
     import os
     from alembic.config import Config
     from alembic import command
@@ -91,6 +127,11 @@ def init_db():
     """
     Initialize database schema authoritatively using Alembic migrations.
     Never calls create_all() before migrations to prevent schema state divergence.
+    Skipped entirely when DATABASE_DISABLED is active.
     """
+    if settings.DATABASE_DISABLED:
+        logger.warning("init_db() skipped: DATABASE_DISABLED mode is active.")
+        return
+
     import backend.app.models  # noqa: F401
     run_migrations()

@@ -200,6 +200,44 @@ python -m backend.scripts.sandbox_smoke
 
 ---
 
+## 🚀 Deployment Guide (Render Free + Vercel)
+
+Cashflow Lifeline is designed to deploy on 100% free-tier infrastructure:
+- **Backend**: Render Free Web Service (`python` runtime)
+- **Frontend**: Vercel SPA (`frontend/` directory)
+- **Database**: TiDB Cloud Starter (MySQL 8.0-compatible Serverless)
+- **Payments**: PayPal Sandbox only
+
+### Temporary Database-Less Deployment Mode (Postponed Database Integration)
+
+When database integration is temporarily postponed (or if database user permissions deny DDL creation such as `CREATE command denied for table 'alembic_version'`), enable the explicit temporary deployment mode:
+
+| Environment Variable | Value | Purpose |
+| :--- | :--- | :--- |
+| `DATABASE_DISABLED` | `true` | Bypasses `init_db()`, Alembic migrations, and database connection attempts. Allows FastAPI to start cleanly on Render. |
+
+**Render Service Settings:**
+- **Build Command**: `pip install -r requirements.txt`
+- **Start Command**: `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT`
+- **Environment Variables**:
+  - `DATABASE_DISABLED`: `true`
+  - `DEV_MODE`: `false`
+  - `PAYPAL_BASE_URL`: `https://api-m.sandbox.paypal.com`
+
+**Behavior in Temporary Mode:**
+- Independent routes (`/health`, `/status`, `/docs`, `/openapi.json`, `/region/countries`, `/region/currencies`, `/region/rates`) return `200 OK`.
+- Database-dependent endpoints (such as `/auth/login`, `/clients`, `/forecast/latest`, `/obligations`) return clear, controlled `503 Service Unavailable` responses with descriptive messages instead of crashing the process.
+- No fake or corrupted data is generated; authentic multi-tenant isolation is strictly preserved.
+
+### Transitioning to Full Database Mode
+
+Once your TiDB Cloud cluster permissions are granted:
+1. In the Render Dashboard, change `DATABASE_DISABLED` to `false` (or remove the variable).
+2. Set `DATABASE_URL` to your TiDB Cloud connection string (e.g. `mysql://<user>:<password>@gateway01.<region>.prod.aws.tidbcloud.com:4000/<dbname>?ssl_ca=/etc/ssl/certs/ca-certificates.crt`).
+3. Deploy. Alembic migrations and table initialization will execute automatically and authoritatively.
+
+---
+
 ## 🏆 Devpost Submission Summary
 
 - **Title**: Cashflow Lifeline &mdash; Autonomous AI Cashflow Guardian for Freelancers

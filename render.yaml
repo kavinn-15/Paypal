@@ -2,13 +2,15 @@ services:
   - type: web
     name: cashflow-lifeline-api
     runtime: python
-    buildCommand: pip install -r requirements.txt && alembic upgrade head
+    buildCommand: pip install -r requirements.txt
     startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: DEV_MODE
         value: "false"
+      - key: DATABASE_DISABLED
+        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: PAYPAL_BASE_URL

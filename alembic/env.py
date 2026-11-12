@@ -85,7 +85,15 @@ def run_migrations_online() -> None:
             context.run_migrations()
 
 
-if context.is_offline_mode():
+is_db_disabled = (
+    os.environ.get("DATABASE_DISABLED", "").strip().lower() in ("1", "true", "yes")
+    or getattr(settings, "DATABASE_DISABLED", False)
+)
+
+if is_db_disabled:
+    import logging
+    logging.getLogger("alembic.env").warning("DATABASE_DISABLED is active. Alembic migrations skipped.")
+elif context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()

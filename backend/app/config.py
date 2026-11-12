@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     PUBLIC_BASE_URL: str = Field(default="http://localhost:8000")
     APP_BASE_URL: str = Field(default="http://localhost:5173")
     DATABASE_URL: str = Field(default="sqlite:///./cashflow.db")
+    DATABASE_DISABLED: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("DATABASE_DISABLED", "DISABLE_DATABASE", "SKIP_DB_INIT"),
+        description="When true, enables temporary deployment mode: skips init_db(), migrations, and database connections. Database-dependent endpoints return 503."
+    )
     ALLOWED_ORIGINS: str = Field(default="http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173")
 
     @field_validator("DATABASE_URL", mode="before")
@@ -187,6 +192,7 @@ class Settings(BaseSettings):
         """Returns non-sensitive configuration parameters with all keys and secrets redacted."""
         return {
             "DEV_MODE": self.DEV_MODE,
+            "DATABASE_DISABLED": self.DATABASE_DISABLED,
             "ALLOW_DEMO_ENDPOINTS": self.ALLOW_DEMO_ENDPOINTS,
             "PAYPAL_BASE_URL": self.PAYPAL_BASE_URL,
             "PAYPAL_CLIENT_ID_PREVIEW": (self.PAYPAL_CLIENT_ID[:6] + "...") if self.PAYPAL_CLIENT_ID else None,
