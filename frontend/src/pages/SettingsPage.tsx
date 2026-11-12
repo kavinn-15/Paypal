@@ -280,68 +280,68 @@ export const SettingsPage: React.FC = () => {
       </div>
 
       {/* Security & Contact Information Card */}
-      <div className="bento-card p-4 sm:p-6 space-y-4 sm:space-y-5 bg-white">
+      <div className="ignara-card p-4 sm:p-6 space-y-4 sm:space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-electric-50 border border-electric-200 flex items-center justify-center text-electric shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-[var(--o1)]/10 border border-[var(--o1)]/20 flex items-center justify-center text-[var(--o1)] shrink-0">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-black text-base text-ink tracking-tight">Security &amp; Contact Credentials</h3>
-              <p className="text-xs text-sardine-slate">Identity verification, contact channels, and multi-factor credentials</p>
+              <h3 className="ignara-h3">Security &amp; Contact Credentials</h3>
+              <p className="text-xs text-[var(--mu)]">Identity verification, contact channels, and multi-factor credentials</p>
             </div>
           </div>
 
           <button
             onClick={handleOpenPhoneModal}
-            className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-ink text-xs font-semibold rounded-lg border border-slate-300 transition-colors min-h-[44px] sm:min-h-0 self-stretch sm:self-auto"
+            className="ignara-btn-secondary flex items-center justify-center space-x-1.5 px-3 py-2 text-xs font-semibold rounded-xl min-h-[44px] sm:min-h-0 self-stretch sm:self-auto"
           >
-            <Edit2 className="w-3.5 h-3.5 text-electric shrink-0" />
+            <Edit2 className="w-3.5 h-3.5 text-[var(--o1)] shrink-0" />
             <span>{currentUser?.phone_number ? 'Change Phone Number' : 'Add Phone Number'}</span>
           </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 pt-1 sm:pt-2">
           {/* Email Channel */}
-          <div className="p-3.5 sm:p-4 rounded-xl border border-slate-200 bg-slate-50/70 flex items-center justify-between gap-2">
+          <div className="p-3.5 sm:p-4 rounded-xl border border-[var(--line)] bg-[var(--card2)] flex items-center justify-between gap-2">
             <div className="flex items-center space-x-3 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-sardine-slate shrink-0">
-                <Mail className="w-4 h-4 text-electric" />
+              <div className="w-8 h-8 rounded-lg bg-[var(--side)] border border-[var(--line)] flex items-center justify-center text-[var(--o1)] shrink-0">
+                <Mail className="w-4 h-4 text-[var(--o1)]" />
               </div>
               <div className="min-w-0">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-sardine-slate block">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--dim)] block">
                   Registered Work Email
                 </span>
-                <span className="font-semibold text-xs sm:text-sm text-ink block truncate max-w-[170px] sm:max-w-[240px]">
+                <span className="font-semibold text-xs sm:text-sm text-[var(--tx)] block truncate max-w-[170px] sm:max-w-[240px]">
                   {currentUser?.email || 'N/A'}
                 </span>
               </div>
             </div>
 
             {currentUser?.email_verified || currentUser?.is_demo ? (
-              <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[11px] font-bold shrink-0">
-                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+              <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-[var(--g)]/15 text-[var(--g)] border border-[var(--g)]/30 rounded-full text-[11px] font-semibold shrink-0">
+                <CheckCircle2 className="w-3 h-3 text-[var(--g)]" />
                 <span>Verified</span>
               </span>
             ) : (
-              <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-[11px] font-bold shrink-0">
-                <AlertTriangle className="w-3 h-3 text-amber-600" />
+              <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-[var(--y)]/15 text-[var(--y)] border border-[var(--y)]/30 rounded-full text-[11px] font-semibold shrink-0">
+                <AlertTriangle className="w-3 h-3 text-[var(--y)]" />
                 <span>Unverified</span>
               </span>
             )}
           </div>
 
           {/* Phone Channel */}
-          <div className="p-3.5 sm:p-4 rounded-xl border border-slate-200 bg-slate-50/70 flex items-center justify-between gap-2">
+          <div className="p-3.5 sm:p-4 rounded-xl border border-[var(--line)] bg-[var(--card2)] flex items-center justify-between gap-2">
             <div className="flex items-center space-x-3 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-sardine-slate shrink-0">
-                <Phone className="w-4 h-4 text-electric" />
+              <div className="w-8 h-8 rounded-lg bg-[var(--side)] border border-[var(--line)] flex items-center justify-center text-[var(--o1)] shrink-0">
+                <Phone className="w-4 h-4 text-[var(--o1)]" />
               </div>
               <div className="min-w-0">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-sardine-slate block">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--dim)] block">
                   Mobile SMS Channel
                 </span>
-                <span className="font-mono font-semibold text-xs sm:text-sm text-ink block truncate">
+                <span className="font-mono font-semibold text-xs sm:text-sm text-[var(--tx)] block truncate">
                   {currentUser?.phone_number || 'No phone registered'}
                 </span>
               </div>
@@ -349,20 +349,20 @@ export const SettingsPage: React.FC = () => {
 
             {currentUser?.phone_number ? (
               currentUser.phone_verified || currentUser.is_demo ? (
-                <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[11px] font-bold shrink-0">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-[var(--g)]/15 text-[var(--g)] border border-[var(--g)]/30 rounded-full text-[11px] font-semibold shrink-0">
+                  <CheckCircle2 className="w-3 h-3 text-[var(--g)]" />
                   <span>Verified</span>
                 </span>
               ) : (
-                <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-[11px] font-bold shrink-0">
-                  <AlertTriangle className="w-3 h-3 text-amber-600" />
+                <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-[var(--y)]/15 text-[var(--y)] border border-[var(--y)]/30 rounded-full text-[11px] font-semibold shrink-0">
+                  <AlertTriangle className="w-3 h-3 text-[var(--y)]" />
                   <span>Unverified</span>
                 </span>
               )
             ) : (
               <button
                 onClick={handleOpenPhoneModal}
-                className="text-[11px] font-bold text-electric hover:underline shrink-0 p-1 min-h-[44px] flex items-center"
+                className="text-[11px] font-semibold text-[var(--o1)] hover:underline shrink-0 p-1 min-h-[44px] flex items-center cursor-pointer"
               >
                 + Register Phone
               </button>
@@ -372,15 +372,15 @@ export const SettingsPage: React.FC = () => {
       </div>
 
       {/* Regional Preferences & Currency Localization Card */}
-      <div className="bento-card p-4 sm:p-6 space-y-4 sm:space-y-5 bg-white">
+      <div className="ignara-card p-4 sm:p-6 space-y-4 sm:space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-50 border border-cyan-200 flex items-center justify-center text-cyan-700 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0">
               <Globe className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-black text-base text-ink tracking-tight">Regional Preferences &amp; Currency Localization</h3>
-              <p className="text-xs text-sardine-slate">
+              <h3 className="ignara-h3">Regional Preferences &amp; Currency Localization</h3>
+              <p className="text-xs text-[var(--mu)]">
                 Operating country, display currency format, and automated approximate IP geolocation
               </p>
             </div>
@@ -391,26 +391,26 @@ export const SettingsPage: React.FC = () => {
               type="button"
               onClick={handleRedetectLocation}
               disabled={isRedetecting}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-cyan-200 bg-cyan-50 hover:bg-cyan-100/70 text-cyan-800 text-xs font-semibold transition disabled:opacity-50 shadow-xs cursor-pointer"
+              className="ignara-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer"
               title="Re-detect country and currency using network geolocation"
             >
               {isRedetecting ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-700" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--o1)]" />
                   <span>Detecting...</span>
                 </>
               ) : (
                 <>
-                  <RefreshCw className="w-3.5 h-3.5 text-cyan-700" />
+                  <RefreshCw className="w-3.5 h-3.5 text-[var(--o1)]" />
                   <span>Re-detect My Location</span>
                 </>
               )}
             </button>
-            <span className="text-[11px] font-mono px-2.5 py-1 rounded-full border bg-slate-50 text-slate-600 border-slate-200">
-              Source: <strong className="text-cyan-700 uppercase">{preferenceSource}</strong>
+            <span className="text-[11px] font-mono px-2.5 py-1 rounded-full border bg-[var(--card2)] text-[var(--mu)] border-[var(--line)]">
+              Source: <strong className="text-[var(--o1)] uppercase">{preferenceSource}</strong>
             </span>
             {preferencesUpdatedAt && (
-              <span className="text-[10px] text-slate-400 hidden sm:inline">
+              <span className="text-[10px] text-[var(--dim)] hidden sm:inline">
                 Updated {new Date(preferencesUpdatedAt).toLocaleDateString()}
               </span>
             )}
@@ -418,9 +418,9 @@ export const SettingsPage: React.FC = () => {
         </div>
 
         {redetectSuggestion && (
-          <div className="p-3 bg-cyan-50 border border-cyan-300 rounded-xl text-xs text-cyan-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fadeIn">
+          <div className="p-3 bg-[var(--o1)]/10 border border-[var(--o1)]/30 rounded-xl text-xs text-[var(--tx)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fadeIn">
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-cyan-600 shrink-0" />
+              <Sparkles className="w-4 h-4 text-[var(--o1)] shrink-0" />
               <span>
                 Detected location: <strong>{redetectSuggestion.flag} {redetectSuggestion.countryName}</strong> (Suggested: <strong>{redetectSuggestion.currency}</strong>). Apply to form fields?
               </span>
@@ -429,14 +429,14 @@ export const SettingsPage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleApplySuggestion}
-                className="px-3 py-1 rounded-lg bg-cyan-700 text-white font-semibold hover:bg-cyan-800 transition shadow-xs text-xs"
+                className="ignara-btn-primary px-3 py-1 rounded-lg text-xs font-semibold"
               >
                 Apply
               </button>
               <button
                 type="button"
                 onClick={() => setRedetectSuggestion(null)}
-                className="px-2.5 py-1 rounded-lg text-slate-600 hover:bg-slate-200 transition text-xs font-medium"
+                className="ignara-btn-secondary px-2.5 py-1 rounded-lg text-xs"
               >
                 Dismiss
               </button>
@@ -445,12 +445,12 @@ export const SettingsPage: React.FC = () => {
         )}
 
         {redetectNotice && (
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center justify-between gap-2">
+          <div className="p-3 bg-[var(--y)]/10 border border-[var(--y)]/30 rounded-xl text-xs text-[var(--y)] flex items-center justify-between gap-2">
             <span>{redetectNotice}</span>
             <button
               type="button"
               onClick={() => setRedetectNotice(null)}
-              className="text-amber-700 hover:text-amber-900 text-xs font-semibold px-1"
+              className="text-[var(--y)] hover:opacity-80 text-xs font-semibold px-1 cursor-pointer"
             >
               &times;
             </button>
@@ -458,15 +458,15 @@ export const SettingsPage: React.FC = () => {
         )}
 
         {regionalSuccess && (
-          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-start space-x-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+          <div className="p-3 bg-[var(--g)]/10 border border-[var(--g)]/30 rounded-xl text-xs text-[var(--g)] flex items-start space-x-2">
+            <CheckCircle2 className="w-4 h-4 text-[var(--g)] shrink-0 mt-0.5" />
             <span>{regionalSuccess}</span>
           </div>
         )}
 
         {regionalError && (
-          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start space-x-2">
-            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+          <div className="p-3 bg-[var(--r)]/10 border border-[var(--r)]/30 rounded-xl text-xs text-[var(--r)] flex items-start space-x-2">
+            <AlertTriangle className="w-4 h-4 text-[var(--r)] shrink-0 mt-0.5" />
             <span>{regionalError}</span>
           </div>
         )}
@@ -474,87 +474,89 @@ export const SettingsPage: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
           {/* Country Selection */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-700">Country / Region</label>
+            <label className="block text-xs font-bold text-[var(--tx)]">Country / Region</label>
             <select
               value={selectedCountry}
               onChange={(e) => setSelectedCountry(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-ink focus:outline-none focus:border-electric cursor-pointer"
+              className="w-full px-3 py-2 bg-[var(--card2)] border border-[var(--line)] rounded-xl text-xs sm:text-sm text-[var(--tx)] focus:outline-none focus:border-[var(--o1)] cursor-pointer"
+              style={{ backgroundColor: 'var(--card2)', color: 'var(--tx)' }}
             >
               {countriesList.length > 0 ? (
                 countriesList.map((c) => (
-                  <option key={c.code} value={c.code}>
+                  <option key={c.code} value={c.code} className="bg-[var(--card)] text-[var(--tx)]" style={{ backgroundColor: 'var(--card)', color: 'var(--tx)' }}>
                     {c.flag} {c.name} ({c.code})
                   </option>
                 ))
               ) : (
                 <>
-                  <option value="US">🇺🇸 United States (US)</option>
-                  <option value="IN">🇮🇳 India (IN)</option>
-                  <option value="GB">🇬🇧 United Kingdom (GB)</option>
-                  <option value="DE">🇩🇪 Germany (DE)</option>
-                  <option value="CA">🇨🇦 Canada (CA)</option>
-                  <option value="AU">🇦🇺 Australia (AU)</option>
+                  <option value="US" className="bg-[var(--card)] text-[var(--tx)]" style={{ backgroundColor: 'var(--card)', color: 'var(--tx)' }}>🇺🇸 United States (US)</option>
+                  <option value="IN" className="bg-[var(--card)] text-[var(--tx)]" style={{ backgroundColor: 'var(--card)', color: 'var(--tx)' }}>🇮🇳 India (IN)</option>
+                  <option value="GB" className="bg-[var(--card)] text-[var(--tx)]" style={{ backgroundColor: 'var(--card)', color: 'var(--tx)' }}>🇬🇧 United Kingdom (GB)</option>
+                  <option value="DE" className="bg-[var(--card)] text-[var(--tx)]" style={{ backgroundColor: 'var(--card)', color: 'var(--tx)' }}>🇩🇪 Germany (DE)</option>
+                  <option value="CA" className="bg-[var(--card)] text-[var(--tx)]" style={{ backgroundColor: 'var(--card)', color: 'var(--tx)' }}>🇨🇦 Canada (CA)</option>
+                  <option value="AU" className="bg-[var(--card)] text-[var(--tx)]" style={{ backgroundColor: 'var(--card)', color: 'var(--tx)' }}>🇦🇺 Australia (AU)</option>
                 </>
               )}
             </select>
-            <span className="text-[10px] text-slate-500 block">
+            <span className="text-[10px] text-[var(--mu)] block">
               Governs regional formatting and standard payment dial codes.
             </span>
           </div>
 
           {/* Preferred Display Currency */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-700">Preferred Display Currency</label>
+            <label className="block text-xs font-bold text-[var(--tx)]">Preferred Display Currency</label>
             <select
               value={selectedDisplayCurrency}
               onChange={(e) => setSelectedDisplayCurrency(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-ink focus:outline-none focus:border-electric cursor-pointer"
+              className="w-full px-3 py-2 bg-[var(--card2)] border border-[var(--line)] rounded-xl text-xs sm:text-sm text-[var(--tx)] focus:outline-none focus:border-[var(--o1)] cursor-pointer"
+              style={{ backgroundColor: 'var(--card2)', color: 'var(--tx)' }}
             >
               {currenciesList.length > 0 ? (
                 currenciesList.map((cur) => (
-                  <option key={cur.code} value={cur.code}>
+                  <option key={cur.code} value={cur.code} className="bg-[var(--card)] text-[var(--tx)]" style={{ backgroundColor: 'var(--card)', color: 'var(--tx)' }}>
                     {cur.code} ({cur.symbol}) — {cur.name}
                   </option>
                 ))
               ) : (
                 <>
-                  <option value="USD">USD ($) — US Dollar</option>
-                  <option value="INR">INR (₹) — Indian Rupee</option>
-                  <option value="EUR">EUR (€) — Euro</option>
-                  <option value="GBP">GBP (£) — British Pound</option>
-                  <option value="CAD">CAD (CA$) — Canadian Dollar</option>
-                  <option value="AUD">AUD (A$) — Australian Dollar</option>
+                  <option value="USD" className="bg-[var(--card)] text-[var(--tx)]" style={{ backgroundColor: 'var(--card)', color: 'var(--tx)' }}>USD ($) — US Dollar</option>
+                  <option value="INR" className="bg-[var(--card)] text-[var(--tx)]" style={{ backgroundColor: 'var(--card)', color: 'var(--tx)' }}>INR (₹) — Indian Rupee</option>
+                  <option value="EUR" className="bg-[var(--card)] text-[var(--tx)]" style={{ backgroundColor: 'var(--card)', color: 'var(--tx)' }}>EUR (€) — Euro</option>
+                  <option value="GBP" className="bg-[var(--card)] text-[var(--tx)]" style={{ backgroundColor: 'var(--card)', color: 'var(--tx)' }}>GBP (£) — British Pound</option>
+                  <option value="CAD" className="bg-[var(--card)] text-[var(--tx)]" style={{ backgroundColor: 'var(--card)', color: 'var(--tx)' }}>CAD (CA$) — Canadian Dollar</option>
+                  <option value="AUD" className="bg-[var(--card)] text-[var(--tx)]" style={{ backgroundColor: 'var(--card)', color: 'var(--tx)' }}>AUD (A$) — Australian Dollar</option>
                 </>
               )}
             </select>
-            <span className="text-[10px] text-slate-500 block">
+            <span className="text-[10px] text-[var(--mu)] block">
               Financial dashboard, summaries, and forecasts render in this currency.
             </span>
           </div>
 
           {/* Base Accounting Ledger Currency (Informational / Safety) */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-700">Base Accounting Ledger</label>
-            <div className="p-2.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-mono font-bold text-ink flex items-center justify-between">
+            <label className="block text-xs font-bold text-[var(--tx)]">Base Accounting Ledger</label>
+            <div className="p-2.5 rounded-xl bg-[var(--card2)] border border-[var(--line)] text-xs font-mono font-semibold text-[var(--tx)] flex items-center justify-between min-h-[42px]">
               <span>{currentUser?.currency || 'USD'} (Fixed)</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-sans font-bold">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--g)]/15 text-[var(--g)] border border-[var(--g)]/30 font-sans font-semibold">
                 Audited Ledger
               </span>
             </div>
-            <span className="text-[10px] text-slate-500 block">
+            <span className="text-[10px] text-[var(--dim)] block">
               Underlying ledger currency. Preserved to prevent unauthorized cross-currency ledger drift.
             </span>
           </div>
         </div>
 
         {/* Auto detection toggle and actions */}
-        <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <label className="flex items-center space-x-2 text-xs text-slate-700 cursor-pointer">
+        <div className="pt-3 border-t border-[var(--line)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <label className="flex items-center space-x-2 text-xs text-[var(--tx)] cursor-pointer">
             <input
               type="checkbox"
               checked={autoDetectEnabled}
               onChange={(e) => setAutoDetectEnabled(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-300 text-electric focus:ring-0"
+              className="w-4 h-4 rounded border-[var(--line)] bg-[var(--card2)] text-[var(--o1)] accent-[var(--o1)] focus:ring-0"
             />
             <span>Enable automatic regional detection on future visits</span>
           </label>
@@ -569,7 +571,7 @@ export const SettingsPage: React.FC = () => {
                 setRegionalSuccess(null);
                 setRegionalError(null);
               }}
-              className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-600 hover:bg-slate-100 transition"
+              className="ignara-btn-secondary px-3 py-1.5 text-xs font-medium cursor-pointer"
             >
               Cancel
             </button>
@@ -577,7 +579,7 @@ export const SettingsPage: React.FC = () => {
               type="button"
               onClick={handleSaveRegionalPreferences}
               disabled={regionalSaving}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-electric hover:bg-electric-600 text-white text-xs font-bold transition shadow-xs disabled:opacity-50"
+              className="ignara-btn-primary px-4 py-1.5 text-xs font-semibold cursor-pointer disabled:opacity-50"
             >
               {regionalSaving ? (
                 <>
@@ -594,24 +596,24 @@ export const SettingsPage: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Sandbox Connection Card */}
-        <div className="bento-card p-4 sm:p-6 space-y-4 sm:space-y-5">
+        <div className="ignara-card p-4 sm:p-6 space-y-4 sm:space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-electric-50 border border-electric-200/80 flex items-center justify-center text-electric shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-[var(--o1)]/10 border border-[var(--o1)]/20 flex items-center justify-center text-[var(--o1)] shrink-0">
                 <Key className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-black text-base text-ink tracking-tight">PayPal REST API Sandbox</h3>
-                <p className="text-xs text-sardine-slate">Target: api-m.sandbox.paypal.com</p>
+                <h3 className="ignara-h3">PayPal REST API Sandbox</h3>
+                <p className="text-xs text-[var(--mu)]">Target: api-m.sandbox.paypal.com</p>
               </div>
             </div>
 
             <button
               onClick={handleTestConnection}
               disabled={isTesting}
-              className="flex items-center justify-center space-x-1.5 px-3.5 py-2.5 bg-ink hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-50 border border-slate-700 hover:border-electric min-h-[44px] self-stretch sm:self-auto"
+              className="ignara-btn-primary flex items-center justify-center space-x-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl min-h-[40px] self-stretch sm:self-auto cursor-pointer"
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-electric ${isTesting ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin' : ''}`} />
               <span>{isTesting ? 'Testing...' : 'Test Connection'}</span>
             </button>
           </div>
@@ -621,161 +623,161 @@ export const SettingsPage: React.FC = () => {
             <div
               className={`p-3.5 sm:p-4 rounded-xl border text-xs shadow-2xs ${
                 testResult.success
-                  ? 'bg-emerald-50/90 text-emerald-900 border-emerald-300'
-                  : 'bg-amber-50 text-amber-900 border-amber-300'
+                  ? 'bg-[var(--g)]/10 text-[var(--g)] border-[var(--g)]/30'
+                  : 'bg-[var(--y)]/10 text-[var(--y)] border-[var(--y)]/30'
               }`}
             >
               <div className="font-bold flex items-center space-x-1.5">
-                {testResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />}
+                {testResult.success ? <CheckCircle2 className="w-4 h-4 text-[var(--g)] shrink-0" /> : <AlertTriangle className="w-4 h-4 text-[var(--y)] shrink-0" />}
                 <span>{testResult.success ? 'Sandbox Authentication Verified' : 'Authentication Diagnostic'}</span>
               </div>
-              <p className="mt-1 text-slate-700 break-words">{testResult.message}</p>
+              <p className="mt-1 text-[var(--tx)] break-words">{testResult.message}</p>
               {testResult.token_preview && (
-                <p className="font-mono text-[11px] mt-1.5 bg-white/70 p-1.5 rounded-lg border border-emerald-200 text-emerald-900 break-all">
+                <p className="font-mono text-[11px] mt-1.5 bg-[var(--card2)] p-1.5 rounded-lg border border-[var(--line)] text-[var(--g)] break-all">
                   Token: {testResult.token_preview}
                 </p>
               )}
             </div>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3 text-xs border-t border-slate-100">
-            <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/60">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Integration Type</span>
-              <span className="font-bold text-ink block mt-0.5 truncate">{status?.account_label || 'Shared Developer Sandbox'}</span>
-              <span className="text-[10px] text-sardine-slate block">Test / Demo Mode</span>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3 text-xs border-t border-[var(--line)]">
+            <div className="bg-[var(--card2)] p-3 rounded-xl border border-[var(--line)]">
+              <span className="text-[10px] uppercase font-semibold tracking-wider text-[var(--dim)] block">Integration Type</span>
+              <span className="font-semibold text-[var(--tx)] block mt-0.5 truncate">{status?.account_label || 'Shared Developer Sandbox'}</span>
+              <span className="text-[10px] text-[var(--mu)] block">Test / Demo Mode</span>
             </div>
-            <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/60">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Environment</span>
-              <span className="font-black text-emerald-700 block mt-0.5">SANDBOX ONLY</span>
-              <span className="text-[10px] text-sardine-slate block">Hard Refusal Active</span>
+            <div className="bg-[var(--card2)] p-3 rounded-xl border border-[var(--line)]">
+              <span className="text-[10px] uppercase font-semibold tracking-wider text-[var(--dim)] block">Environment</span>
+              <span className="font-bold text-[var(--g)] block mt-0.5">SANDBOX ONLY</span>
+              <span className="text-[10px] text-[var(--mu)] block">Hard Refusal Active</span>
             </div>
-            <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/60 col-span-2 sm:col-span-1">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Webhook ID</span>
-              <span className="font-mono font-bold text-ink block mt-0.5 truncate">
+            <div className="bg-[var(--card2)] p-3 rounded-xl border border-[var(--line)] col-span-2 sm:col-span-1">
+              <span className="text-[10px] uppercase font-semibold tracking-wider text-[var(--dim)] block">Webhook ID</span>
+              <span className="font-mono font-semibold text-[var(--tx)] block mt-0.5 truncate">
                 {status?.webhook_id ? status.webhook_id.substring(0, 14) + '...' : 'Registered via API'}
               </span>
-              <span className="text-[10px] text-sardine-slate block">Verified Listener</span>
+              <span className="text-[10px] text-[var(--mu)] block">Verified Listener</span>
             </div>
           </div>
-          <div className="p-3 bg-blue-50/70 border border-blue-200/70 rounded-xl text-[11px] text-blue-900 leading-relaxed">
-            <span className="font-bold">Integration Notice: </span>
+          <div className="p-3 bg-[var(--side)] border border-[var(--line)] rounded-xl text-[11px] text-[var(--mu)] leading-relaxed">
+            <span className="font-semibold text-[var(--tx)]">Integration Notice: </span>
             This workspace uses the Cashflow Lifeline shared PayPal developer sandbox for simulated transactions and verification testing. Connecting an individual live merchant account requires PayPal Seller Onboarding (OAuth partner referrals).
           </div>
         </div>
 
         {/* Safety Policy Limits Card */}
-        <div className="bento-card p-6 space-y-5">
+        <div className="ignara-card p-4 sm:p-6 space-y-4 sm:space-y-5">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-700">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
               <Shield className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-black text-base text-ink tracking-tight">Deterministic Policy Controls</h3>
-              <p className="text-xs text-sardine-slate">Enforced by Guardrail Agent. Zero code paths bypass these bounds.</p>
+              <h3 className="ignara-h3">Deterministic Policy Controls</h3>
+              <p className="text-xs text-[var(--mu)]">Enforced by Guardrail Agent. Zero code paths bypass these bounds.</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-            <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/60">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Early Discount</span>
-              <span className="font-black text-ink text-base">5.0% Cap</span>
-              <span className="text-[10px] text-sardine-slate block mt-0.5">Plan B capped at 3.0%</span>
+            <div className="p-3.5 bg-[var(--card2)] rounded-xl border border-[var(--line)]">
+              <span className="text-[10px] uppercase font-semibold tracking-wider text-[var(--dim)] block">Early Discount</span>
+              <span className="font-bold text-[var(--tx)] text-base">5.0% Cap</span>
+              <span className="text-[10px] text-[var(--mu)] block mt-0.5">Plan B capped at 3.0%</span>
             </div>
 
-            <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/60">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Single Payout</span>
-              <span className="font-black text-ink text-base">$10,000 Cap</span>
-              <span className="text-[10px] text-sardine-slate block mt-0.5">Hard financial ceiling</span>
+            <div className="p-3.5 bg-[var(--card2)] rounded-xl border border-[var(--line)]">
+              <span className="text-[10px] uppercase font-semibold tracking-wider text-[var(--dim)] block">Single Payout</span>
+              <span className="font-bold text-[var(--tx)] text-base">$10,000 Cap</span>
+              <span className="text-[10px] text-[var(--mu)] block mt-0.5">Hard financial ceiling</span>
             </div>
 
-            <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/60">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-sardine-muted block">Currencies</span>
-              <span className="font-black text-ink text-sm">USD, EUR, GBP</span>
-              <span className="text-[10px] text-sardine-slate block mt-0.5">Strict ISO whitelist</span>
+            <div className="p-3.5 bg-[var(--card2)] rounded-xl border border-[var(--line)]">
+              <span className="text-[10px] uppercase font-semibold tracking-wider text-[var(--dim)] block">Currencies</span>
+              <span className="font-bold text-[var(--tx)] text-sm">USD, EUR, GBP</span>
+              <span className="text-[10px] text-[var(--mu)] block mt-0.5">Strict ISO whitelist</span>
             </div>
           </div>
         </div>
 
         {/* LLM Safety & Fallback Pod */}
-        <div className="bento-ink p-6 space-y-4">
+        <div className="ignara-card p-4 sm:p-6 space-y-4">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-electric-soft">
+            <div className="w-10 h-10 rounded-xl bg-[var(--o1)]/10 border border-[var(--o1)]/20 flex items-center justify-center text-[var(--o1)] shrink-0">
               <Bot className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-black text-base text-white tracking-tight">LLM Safety Boundary</h3>
-              <p className="text-xs text-sardine-muted">Google Gemini / Anthropic / Template Fallback</p>
+              <h3 className="ignara-h3">LLM Safety Boundary</h3>
+              <p className="text-xs text-[var(--mu)]">Google Gemini / Anthropic / Template Fallback</p>
             </div>
           </div>
 
-          <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 text-xs space-y-2 text-slate-300">
-            <div className="flex items-center space-x-2 text-emerald-400 font-bold">
+          <div className="p-4 bg-[var(--card2)] rounded-xl border border-[var(--line)] text-xs space-y-2 text-[var(--tx)]">
+            <div className="flex items-center space-x-2 text-[var(--g)] font-semibold">
               <CheckCircle2 className="w-4 h-4" />
               <span>Zero-Execution Rule Enforced</span>
             </div>
-            <p className="text-sardine-muted text-[11px] leading-relaxed">
+            <p className="text-[var(--mu)] text-[11px] leading-relaxed">
               The AI layer is restricted to plain-language driver summaries and message drafts. It can never approve, execute, or modify any dollar amount or transaction.
             </p>
           </div>
         </div>
 
         {/* Webhook Ingress Architecture */}
-        <div className="bento-card p-6 space-y-4">
+        <div className="ignara-card p-4 sm:p-6 space-y-4">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+            <div className="w-10 h-10 rounded-xl bg-[var(--g)]/10 border border-[var(--g)]/20 flex items-center justify-center text-[var(--g)] shrink-0">
               <Radio className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-black text-base text-ink tracking-tight">Webhook Ingress Pipeline</h3>
-              <p className="text-xs text-sardine-slate">Cryptographically verified via PayPal API</p>
+              <h3 className="ignara-h3">Webhook Ingress Pipeline</h3>
+              <p className="text-xs text-[var(--mu)]">Cryptographically verified via PayPal API</p>
             </div>
           </div>
 
-          <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200/60 text-xs space-y-2">
+          <div className="p-4 bg-[var(--card2)] rounded-xl border border-[var(--line)] text-xs space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-sardine-slate">Verification Endpoint:</span>
-              <span className="font-mono text-ink font-bold">/v1/notifications/verify-webhook-signature</span>
+              <span className="text-[var(--mu)]">Verification Endpoint:</span>
+              <span className="font-mono text-[var(--tx)] font-semibold">/v1/notifications/verify-webhook-signature</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sardine-slate">Queue Persistence:</span>
-              <span className="font-mono text-emerald-700 font-bold">asyncio + SQLite / MySQL WAL</span>
+              <span className="text-[var(--mu)]">Queue Persistence:</span>
+              <span className="font-mono text-[var(--g)] font-semibold">asyncio + SQLite / MySQL WAL</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sardine-slate">Auto-Recalculate on Pay:</span>
-              <span className="font-mono text-electric font-bold">Enabled</span>
+              <span className="text-[var(--mu)]">Auto-Recalculate on Pay:</span>
+              <span className="font-mono text-[var(--o1)] font-semibold">Enabled</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Account Session & Sign Out Section */}
-      <div className="bento-card p-4 sm:p-6 space-y-4 border border-slate-200">
+      <div className="ignara-card p-4 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start sm:items-center space-x-3.5">
-            <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-ink shrink-0">
-              <UserCheck className="w-5 h-5 text-electric" />
+            <div className="w-10 h-10 rounded-xl bg-[var(--side)] border border-[var(--line)] flex items-center justify-center text-[var(--o1)] shrink-0">
+              <UserCheck className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h3 className="font-black text-base text-ink tracking-tight">Active User Account Session</h3>
+                <h3 className="ignara-h3">Active User Account Session</h3>
                 {currentUser?.is_demo && (
-                  <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 font-bold px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] bg-[var(--y)]/15 text-[var(--y)] border border-[var(--y)]/30 font-semibold px-2 py-0.5 rounded-full">
                     Demo Mode (Alex Morgan)
                   </span>
                 )}
               </div>
-              <p className="text-xs text-sardine-slate mt-0.5">
-                Logged in as <strong>{currentUser?.name || 'User'}</strong> ({currentUser?.email}). Sign out to switch accounts.
+              <p className="text-xs text-[var(--mu)] mt-0.5">
+                Logged in as <strong className="text-[var(--tx)]">{currentUser?.name || 'User'}</strong> ({currentUser?.email}). Sign out to switch accounts.
               </p>
             </div>
           </div>
 
           <button
             onClick={handleLogout}
-            className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center space-x-2 min-h-[44px] ${
+            className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-semibold transition-all shadow-xs flex items-center justify-center space-x-2 min-h-[44px] cursor-pointer ${
               currentUser?.is_demo
                 ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200'
+                : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30'
             }`}
           >
             <LogOut className="w-4 h-4" />
@@ -786,19 +788,19 @@ export const SettingsPage: React.FC = () => {
 
       {/* Change / Register Phone Modal */}
       {showPhoneModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl max-w-md w-full max-h-[92vh] flex flex-col p-4 sm:p-6 shadow-2xl border border-slate-200 space-y-4 sm:space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-4 animate-fadeIn">
+          <div className="bg-[var(--card)] rounded-2xl max-w-md w-full max-h-[92vh] flex flex-col p-4 sm:p-6 shadow-2xl border border-[var(--line)] space-y-4 sm:space-y-5 text-[var(--tx)]">
             <div className="flex justify-between items-center shrink-0">
               <div className="flex items-center space-x-2">
-                <Phone className="w-5 h-5 text-electric shrink-0" />
-                <h3 className="font-black text-sm sm:text-base text-ink truncate">
+                <Phone className="w-5 h-5 text-[var(--o1)] shrink-0" />
+                <h3 className="ignara-h3 truncate">
                   {currentUser?.phone_number ? 'Update Mobile Phone' : 'Register Mobile Phone'}
                 </h3>
               </div>
               <button
                 onClick={() => setShowPhoneModal(false)}
                 aria-label="Close phone modal"
-                className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-ink hover:bg-slate-100 transition-colors"
+                className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-[var(--dim)] hover:text-[var(--tx)] hover:bg-[var(--card2)] transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -806,14 +808,14 @@ export const SettingsPage: React.FC = () => {
 
             <div className="overflow-y-auto pr-1 space-y-4">
               {phoneError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start space-x-2">
+                <div className="p-3 bg-[var(--r)]/10 border border-[var(--r)]/30 rounded-xl text-xs text-[var(--r)] flex items-start space-x-2">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span className="break-words">{phoneError}</span>
                 </div>
               )}
 
               {phoneSuccess && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 flex items-start space-x-2">
+                <div className="p-3 bg-[var(--g)]/10 border border-[var(--g)]/30 rounded-xl text-xs text-[var(--g)] flex items-start space-x-2">
                   <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
                   <span className="break-words">{phoneSuccess}</span>
                 </div>
@@ -821,23 +823,23 @@ export const SettingsPage: React.FC = () => {
 
               {phoneStep === 'details' ? (
                 <form onSubmit={handleRequestPhoneChange} className="space-y-4">
-                  <p className="text-xs text-sardine-slate leading-relaxed">
+                  <p className="text-xs text-[var(--mu)] leading-relaxed">
                     For account security, changing your mobile number requires confirming your account password. An SMS code will be sent to the new number.
                   </p>
 
                   <div className="space-y-1">
-                    <label className="block text-xs font-semibold text-ink">
-                      Current Account Password <span className="text-rose-500">*</span>
+                    <label className="block text-xs font-semibold text-[var(--tx)]">
+                      Current Account Password <span className="text-[var(--r)]">*</span>
                     </label>
                     <div className="relative">
-                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                      <Lock className="w-4 h-4 text-[var(--dim)] absolute left-3 top-3 pointer-events-none" />
                       <input
                         type="password"
                         value={currentPassword}
                         onChange={(e) => setCurrentPassword(e.target.value)}
                         placeholder="••••••••"
                         required
-                        className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-electric"
+                        className="ignara-input w-full pl-9"
                       />
                     </div>
                   </div>
@@ -860,14 +862,14 @@ export const SettingsPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setShowPhoneModal(false)}
-                      className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors min-h-[44px] sm:min-h-0 flex items-center justify-center"
+                      className="ignara-btn-secondary w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold rounded-xl transition-colors min-h-[44px] sm:min-h-0 flex items-center justify-center cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={phoneLoading}
-                      className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-bold bg-electric hover:bg-electric-600 text-white rounded-xl shadow-xs transition-colors disabled:opacity-50 flex items-center justify-center space-x-1.5 min-h-[44px] sm:min-h-0"
+                      className="ignara-btn-primary w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold rounded-xl shadow-btn transition-colors disabled:opacity-50 flex items-center justify-center space-x-1.5 min-h-[44px] sm:min-h-0 cursor-pointer"
                     >
                       {phoneLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       <span>Send SMS Verification</span>
@@ -876,8 +878,8 @@ export const SettingsPage: React.FC = () => {
                 </form>
               ) : (
                 <form onSubmit={handleVerifyPhoneChange} className="space-y-4">
-                  <p className="text-xs text-sardine-slate leading-relaxed">
-                    Enter the 6-digit SMS code sent to <strong className="font-mono text-ink break-all">{newPhoneNumber}</strong>:
+                  <p className="text-xs text-[var(--mu)] leading-relaxed">
+                    Enter the 6-digit SMS code sent to <strong className="font-mono text-[var(--tx)] break-all">{newPhoneNumber}</strong>:
                   </p>
 
                   <input
@@ -889,10 +891,10 @@ export const SettingsPage: React.FC = () => {
                     placeholder="123456"
                     required
                     autoFocus
-                    className="w-full text-center tracking-[0.25em] sm:tracking-[0.4em] font-mono text-lg sm:text-xl py-2.5 sm:py-3 border border-slate-200 rounded-xl focus:outline-none focus:border-electric"
+                    className="w-full text-center tracking-[0.25em] sm:tracking-[0.4em] font-mono text-lg sm:text-xl py-2.5 sm:py-3 bg-[var(--bg)] border border-[var(--line)] text-[var(--tx)] rounded-xl focus:outline-none focus:border-[var(--o1)]"
                   />
 
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-sardine-slate">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-[var(--mu)]">
                     <span>
                       {changeCooldown > 0 ? (
                         <span>Resend in <strong>{changeCooldown}s</strong></span>
@@ -901,7 +903,7 @@ export const SettingsPage: React.FC = () => {
                           type="button"
                           onClick={handleResendChangeOtp}
                           disabled={phoneLoading}
-                          className="text-electric font-semibold flex items-center space-x-1 min-h-[44px] sm:min-h-0 py-1"
+                          className="text-[var(--o1)] font-semibold flex items-center space-x-1 min-h-[44px] sm:min-h-0 py-1 cursor-pointer"
                         >
                           <RotateCcw className="w-3 h-3" />
                           <span>Resend SMS OTP</span>
@@ -915,14 +917,14 @@ export const SettingsPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setPhoneStep('details')}
-                      className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors min-h-[44px] sm:min-h-0 flex items-center justify-center"
+                      className="ignara-btn-secondary w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold rounded-xl transition-colors min-h-[44px] sm:min-h-0 flex items-center justify-center cursor-pointer"
                     >
                       Back
                     </button>
                     <button
                       type="submit"
                       disabled={phoneLoading || changeOtpCode.length !== 6}
-                      className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-bold bg-electric hover:bg-electric-600 text-white rounded-xl shadow-xs transition-colors disabled:opacity-50 flex items-center justify-center space-x-1.5 min-h-[44px] sm:min-h-0"
+                      className="ignara-btn-primary w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold rounded-xl shadow-btn transition-colors disabled:opacity-50 flex items-center justify-center space-x-1.5 min-h-[44px] sm:min-h-0 cursor-pointer"
                     >
                       {phoneLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       <span>Verify &amp; Update Phone</span>

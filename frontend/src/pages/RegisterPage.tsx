@@ -98,9 +98,10 @@ export const RegisterPage: React.FC = () => {
 
         // Fresh visitor: auto-detect region
         const detected = await api.detectRegion().catch(() => null);
-        if (detected && isMounted) {
+        if (detected && isMounted && detected.country) {
           setCountry(detected.country);
-          setPreferredCurrency(detected.currency);
+          if (detected.currency) setPreferredCurrency(detected.currency);
+          if (detected.dial_code) setPhoneCountryCode(detected.dial_code);
           setStoredDetectedRegion({
             country: detected.country,
             countryName: detected.country_name,

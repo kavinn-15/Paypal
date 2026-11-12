@@ -141,7 +141,7 @@ export const RescuePlanCard: React.FC<RescuePlanCardProps> = ({
           </div>
           <div className="flex justify-between">
             <span className="text-[var(--mu)]">Amount:</span>
-            <span className="text-[var(--g)] font-semibold">{formatCurrency(action.amount, { currency: action.currency })}</span>
+            <span className="text-[var(--g)] font-semibold">{formatCurrency(action.amount, { fromCurrency: action.currency })}</span>
           </div>
         </div>
 
@@ -154,7 +154,7 @@ export const RescuePlanCard: React.FC<RescuePlanCardProps> = ({
               className="ignara-btn-primary w-full py-2.5 px-3 rounded-[14px] text-xs font-semibold shadow-btn flex items-center justify-center space-x-2 disabled:opacity-50 min-h-[44px] text-center"
             >
               <Lock className="w-3.5 h-3.5 shrink-0" />
-              <span>Approve Action ({action.recipient.split(' ')[0]} - {formatCurrency(action.amount, { currency: action.currency })})</span>
+              <span>Approve Action ({action.recipient.split(' ')[0]} - {formatCurrency(action.amount, { fromCurrency: action.currency })})</span>
             </button>
           )}
 

@@ -39,12 +39,12 @@ export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
 
   const getHeroMessage = () => {
     if (webhookVerified) {
-      return `PayPal Sandbox webhook verified payment receipt. Available balance comfortably covers Friday's ${formatCurrency(obligation.amount, { currency: obligation.currency })} payout.`;
+      return `PayPal Sandbox webhook verified payment receipt. Available balance comfortably covers Friday's ${formatCurrency(obligation.amount, { fromCurrency: obligation.currency })} payout.`;
     }
     if (paymentReceived || isCovered) {
-      return `Forecast recalculation indicates sufficient cashflow to cover Friday's ${formatCurrency(obligation.amount, { currency: obligation.currency })} contractor payout to ${obligation.payee_name}.`;
+      return `Forecast recalculation indicates sufficient cashflow to cover Friday's ${formatCurrency(obligation.amount, { fromCurrency: obligation.currency })} contractor payout to ${obligation.payee_name}.`;
     }
-    return `Current PayPal balance is ${formatCurrency(startingBalance)}. Due to predictable client payment delays, available liquidity cannot cover the ${formatCurrency(obligation.amount, { currency: obligation.currency })} contractor payout.`;
+    return `Current PayPal balance is ${formatCurrency(startingBalance)}. Due to predictable client payment delays, available liquidity cannot cover the ${formatCurrency(obligation.amount, { fromCurrency: obligation.currency })} contractor payout.`;
   };
 
   return (
@@ -170,7 +170,7 @@ export const AtRiskBanner: React.FC<AtRiskBannerProps> = ({
 
           <div className="flex items-baseline justify-between mt-1">
             <div className="ignara-num-big">
-              <CountUp value={obligation.amount} formatFn={(v) => formatCurrency(v, { currency: obligation.currency })} />
+              <CountUp value={obligation.amount} formatFn={(v) => formatCurrency(v, { fromCurrency: obligation.currency })} />
             </div>
 
             {/* Tiny SVG Sparkline */}

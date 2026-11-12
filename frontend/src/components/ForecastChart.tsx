@@ -29,7 +29,7 @@ export const ForecastChart: React.FC<ForecastChartProps> = ({
   obligationAmount,
 }) => {
   const [showUncertaintyBand, setShowUncertaintyBand] = useState(true);
-  const { formatCurrency } = useRegionalPreferences();
+  const { formatCurrency, convertAmount } = useRegionalPreferences();
 
   const chartData = projections.map((p, idx) => {
     const planP = selectedPlan?.forecast_with_plan?.[idx];
@@ -38,18 +38,25 @@ export const ForecastChart: React.FC<ForecastChartProps> = ({
       day: 'numeric',
     });
 
+    const baselineBalance = convertAmount(p.ending_balance);
+    const planBalance = planP ? convertAmount(planP.ending_balance) : undefined;
+    const rawCiLow = p.ci_low ?? p.ending_balance - 400;
+    const rawCiHigh = p.ci_high ?? p.ending_balance + 600;
+    const ciLow = convertAmount(rawCiLow);
+    const ciHigh = convertAmount(rawCiHigh);
+
     return {
       date: dateFormatted,
       fullDate: p.date,
-      baselineBalance: p.ending_balance,
-      planBalance: planP ? planP.ending_balance : undefined,
-      ciLow: p.ci_low ?? p.ending_balance - 400,
-      ciHigh: p.ci_high ?? p.ending_balance + 600,
-      ciBand: [p.ci_low ?? p.ending_balance - 400, p.ci_high ?? p.ending_balance + 600],
-      inflows: p.inflows,
-      outflows: p.outflows,
+      baselineBalance,
+      planBalance,
+      ciLow,
+      ciHigh,
+      ciBand: [ciLow, ciHigh],
+      inflows: convertAmount(p.inflows),
+      outflows: convertAmount(p.outflows),
       isShortfall: p.is_shortfall,
-      shortfallAmount: p.shortfall_amount,
+      shortfallAmount: convertAmount(p.shortfall_amount),
     };
   });
 
@@ -71,28 +78,28 @@ export const ForecastChart: React.FC<ForecastChartProps> = ({
             <div className="flex justify-between items-center space-x-3">
               <span className="font-sans text-[var(--mu)]">Baseline Balance:</span>
               <span className={`font-semibold ${data.baselineBalance < 0 ? 'text-[var(--r)]' : ''}`}>
-                {formatCurrency(data.baselineBalance)}
+                {formatCurrency(data.baselineBalance, { noConvert: true })}
               </span>
             </div>
 
             {data.planBalance !== undefined && (
               <div className="flex justify-between items-center space-x-3 text-[var(--o1)] font-semibold">
                 <span className="font-sans">With Plan:</span>
-                <span>{formatCurrency(data.planBalance)}</span>
+                <span>{formatCurrency(data.planBalance, { noConvert: true })}</span>
               </div>
             )}
 
             {data.inflows > 0 && (
               <div className="flex justify-between items-center space-x-3 text-[var(--g)]">
                 <span className="font-sans text-[var(--mu)]">Inflows:</span>
-                <span>+{formatCurrency(data.inflows)}</span>
+                <span>+{formatCurrency(data.inflows, { noConvert: true })}</span>
               </div>
             )}
 
             {data.outflows > 0 && (
               <div className="flex justify-between items-center space-x-3 text-[var(--r)]">
                 <span className="font-sans text-[var(--mu)]">Outflows:</span>
-                <span>-{formatCurrency(data.outflows)}</span>
+                <span>-{formatCurrency(data.outflows, { noConvert: true })}</span>
               </div>
             )}
 
@@ -100,7 +107,7 @@ export const ForecastChart: React.FC<ForecastChartProps> = ({
               <div className="flex justify-between items-center space-x-3 pt-1 border-t border-black/10 text-[10.5px] text-[var(--dim)]">
                 <span className="font-sans">Monte Carlo 80% CI:</span>
                 <span>
-                  {formatCurrency(Math.round(data.ciLow))} &rarr; {formatCurrency(Math.round(data.ciHigh))}
+                  {formatCurrency(Math.round(data.ciLow), { noConvert: true })} &rarr; {formatCurrency(Math.round(data.ciHigh), { noConvert: true })}
                 </span>
               </div>
             )}
@@ -153,7 +160,7 @@ export const ForecastChart: React.FC<ForecastChartProps> = ({
               tick={{ fontSize: 11, fill: 'var(--mu)', fontFamily: 'Outfit, sans-serif' }}
               tickLine={false}
               axisLine={{ stroke: 'var(--line)' }}
-              tickFormatter={(v) => formatCurrency(v, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              tickFormatter={(v) => formatCurrency(v, { noConvert: true, minimumFractionDigits: 0, maximumFractionDigits: 0 })}
             />
             <Tooltip content={<CustomTooltip />} />
             <Legend

@@ -275,7 +275,7 @@ export const ClientsPage: React.FC = () => {
                     >
                       <div className="min-w-0">
                         <div className="font-semibold text-[var(--tx)] font-mono text-sm">
-                          {formatCurrency(inv.amount, { currency: inv.currency, showCode: true })}
+                          {formatCurrency(inv.amount, { fromCurrency: inv.currency, showCode: true })}
                         </div>
                         <div className="text-[11px] text-[var(--mu)] truncate">
                           Due: <span className="font-medium text-[var(--tx)]">{inv.due_date}</span> &bull; #{inv.paypal_invoice_id}

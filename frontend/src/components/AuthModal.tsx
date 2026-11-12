@@ -183,13 +183,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                   <select
                     value={currency}
                     onChange={(e) => setCurrency(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-electric focus:ring-1 focus:ring-electric bg-white"
+                    className="w-full px-3 py-2 text-sm border border-[var(--line)] rounded-xl focus:outline-hidden focus:border-[var(--o1)] focus:ring-1 focus:ring-[var(--o1)] bg-[var(--card)] text-[var(--tx)]"
                   >
-                    <option value="USD">USD ($ - United States Dollar)</option>
-                    <option value="EUR">EUR (€ - Euro)</option>
-                    <option value="GBP">GBP (£ - British Pound)</option>
-                    <option value="CAD">CAD ($ - Canadian Dollar)</option>
-                    <option value="AUD">AUD ($ - Australian Dollar)</option>
+                    <option value="USD" className="bg-[var(--card)] text-[var(--tx)]">USD ($ - United States Dollar)</option>
+                    <option value="EUR" className="bg-[var(--card)] text-[var(--tx)]">EUR (€ - Euro)</option>
+                    <option value="GBP" className="bg-[var(--card)] text-[var(--tx)]">GBP (£ - British Pound)</option>
+                    <option value="CAD" className="bg-[var(--card)] text-[var(--tx)]">CAD ($ - Canadian Dollar)</option>
+                    <option value="AUD" className="bg-[var(--card)] text-[var(--tx)]">AUD ($ - Australian Dollar)</option>
                   </select>
                 </div>
 

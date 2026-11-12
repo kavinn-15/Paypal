@@ -1,5 +1,6 @@
 /* Ignara Design Tokens & Global System */
 :root {
+  color-scheme: dark;
   /* Default: Dark Theme */
   --bg: #222224;
   --side: #242426;
@@ -39,6 +40,7 @@
 
 /* Light Theme via data-theme attribute or prefers-color-scheme */
 [data-theme="light"] {
+  color-scheme: light;
   --bg: #f3f1ee;
   --side: #faf8f6;
   --card: #ffffff;
@@ -90,6 +92,29 @@ html, body {
   min-height: 100%;
   width: 100%;
   overflow-x: hidden;
+}
+
+/* Form controls baseline & select dropdown contrast fix */
+select {
+  color-scheme: dark;
+  background-color: var(--card);
+  color: var(--tx);
+}
+
+[data-theme="light"] select {
+  color-scheme: light;
+  background-color: var(--card);
+  color: var(--tx);
+}
+
+select option {
+  background-color: #242426;
+  color: #f4f2ef;
+}
+
+[data-theme="light"] select option {
+  background-color: #ffffff;
+  color: #1d1c1c;
 }
 
 #root {

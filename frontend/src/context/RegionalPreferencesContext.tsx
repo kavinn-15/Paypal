@@ -32,11 +32,13 @@ export interface RegionalPreferencesContextType {
     amount: number | string | null | undefined,
     options?: {
       currency?: string;
+      fromCurrency?: string;
       locale?: string;
       showCode?: boolean;
       minimumFractionDigits?: number;
       maximumFractionDigits?: number;
       convertFromBase?: boolean;
+      noConvert?: boolean;
     }
   ) => string;
   formatNumber: (value: number | string | null | undefined, options?: Intl.NumberFormatOptions) => string;
@@ -248,32 +250,65 @@ export const RegionalPreferencesProvider: React.FC<{ children: React.ReactNode }
     }
   }, [currentUser, refreshUser]);
 
-  // Context-aware formatCurrency implementation
+  // Context-aware formatCurrency implementation with automatic rate conversion
   const formatCurrencyFn = useCallback(
     (
       amount: number | string | null | undefined,
       options?: {
         currency?: string;
+        fromCurrency?: string;
         locale?: string;
         showCode?: boolean;
         minimumFractionDigits?: number;
         maximumFractionDigits?: number;
         convertFromBase?: boolean;
+        noConvert?: boolean;
       }
     ) => {
-      const targetCurrency = options?.currency || currency;
-      const targetLocale = options?.locale || locale;
+      if (amount === null || amount === undefined || isNaN(Number(amount))) {
+        return '—';
+      }
 
-      let numericAmount = amount;
+      const numeric = Number(amount);
+
+      // If explicit noConvert is requested, format as-is without rate conversion
+      if (options?.noConvert) {
+        const directCurrency = options?.currency || currency;
+        const directLocale = options?.locale || locale;
+        return utilFormatCurrency(numeric, directCurrency, directLocale, options);
+      }
+
+      // Determine target display currency:
+      // The default target display currency is the user's active selected `currency` (e.g. 'INR').
+      // If the caller passes options.currency that matches baseCurrency (e.g. { currency: obligation.currency } where obligation is USD),
+      // that is the source currency of the data, so the target remains the user's active display currency.
+      let targetCurrency = currency;
+      let sourceCurrency = options?.fromCurrency || baseCurrency;
+
+      if (options?.currency) {
+        if (options.currency === baseCurrency) {
+          sourceCurrency = baseCurrency;
+          targetCurrency = currency;
+        } else if (options.currency === currency) {
+          sourceCurrency = baseCurrency;
+          targetCurrency = currency;
+        } else {
+          // Explicit target requested by caller
+          targetCurrency = options.currency;
+        }
+      }
+
+      const targetLocale = options?.locale || locale;
+      let numericAmount = numeric;
       let effectiveCurrency = targetCurrency;
 
-      if (options?.convertFromBase && baseCurrency !== targetCurrency && amount !== null && amount !== undefined) {
-        const converted = utilConvertAmount(amount, baseCurrency, targetCurrency, exchangeRates);
+      // Automatically convert when source and target currencies differ
+      if (sourceCurrency !== targetCurrency) {
+        const converted = utilConvertAmount(numeric, sourceCurrency, targetCurrency, exchangeRates);
         if (converted !== null && !isNaN(converted)) {
           numericAmount = converted;
         } else {
-          // Never format unconverted amount with target symbol; fallback safely to base currency
-          effectiveCurrency = baseCurrency;
+          effectiveCurrency = sourceCurrency;
         }
       }
 
