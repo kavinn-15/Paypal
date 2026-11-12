@@ -101,11 +101,12 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
         content={"detail": "Database service is temporarily unavailable. Database operations are currently postponed or failed."}
     )
 
-# CORS configured with explicit allowed origins
+# CORS configured with explicit allowed origins & Vercel domain pattern
 cors_origins = settings.allowed_origins_list
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],

@@ -61,3 +61,4 @@ Use `DATABASE_DISABLED=true` when:
 3. Add Environment Variable:
    - `VITE_API_URL`: `https://<your-render-service>.onrender.com`
 4. Deploy. The included `frontend/vercel.json` ensures client-side SPA routing (`/* -> /index.html`) works out of the box.
+
