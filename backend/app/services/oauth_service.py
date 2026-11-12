@@ -23,15 +23,27 @@ def generate_pkce_pair() -> Tuple[str, str]:
     return verifier, challenge
 
 
-def get_google_auth_url(state: str, code_challenge: Optional[str] = None) -> str:
+def get_google_auth_url(
+    state: str,
+    code_challenge: Optional[str] = None,
+    redirect_uri: Optional[str] = None
+) -> str:
     """Builds the Google OAuth 2.0 OpenID Connect authorization URL."""
     client_id = settings.GOOGLE_CLIENT_ID or "placeholder_google_client_id.apps.googleusercontent.com"
-    redirect_uri = settings.GOOGLE_REDIRECT_URI
+    target_redirect_uri = redirect_uri or settings.GOOGLE_REDIRECT_URI
+
+    # Safety guard: In production mode, never allow redirect_uri to point to localhost
+    if not settings.DEV_MODE and ("localhost" in target_redirect_uri or "127.0.0.1" in target_redirect_uri):
+        logger.warning(
+            f"Prevented localhost redirect URI in production OAuth initiation: {target_redirect_uri}. "
+            f"Falling back to {settings.GOOGLE_REDIRECT_URI}"
+        )
+        target_redirect_uri = settings.GOOGLE_REDIRECT_URI
 
     base = "https://accounts.google.com/o/oauth2/v2/auth"
     params = {
         "client_id": client_id,
-        "redirect_uri": redirect_uri,
+        "redirect_uri": target_redirect_uri,
         "response_type": "code",
         "scope": "openid email profile",
         "state": state,
@@ -124,8 +136,21 @@ async def verify_google_id_token(id_token_str: str) -> Dict[str, Any]:
         )
 
 
-async def exchange_google_code(code: str, code_verifier: Optional[str] = None) -> Dict[str, Any]:
+async def exchange_google_code(
+    code: str,
+    code_verifier: Optional[str] = None,
+    redirect_uri: Optional[str] = None
+) -> Dict[str, Any]:
     """Exchanges an authorization code for Google tokens."""
+    target_redirect_uri = redirect_uri or settings.GOOGLE_REDIRECT_URI
+
+    # Safety guard: In production mode, never allow redirect_uri to point to localhost
+    if not settings.DEV_MODE and ("localhost" in target_redirect_uri or "127.0.0.1" in target_redirect_uri):
+        logger.warning(
+            f"Prevented localhost redirect URI in production OAuth token exchange: {target_redirect_uri}. "
+            f"Falling back to {settings.GOOGLE_REDIRECT_URI}"
+        )
+        target_redirect_uri = settings.GOOGLE_REDIRECT_URI
     if code.startswith("mock_google_"):
         if not settings.DEV_MODE:
             raise HTTPException(
@@ -163,7 +188,7 @@ async def exchange_google_code(code: str, code_verifier: Optional[str] = None) -
         "code": code,
         "client_id": settings.GOOGLE_CLIENT_ID or "placeholder_google_client_id",
         "client_secret": settings.GOOGLE_CLIENT_SECRET or "placeholder_google_client_secret",
-        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+        "redirect_uri": target_redirect_uri,
         "grant_type": "authorization_code",
     }
     if code_verifier:

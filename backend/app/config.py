@@ -94,7 +94,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("GOOGLE_CLIENT_ID", "VITE_GOOGLE_CLIENT_ID")
     )
     GOOGLE_CLIENT_SECRET: Optional[str] = Field(default=None)
-    GOOGLE_REDIRECT_URI: str = Field(default="http://localhost:5173/auth/callback/google")
+    GOOGLE_REDIRECT_URI: Optional[str] = Field(default=None)
 
     @field_validator("GOOGLE_CLIENT_ID", mode="before")
     @classmethod
@@ -109,6 +109,14 @@ class Settings(BaseSettings):
     def clean_google_client_secret(cls, v: Optional[str]) -> Optional[str]:
         if isinstance(v, str):
             v = v.strip()
+            return v if v else None
+        return v
+
+    @field_validator("GOOGLE_REDIRECT_URI", mode="before")
+    @classmethod
+    def clean_google_redirect_uri(cls, v: Optional[str]) -> Optional[str]:
+        if isinstance(v, str):
+            v = v.strip().rstrip("/")
             return v if v else None
         return v
 
@@ -148,6 +156,45 @@ class Settings(BaseSettings):
     @property
     def trusted_proxies_list(self) -> List[str]:
         return [p.strip() for p in self.TRUSTED_PROXIES.split(",") if p.strip()]
+
+    @model_validator(mode="after")
+    def resolve_google_redirect_uri(self) -> 'Settings':
+        clean_app = (self.APP_BASE_URL or "").strip().rstrip("/")
+        if not clean_app:
+            clean_app = "http://localhost:5173" if self.DEV_MODE else "https://cashflow-lifeline.vercel.app"
+            object.__setattr__(self, "APP_BASE_URL", clean_app)
+
+        raw_redirect = (self.GOOGLE_REDIRECT_URI or "").strip()
+
+        # If GOOGLE_REDIRECT_URI is not set, derive dynamically from APP_BASE_URL
+        if not raw_redirect:
+            object.__setattr__(self, "GOOGLE_REDIRECT_URI", f"{clean_app}/auth/callback/google")
+        else:
+            clean_redirect = raw_redirect.rstrip("/")
+            # If APP_BASE_URL is a production non-localhost domain but GOOGLE_REDIRECT_URI was left as localhost
+            is_app_production = "localhost" not in clean_app and "127.0.0.1" not in clean_app
+            is_redirect_localhost = "localhost" in clean_redirect or "127.0.0.1" in clean_redirect
+            if is_app_production and is_redirect_localhost:
+                logger.warning(
+                    f"GOOGLE_REDIRECT_URI was configured with localhost ({clean_redirect}), "
+                    f"but APP_BASE_URL is production ({clean_app}). Automatically resolving to match APP_BASE_URL."
+                )
+                clean_redirect = f"{clean_app}/auth/callback/google"
+            object.__setattr__(self, "GOOGLE_REDIRECT_URI", clean_redirect)
+
+        # In production mode (DEV_MODE=False), strictly prevent redirecting to localhost
+        if not self.DEV_MODE:
+            final_redirect = self.GOOGLE_REDIRECT_URI or ""
+            if "localhost" in final_redirect or "127.0.0.1" in final_redirect:
+                prod_default = "https://cashflow-lifeline.vercel.app/auth/callback/google"
+                logger.warning(
+                    f"Production mode active but GOOGLE_REDIRECT_URI points to localhost ({final_redirect}). "
+                    f"Defaulting to production frontend callback: {prod_default}"
+                )
+                object.__setattr__(self, "GOOGLE_REDIRECT_URI", prod_default)
+                if "localhost" in self.APP_BASE_URL or "127.0.0.1" in self.APP_BASE_URL:
+                    object.__setattr__(self, "APP_BASE_URL", "https://cashflow-lifeline.vercel.app")
+        return self
 
     @model_validator(mode="after")
     def validate_production_security(self) -> 'Settings':
@@ -194,6 +241,8 @@ class Settings(BaseSettings):
             "DEV_MODE": self.DEV_MODE,
             "DATABASE_DISABLED": self.DATABASE_DISABLED,
             "ALLOW_DEMO_ENDPOINTS": self.ALLOW_DEMO_ENDPOINTS,
+            "APP_BASE_URL": self.APP_BASE_URL,
+            "GOOGLE_REDIRECT_URI": self.GOOGLE_REDIRECT_URI,
             "PAYPAL_BASE_URL": self.PAYPAL_BASE_URL,
             "PAYPAL_CLIENT_ID_PREVIEW": (self.PAYPAL_CLIENT_ID[:6] + "...") if self.PAYPAL_CLIENT_ID else None,
             "LLM_PROVIDER": self.LLM_PROVIDER,

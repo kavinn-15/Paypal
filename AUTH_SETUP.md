@@ -129,11 +129,11 @@ GOOGLE_REDIRECT_URI=http://localhost:5173/auth/callback/google
    - Application Type: **Web application**
    - Name: `Cashflow Lifeline Web`
    - Authorized JavaScript origins:
-     - `http://localhost:5173`
-     - `http://localhost:8000`
+     - https://cashflow-lifeline.vercel.app
+     - http://localhost:5173
    - Authorized redirect URIs:
-     - `http://localhost:5173/auth/callback/google`
-     - `http://localhost:8000/api/auth/google/callback`
+     - https://cashflow-lifeline.vercel.app/auth/callback/google
+     - http://localhost:5173/auth/callback/google
 5. Copy your **Client ID** and **Client Secret** into `.env`.
 
 > **Note for Local/Mock Testing**: In `DEV_MODE=true`, Google verification accepts `mock_google:<sub>:<email>` tokens without making external network calls, allowing full automated test coverage offline.

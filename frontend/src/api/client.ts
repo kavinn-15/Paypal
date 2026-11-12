@@ -408,8 +408,9 @@ export const api = {
     });
   },
 
-  getGoogleAuthUrl: async () => {
-    return request<GoogleAuthUrlResponse>('/auth/google/start');
+  getGoogleAuthUrl: async (redirectUri?: string) => {
+    const query = redirectUri ? `?redirect_uri=${encodeURIComponent(redirectUri)}` : '';
+    return request<GoogleAuthUrlResponse>(`/auth/google/start${query}`);
   },
 
   submitGoogleToken: async (credential: string) => {
@@ -422,9 +423,11 @@ export const api = {
     return res;
   },
 
-  completeGoogleCallback: async (code: string, state?: string) => {
-    const query = state ? `?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}` : `?code=${encodeURIComponent(code)}`;
-    const res = await request<TokenResponse>(`/auth/google/callback${query}`);
+  completeGoogleCallback: async (code: string, state?: string, redirectUri?: string) => {
+    const params = new URLSearchParams({ code });
+    if (state) params.set('state', state);
+    if (redirectUri) params.set('redirect_uri', redirectUri);
+    const res = await request<TokenResponse>(`/auth/google/callback?${params.toString()}`);
     setStoredTokens(res.access_token, res.refresh_token);
     if (res.email) localStorage.setItem('cashflow_user_email', res.email);
     return res;

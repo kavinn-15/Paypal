@@ -29,7 +29,7 @@ interface AuthContextType {
   verifyPhoneOtp: (phoneNumber: string, otp: string) => Promise<any>;
   resendPhoneOtp: (phoneNumber: string) => Promise<any>;
   loginWithGoogleToken: (credential: string) => Promise<any>;
-  loginWithGoogleCode: (code: string, state?: string) => Promise<any>;
+  loginWithGoogleCode: (code: string, state?: string, redirectUri?: string) => Promise<any>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -169,10 +169,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loginWithGoogleCode = async (code: string, state?: string) => {
+  const loginWithGoogleCode = async (code: string, state?: string, redirectUri?: string) => {
     setIsLoading(true);
     try {
-      const res = await api.completeGoogleCallback(code, state);
+      const res = await api.completeGoogleCallback(code, state, redirectUri);
       await refreshUser();
       return res;
     } finally {

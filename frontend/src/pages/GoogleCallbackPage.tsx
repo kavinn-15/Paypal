@@ -27,7 +27,8 @@ export const GoogleCallbackPage: React.FC = () => {
       }
 
       try {
-        await loginWithGoogleCode(code, state);
+        const redirectUri = `${window.location.origin}/auth/callback/google`;
+        await loginWithGoogleCode(code, state, redirectUri);
         navigate('/dashboard', { replace: true });
       } catch (err: any) {
         setError(err.message || 'Failed to complete Google authentication.');

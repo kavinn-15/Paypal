@@ -1,10 +1,13 @@
 import datetime
+import logging
 import re
 import secrets
 import jwt
 from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from backend.app.db import get_db
 from backend.app.config import settings
@@ -605,12 +608,56 @@ def legacy_reset_password(req: ResetPasswordRequest, db: Session = Depends(get_d
 # Google OAuth 2.0 / OpenID Connect Endpoints
 # =========================================================================
 
+def validate_oauth_redirect_uri(redirect_uri: Optional[str]) -> str:
+    """
+    Validates and sanitizes client-supplied redirect URI.
+    Ensures redirect URI strictly matches allowed origins or known patterns.
+    Falls back safely to settings.GOOGLE_REDIRECT_URI.
+    """
+    if not redirect_uri:
+        return settings.GOOGLE_REDIRECT_URI
+
+    clean = redirect_uri.strip().rstrip("/")
+    # In production mode, localhost is strictly prohibited
+    if not settings.DEV_MODE and ("localhost" in clean or "127.0.0.1" in clean):
+        logger.warning(
+            f"Rejected localhost redirect URI in production: {clean}. "
+            f"Using safe default: {settings.GOOGLE_REDIRECT_URI}"
+        )
+        return settings.GOOGLE_REDIRECT_URI
+
+    # Allowed if matches configured GOOGLE_REDIRECT_URI
+    if settings.GOOGLE_REDIRECT_URI and clean == settings.GOOGLE_REDIRECT_URI.rstrip("/"):
+        return clean
+
+    # Allowed if matches APP_BASE_URL callback
+    clean_app = settings.APP_BASE_URL.rstrip("/")
+    if clean == f"{clean_app}/auth/callback/google":
+        return clean
+
+    # Allowed if origin is in allowed_origins_list
+    for origin in settings.allowed_origins_list:
+        if clean == f"{origin.rstrip('/')}/auth/callback/google":
+            return clean
+
+    import re
+    if re.match(r"^https:\/\/[a-zA-Z0-9\-]+\.vercel\.app\/auth\/callback\/google$", clean):
+        return clean
+
+    logger.warning(f"Untrusted redirect_uri requested: {clean}. Using default: {settings.GOOGLE_REDIRECT_URI}")
+    return settings.GOOGLE_REDIRECT_URI
+
+
 @router.get("/google/start", response_model=GoogleAuthUrlResponse)
-def google_auth_start(db: Session = Depends(get_db)):
+def google_auth_start(
+    redirect_uri: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     """
     Initiates Google OAuth 2.0 flow.
     Generates cryptographic state and PKCE parameters, saves state in database, and returns auth URL.
     """
+    target_redirect_uri = validate_oauth_redirect_uri(redirect_uri)
     state = secrets.token_urlsafe(32)
     verifier, challenge = generate_pkce_pair()
 
@@ -626,16 +673,22 @@ def google_auth_start(db: Session = Depends(get_db)):
     db.add(db_state)
     db.commit()
 
-    auth_url = get_google_auth_url(state=state, code_challenge=challenge)
+    auth_url = get_google_auth_url(state=state, code_challenge=challenge, redirect_uri=target_redirect_uri)
     return GoogleAuthUrlResponse(auth_url=auth_url, state=state, client_id=settings.GOOGLE_CLIENT_ID)
 
 
 @router.get("/google/callback", response_model=TokenResponse)
-async def google_auth_callback(code: str, state: Optional[str] = None, db: Session = Depends(get_db)):
+async def google_auth_callback(
+    code: str,
+    state: Optional[str] = None,
+    redirect_uri: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     """
     Handles Google OAuth redirect with authorization code.
     Validates state parameter, exchanges code for tokens, verifies identity, and establishes authenticated session.
     """
+    target_redirect_uri = validate_oauth_redirect_uri(redirect_uri)
     code_verifier = None
     if state:
         now = datetime.datetime.utcnow()
@@ -660,7 +713,7 @@ async def google_auth_callback(code: str, state: Optional[str] = None, db: Sessi
             detail="Missing required OAuth state parameter."
         )
 
-    tokens = await exchange_google_code(code=code, code_verifier=code_verifier)
+    tokens = await exchange_google_code(code=code, code_verifier=code_verifier, redirect_uri=target_redirect_uri)
     id_token_str = tokens.get("id_token")
     if not id_token_str:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No ID token returned by Google.")

@@ -191,3 +191,34 @@ describe('Navigation Route Redirection & Aliasing', () => {
     expect(isNavPathActive('dashboard', '/forecast')).toBe(true);
   });
 });
+
+describe('Google OAuth Callback & URL Routing', () => {
+  it('constructs correct callback URI based on window origin', () => {
+    const buildCallbackUri = (origin: string) => `${origin.replace(/\/+$/, '')}/auth/callback/google`;
+
+    expect(buildCallbackUri('http://localhost:5173')).toBe('http://localhost:5173/auth/callback/google');
+    expect(buildCallbackUri('http://localhost:5173/')).toBe('http://localhost:5173/auth/callback/google');
+    expect(buildCallbackUri('https://cashflow-lifeline.vercel.app')).toBe('https://cashflow-lifeline.vercel.app/auth/callback/google');
+    expect(buildCallbackUri('https://cashflow-lifeline.vercel.app/')).toBe('https://cashflow-lifeline.vercel.app/auth/callback/google');
+  });
+
+  it('correctly parses OAuth callback query parameters', () => {
+    const parseOAuthParams = (queryString: string) => {
+      const params = new URLSearchParams(queryString);
+      return {
+        code: params.get('code'),
+        state: params.get('state'),
+        error: params.get('error'),
+      };
+    };
+
+    const res = parseOAuthParams('?code=4%2F0AY0e-g7...&state=xyz123secure');
+    expect(res.code).toBe('4/0AY0e-g7...');
+    expect(res.state).toBe('xyz123secure');
+    expect(res.error).toBeNull();
+
+    const errRes = parseOAuthParams('?error=access_denied&state=xyz123secure');
+    expect(errRes.code).toBeNull();
+    expect(errRes.error).toBe('access_denied');
+  });
+});

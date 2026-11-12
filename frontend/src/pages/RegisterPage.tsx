@@ -158,7 +158,8 @@ export const RegisterPage: React.FC = () => {
     setError(null);
     setGoogleLoading(true);
     try {
-      const res = await api.getGoogleAuthUrl();
+      const redirectUri = `${window.location.origin}/auth/callback/google`;
+      const res = await api.getGoogleAuthUrl(redirectUri);
       if (res.auth_url) {
         const clientId = res.client_id || import.meta.env.VITE_GOOGLE_CLIENT_ID;
         const isPlaceholder = !clientId || clientId.includes('placeholder_google_client_id') || res.auth_url.includes('placeholder_google_client_id');

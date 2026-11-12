@@ -27,9 +27,12 @@ The repository includes [render.yaml](file:///d:/Project/Paypal/render.yaml) pre
 | `APPROVAL_SECRET` | Auto-generated 32+ bytes | Render generates automatically (`generateValue: true`). |
 | `JWT_SECRET` | Auto-generated 32+ bytes | Render generates automatically (`generateValue: true`). |
 | `OTP_PEPPER` | Auto-generated 32+ bytes | Render generates automatically (`generateValue: true`). |
-| `APP_BASE_URL` | `https://<your-app>.vercel.app` | Vercel production frontend domain. |
-| `ALLOWED_ORIGINS` | `https://<your-app>.vercel.app` | Allowed CORS origins for browser requests. |
-| `PUBLIC_BASE_URL` | `https://<your-service>.onrender.com` | Render public backend URL. |
+| `APP_BASE_URL` | `https://cashflow-lifeline.vercel.app` | Vercel production frontend domain. |
+| `GOOGLE_REDIRECT_URI` | `https://cashflow-lifeline.vercel.app/auth/callback/google` | Google OAuth production callback URL. |
+| `GOOGLE_CLIENT_ID` | `<your-google-client-id>.apps.googleusercontent.com` | Google OAuth 2.0 Web Client ID. |
+| `GOOGLE_CLIENT_SECRET` | `<your-google-client-secret>` | Google OAuth 2.0 Web Client Secret. |
+| `ALLOWED_ORIGINS` | `https://cashflow-lifeline.vercel.app` | Allowed CORS origins for browser requests. |
+| `PUBLIC_BASE_URL` | `https://cashflow-lifeline.onrender.com` | Render public backend URL. |
 
 ---
 
@@ -59,6 +62,25 @@ Use `DATABASE_DISABLED=true` when:
 1. Import your GitHub repository into Vercel.
 2. Set **Root Directory** to `frontend`.
 3. Add Environment Variable:
-   - `VITE_API_URL`: `https://<your-render-service>.onrender.com`
+   - `VITE_API_URL`: `https://cashflow-lifeline.onrender.com`
 4. Deploy. The included `frontend/vercel.json` ensures client-side SPA routing (`/* -> /index.html`) works out of the box.
+
+---
+
+## 4. Google Cloud Console: OAuth 2.0 Configuration
+
+In the [Google Cloud Console](https://console.cloud.google.com/apis/credentials), configure your Web Application OAuth 2.0 client credentials:
+
+### Authorized JavaScript Origins
+Add both local development and production frontend origins:
+- `https://cashflow-lifeline.vercel.app`
+- `http://localhost:5173`
+
+### Authorized Redirect URIs
+Add both local development and production frontend callback routes:
+- `https://cashflow-lifeline.vercel.app/auth/callback/google`
+- `http://localhost:5173/auth/callback/google`
+
+> **Note**: Google OAuth strictly disallows wildcards in Redirect URIs. The exact URI `https://cashflow-lifeline.vercel.app/auth/callback/google` must be registered.
+
 
