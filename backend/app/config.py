@@ -116,7 +116,12 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins_list(self) -> List[str]:
-        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+        origins = [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+        if hasattr(self, "APP_BASE_URL") and self.APP_BASE_URL:
+            clean_app = self.APP_BASE_URL.strip().rstrip("/")
+            if clean_app and clean_app not in origins:
+                origins.append(clean_app)
+        return origins
 
     @property
     def trusted_proxies_list(self) -> List[str]:

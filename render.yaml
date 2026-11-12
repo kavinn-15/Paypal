@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: cashflow-lifeline-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt && alembic upgrade head && python -m backend.scripts.seed --clean --confirm-destructive-reset --demo-mode
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DEV_MODE
+        value: "true"
+      - key: DATABASE_URL
+        value: sqlite:///./cashflow.db
+      - key: PAYPAL_BASE_URL
+        value: https://api-m.sandbox.paypal.com
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: APPROVAL_SECRET
+        generateValue: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: OTP_PEPPER
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false

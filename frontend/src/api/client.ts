@@ -24,7 +24,8 @@ import {
   RegionalPreferencesUpdate
 } from '../types';
 
-const API_BASE = '/api';
+const rawBase = (import.meta.env.VITE_API_URL as string) || '/api';
+const API_BASE = rawBase.replace(/\/+$/, '');
 
 export function getStoredToken(): string | null {
   return localStorage.getItem('cashflow_access_token');

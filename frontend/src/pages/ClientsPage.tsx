@@ -228,7 +228,7 @@ export const ClientsPage: React.FC = () => {
             <span>{error}</span>
           </div>
           <button
-            onClick={fetchClients}
+            onClick={() => fetchClients()}
             className="font-semibold underline hover:opacity-80 cursor-pointer"
           >
             Retry
