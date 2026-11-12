@@ -101,6 +101,16 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
         content={"detail": "Database service is temporarily unavailable. Database operations are currently postponed or failed."}
     )
 
+
+@app.exception_handler(ValueError)
+async def value_error_exception_handler(request: Request, exc: ValueError):
+    logger.warning(f"Handled ValueError on {request.url.path}: {exc}")
+    status_code = status.HTTP_404_NOT_FOUND if "obligation" in str(exc).lower() else status.HTTP_400_BAD_REQUEST
+    return JSONResponse(
+        status_code=status_code,
+        content={"detail": str(exc)}
+    )
+
 # CORS configured with explicit allowed origins & Vercel domain pattern
 cors_origins = settings.allowed_origins_list
 app.add_middleware(

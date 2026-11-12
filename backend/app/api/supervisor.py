@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.db import get_db
@@ -27,12 +27,26 @@ def run_supervisor_workflow(
     5. Negotiation Agent -> multi-tone communication drafting
     6. Supervisory Evaluation -> optimal plan selection & conflict resolution
     """
+    from backend.app.models import Obligation
+    obl_exists = db.query(Obligation).filter(Obligation.owner_id == current_user.id).first()
+    if not obl_exists:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active contractor obligation found to protect. Please create an obligation to orchestrate multi-agent rescue workflows."
+        )
+
     supervisor = AgentSupervisor(db)
-    return supervisor.orchestrate_rescue_workflow(
-        owner=current_user,
-        obligation_id=obligation_id,
-        starting_balance=starting_balance
-    )
+    try:
+        return supervisor.orchestrate_rescue_workflow(
+            owner=current_user,
+            obligation_id=obligation_id,
+            starting_balance=starting_balance
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND if "obligation" in str(e).lower() else status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 @router.get("/runs")

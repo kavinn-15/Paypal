@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
 from backend.app.db import get_db
@@ -42,12 +42,25 @@ async def run_forecast_and_plans(
     if starting_balance is None:
         starting_balance = float(FinancialService.get_confirmed_balance(db, current_user))
 
+    obl_exists = db.query(Obligation).filter(Obligation.owner_id == current_user.id).first()
+    if not obl_exists:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active contractor obligation found to protect. Please create an obligation to generate cashflow forecasts."
+        )
+
     forecaster = ForecasterAgent(db)
-    forecast_res = forecaster.run_forecast(
-        obligation_id=obligation_id,
-        starting_balance=starting_balance,
-        owner_id=current_user.id
-    )
+    try:
+        forecast_res = forecaster.run_forecast(
+            obligation_id=obligation_id,
+            starting_balance=starting_balance,
+            owner_id=current_user.id
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND if "obligation" in str(e).lower() else status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
     planner = RescuePlanEngine(db)
     comparison = planner.generate_plans_for_forecast(forecast_res, discount_pct=discount_pct)
@@ -76,6 +89,12 @@ async def get_latest_forecast(
     ).order_by(Forecast.id.desc()).first()
 
     if not forecast:
+        obl_exists = db.query(Obligation).filter(Obligation.owner_id == current_user.id).first()
+        if not obl_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active contractor obligation found to protect. Please create an obligation to generate cashflow forecasts."
+            )
         return await run_forecast_and_plans(
             obligation_id=None,
             starting_balance=None,

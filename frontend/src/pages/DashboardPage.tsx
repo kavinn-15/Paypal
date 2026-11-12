@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { PlansComparisonResponse, RescuePlan, Action } from '../types';
 import { AtRiskBanner } from '../components/AtRiskBanner';
@@ -6,7 +7,22 @@ import { ForecastChart } from '../components/ForecastChart';
 import { DriverExplanationCard } from '../components/DriverExplanationCard';
 import { RescuePlanCard } from '../components/RescuePlanCard';
 import { ActionTimeline } from '../components/ActionTimeline';
-import { Zap, RefreshCw, AlertCircle, CheckCircle, SlidersHorizontal, Sparkles } from 'lucide-react';
+import {
+  Zap,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle,
+  SlidersHorizontal,
+  Sparkles,
+  Plus,
+  X,
+  Calendar,
+  DollarSign,
+  User,
+  ArrowRight,
+  ShieldCheck,
+  Building
+} from 'lucide-react';
 import { useRegionalPreferences } from '../context/RegionalPreferencesContext';
 
 export const DashboardPage: React.FC = () => {
@@ -23,6 +39,20 @@ export const DashboardPage: React.FC = () => {
   const [filterChip, setFilterChip] = useState<'all' | 'risk' | 'contractors'>('all');
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [horizonsData, setHorizonsData] = useState<Record<string, any> | null>(null);
+
+  // Quick Add Obligation modal state
+  const [showAddObligationModal, setShowAddObligationModal] = useState<boolean>(false);
+  const [newPayeeName, setNewPayeeName] = useState<string>('Sarah Jenkins (Senior UX Contractor)');
+  const [newPayeeEmail, setNewPayeeEmail] = useState<string>('sarah.jenkins@contractor.org');
+  const [newAmount, setNewAmount] = useState<string>('3000');
+  const [newDueDate, setNewDueDate] = useState<string>(() => {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = (5 - day + 7) % 7 || 7;
+    d.setDate(d.getDate() + diff);
+    return d.toISOString().split('T')[0];
+  });
+  const [isSubmittingObligation, setIsSubmittingObligation] = useState<boolean>(false);
 
   const fetchForecast = async () => {
     try {
@@ -134,6 +164,149 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
+  const handleCreateObligation = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newPayeeName.trim() || !newAmount || parseFloat(newAmount) <= 0) {
+      setNotification({ type: 'error', message: 'Please provide a contractor payee name and valid amount.' });
+      return;
+    }
+    setIsSubmittingObligation(true);
+    try {
+      const dueIso = new Date(`${newDueDate}T17:00:00Z`).toISOString();
+      await api.createObligation({
+        payee_name: newPayeeName.trim(),
+        payee_email: newPayeeEmail.trim() || `${newPayeeName.toLowerCase().replace(/\s+/g, '')}@contractor.org`,
+        amount: parseFloat(newAmount),
+        currency: 'USD',
+        due_date: dueIso as any,
+        split_allowed: true,
+      });
+      setShowAddObligationModal(false);
+      setNotification({
+        type: 'success',
+        message: 'Contractor obligation created successfully! Generating forecast...',
+      });
+      await fetchForecast();
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err.message || 'Failed to create obligation.' });
+    } finally {
+      setIsSubmittingObligation(false);
+    }
+  };
+
+  const renderAddObligationModal = () => (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="ignara-card max-w-md w-full p-6 space-y-4 shadow-2xl border-[var(--line)]">
+        <div className="flex items-center justify-between pb-2 border-b border-[var(--line)]">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-[10px] bg-[var(--o1)]/10 text-[var(--o1)] flex items-center justify-center">
+              <ShieldCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--tx)]">New Contractor Obligation</h3>
+              <p className="text-[11px] text-[var(--mu)]">Protect payroll against late invoice settlements</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowAddObligationModal(false)}
+            className="text-[var(--mu)] hover:text-[var(--tx)] p-1 rounded-md"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setNewPayeeName('Sarah Jenkins (Senior UX Contractor)');
+            setNewPayeeEmail('sarah.jenkins@contractor.org');
+            setNewAmount('3000');
+          }}
+          className="w-full text-left p-2.5 rounded-[10px] bg-[var(--card2)] hover:bg-[var(--line)]/30 border border-[var(--line)] text-[11px] text-[var(--o1)] transition-colors flex items-center justify-between"
+        >
+          <span>Use Starter Profile: <strong>Sarah Jenkins ($3,000)</strong></span>
+          <Sparkles className="w-3.5 h-3.5" />
+        </button>
+
+        <form onSubmit={handleCreateObligation} className="space-y-3">
+          <div>
+            <label className="block text-[11px] font-medium text-[var(--mu)] mb-1">Contractor / Payee Name</label>
+            <div className="relative">
+              <User className="w-4 h-4 text-[var(--mu)] absolute left-3 top-2.5" />
+              <input
+                type="text"
+                required
+                value={newPayeeName}
+                onChange={(e) => setNewPayeeName(e.target.value)}
+                placeholder="e.g. Sarah Jenkins (Senior UX Contractor)"
+                className="ignara-input pl-9 w-full text-xs"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-medium text-[var(--mu)] mb-1">Contractor Email (Optional)</label>
+            <input
+              type="email"
+              value={newPayeeEmail}
+              onChange={(e) => setNewPayeeEmail(e.target.value)}
+              placeholder="e.g. contractor@example.org"
+              className="ignara-input w-full text-xs"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-[var(--mu)] mb-1">Payout Amount ($)</label>
+              <div className="relative">
+                <DollarSign className="w-3.5 h-3.5 text-[var(--mu)] absolute left-3 top-2.5" />
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  step="any"
+                  value={newAmount}
+                  onChange={(e) => setNewAmount(e.target.value)}
+                  placeholder="3000"
+                  className="ignara-input pl-8 w-full text-xs"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-[var(--mu)] mb-1">Due Date</label>
+              <input
+                type="date"
+                required
+                value={newDueDate}
+                onChange={(e) => setNewDueDate(e.target.value)}
+                className="ignara-input w-full text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="pt-2 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowAddObligationModal(false)}
+              className="px-3 py-2 text-xs text-[var(--mu)] hover:text-[var(--tx)] rounded-[10px]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmittingObligation}
+              className="ignara-btn-primary py-2 px-4 text-xs font-semibold"
+            >
+              <CheckCircle className={`w-3.5 h-3.5 text-white ${isSubmittingObligation ? 'animate-spin' : ''}`} />
+              <span>{isSubmittingObligation ? 'Creating...' : 'Save & Run Forecast'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+
   if (isLoading && !data) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-3 p-6 text-center ignara-page-enter">
@@ -146,24 +319,60 @@ export const DashboardPage: React.FC = () => {
   }
 
   if (!data) {
+    const isMissingObligation =
+      fetchError &&
+      (fetchError.toLowerCase().includes('obligation') ||
+        fetchError.toLowerCase().includes('404') ||
+        fetchError.toLowerCase().includes('failed to fetch'));
+
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center ignara-page-enter">
-        <div className="ignara-card p-8 max-w-md mx-auto space-y-4 border-[var(--line)]">
-          <AlertCircle className="w-10 h-10 text-[var(--o1)] mx-auto" />
-          <h2 className="ignara-h3">Forecast Unavailable</h2>
-          <p className="text-xs text-[var(--mu)]">
-            {fetchError || 'No cashflow forecast could be calculated. Please check your data or retry.'}
-          </p>
-          <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
-            <button
-              onClick={() => fetchForecast()}
-              className="ignara-btn-primary"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Retry Forecast</span>
-            </button>
+        <div className="ignara-card p-8 max-w-lg mx-auto space-y-5 border-[var(--line)] shadow-lg">
+          <div className="w-14 h-14 rounded-[16px] bg-[var(--o1)]/10 border border-[var(--o1)]/20 text-[var(--o1)] flex items-center justify-center mx-auto shadow-sm">
+            <Sparkles className="w-7 h-7" />
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="ignara-h3">
+              {isMissingObligation ? 'Welcome to Cashflow Lifeline!' : 'Forecast Unavailable'}
+            </h2>
+            <p className="text-xs text-[var(--mu)] leading-relaxed max-w-md mx-auto">
+              {isMissingObligation
+                ? 'Your account is ready. Add your upcoming contractor payroll obligation to activate Monte Carlo risk simulation and autonomous rescue plans.'
+                : fetchError || 'No cashflow forecast could be calculated. Please check your data or retry.'}
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+            {isMissingObligation ? (
+              <>
+                <button
+                  onClick={() => setShowAddObligationModal(true)}
+                  className="ignara-btn-primary"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Contractor Obligation</span>
+                </button>
+                <Link
+                  to="/clients"
+                  className="px-4 py-2.5 rounded-[12px] bg-[var(--card)] hover:bg-[var(--card2)] text-[var(--tx)] border border-[var(--line)] text-xs font-semibold transition-all inline-flex items-center justify-center gap-2"
+                >
+                  <span>Manage Clients</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-[var(--mu)]" />
+                </Link>
+              </>
+            ) : (
+              <button
+                onClick={() => fetchForecast()}
+                className="ignara-btn-primary"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Retry Forecast</span>
+              </button>
+            )}
           </div>
         </div>
+
+        {showAddObligationModal && renderAddObligationModal()}
       </div>
     );
   }
@@ -205,6 +414,15 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <button
+            onClick={() => setShowAddObligationModal(true)}
+            className="ignara-btn-secondary flex-1 sm:flex-initial"
+            title="Add a new contractor payment obligation to protect"
+          >
+            <Plus className="w-4 h-4 text-[var(--o1)]" />
+            <span>+ Obligation</span>
+          </button>
+
           <button
             onClick={handleRecalculate}
             disabled={isLoading}
@@ -406,6 +624,8 @@ export const DashboardPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {showAddObligationModal && renderAddObligationModal()}
     </div>
   );
 };

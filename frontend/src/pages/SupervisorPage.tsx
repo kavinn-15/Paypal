@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { SupervisorRunResponse, AgentTraceStep } from '../types';
 import { Bot, CheckCircle2, AlertTriangle, ArrowRight, Sparkles, RefreshCw, Layers, ShieldCheck, Compass } from 'lucide-react';
@@ -55,8 +56,24 @@ export const SupervisorPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Error Alert */}
-      {error && (
+      {/* Error Alert or Empty Onboarding State */}
+      {error && (error.toLowerCase().includes('obligation') || error.toLowerCase().includes('404') || error.toLowerCase().includes('failed to fetch')) ? (
+        <div className="ignara-card p-8 max-w-lg mx-auto text-center space-y-4 border-[var(--line)] shadow-lg my-6">
+          <div className="w-12 h-12 rounded-[14px] bg-[var(--o1)]/10 text-[var(--o1)] flex items-center justify-center mx-auto">
+            <Compass className="w-6 h-6" />
+          </div>
+          <h2 className="ignara-h3">No Active Contractor Obligations</h2>
+          <p className="text-xs text-[var(--mu)] leading-relaxed">
+            The Multi-Agent Orchestrator coordinates Forecaster, Collector, Treasurer, and Planner agents to safeguard your contractor payroll payouts against delayed invoices. Add your first contractor obligation to activate autonomous multi-agent supervision.
+          </p>
+          <div className="pt-2">
+            <Link to="/dashboard" className="ignara-btn-primary inline-flex items-center gap-2">
+              <span>Go to Dashboard &amp; Add Obligation</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+      ) : error ? (
         <div className="p-3.5 rounded-[14px] bg-[var(--r)]/15 border border-[var(--r)]/30 text-[var(--r)] text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -69,7 +86,7 @@ export const SupervisorPage: React.FC = () => {
             Retry
           </button>
         </div>
-      )}
+      ) : null}
 
       {/* Supervisory Recommendation Banner */}
       {runData && (
@@ -103,47 +120,49 @@ export const SupervisorPage: React.FC = () => {
       )}
 
       {/* Step-by-Step Agent Trace */}
-      <div className="space-y-3 ignara-stagger-2">
-        <h3 className="ignara-h3 flex items-center space-x-2">
-          <Layers className="w-4 h-4 text-[var(--o1)]" />
-          <span>Agent Execution Trace</span>
-        </h3>
+      {runData && (
+        <div className="space-y-3 ignara-stagger-2">
+          <h3 className="ignara-h3 flex items-center space-x-2">
+            <Layers className="w-4 h-4 text-[var(--o1)]" />
+            <span>Agent Execution Trace</span>
+          </h3>
 
-        <div className="space-y-2.5">
-          {runData?.steps_trace.map((step, idx) => (
-            <div
-              key={idx}
-              className="ignara-card p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 hover:border-[var(--o1)]/40 ignara-card-hover"
-            >
-              <div className="flex items-start space-x-3 min-w-0">
-                <div className="w-8 h-8 rounded-[10px] bg-[var(--side)] border border-[var(--line)] flex items-center justify-center font-semibold text-xs text-[var(--tx)] shrink-0 mt-0.5">
-                  #{idx + 1}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                    <span className="font-semibold text-sm text-[var(--tx)]">{step.agent_name}</span>
-                    {(step.step_type || step.summary) && (
-                      <span className="text-[10px] font-mono px-2 py-0.5 bg-[var(--card2)] border border-[var(--line)] rounded-[6px] text-[var(--mu)]">
-                        {step.step_type || step.summary}
-                      </span>
-                    )}
-                    <span className="text-[10px] text-[var(--g)] bg-[var(--g)]/15 border border-[var(--g)]/30 px-2 py-0.5 rounded-[6px] font-semibold">
-                      {step.status}
-                    </span>
+          <div className="space-y-2.5">
+            {runData.steps_trace.map((step, idx) => (
+              <div
+                key={idx}
+                className="ignara-card p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 hover:border-[var(--o1)]/40 ignara-card-hover"
+              >
+                <div className="flex items-start space-x-3 min-w-0">
+                  <div className="w-8 h-8 rounded-[10px] bg-[var(--side)] border border-[var(--line)] flex items-center justify-center font-semibold text-xs text-[var(--tx)] shrink-0 mt-0.5">
+                    #{idx + 1}
                   </div>
-                  <p className="text-xs text-[var(--mu)] mt-1 leading-relaxed">
-                    {step.details || step.key_finding}
-                  </p>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                      <span className="font-semibold text-sm text-[var(--tx)]">{step.agent_name}</span>
+                      {(step.step_type || step.summary) && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 bg-[var(--card2)] border border-[var(--line)] rounded-[6px] text-[var(--mu)]">
+                          {step.step_type || step.summary}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-[var(--g)] bg-[var(--g)]/15 border border-[var(--g)]/30 px-2 py-0.5 rounded-[6px] font-semibold">
+                        {step.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--mu)] mt-1 leading-relaxed">
+                      {step.details || step.key_finding}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-left md:text-right text-[11px] font-mono text-[var(--dim)] shrink-0 pl-11 md:pl-0 border-t md:border-t-0 pt-2 md:pt-0 border-[var(--line)]">
+                  <span>{step.duration_ms !== undefined ? `Latency: ${step.duration_ms}ms` : step.timestamp}</span>
                 </div>
               </div>
-
-              <div className="text-left md:text-right text-[11px] font-mono text-[var(--dim)] shrink-0 pl-11 md:pl-0 border-t md:border-t-0 pt-2 md:pt-0 border-[var(--line)]">
-                <span>{step.duration_ms !== undefined ? `Latency: ${step.duration_ms}ms` : step.timestamp}</span>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
