@@ -68,9 +68,8 @@ export const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [demoLoading, setDemoLoading] = useState(false);
 
-  const { login, loginWithPhonePassword, loginWithPhoneOtp, demoLogin } = useAuth();
+  const { login, loginWithPhonePassword, loginWithPhoneOtp } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -208,19 +207,6 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleDemoSignIn = async () => {
-    setError(null);
-    setDemoLoading(true);
-    try {
-      await demoLogin();
-      navigate(from, { replace: true });
-    } catch (err: any) {
-      setError(err.message || 'Demo initialization failed. Please try again.');
-    } finally {
-      setDemoLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--tx)] flex flex-col justify-between ignara-page-enter">
       {/* Top Simple Header */}
@@ -352,7 +338,7 @@ export const LoginPage: React.FC = () => {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="alex@freelance.org"
+                    placeholder="you@company.com"
                     required
                     autoFocus
                     className="ignara-input w-full pl-9"
@@ -608,38 +594,6 @@ export const LoginPage: React.FC = () => {
               )}
             </div>
           )}
-
-          {/* Sandbox Demo Evaluation */}
-          <div className="relative flex items-center justify-center my-1">
-            <div className="border-t border-[var(--line)] w-full" />
-            <span className="bg-[var(--card)] px-3 text-[10.5px] font-mono uppercase tracking-wider text-[var(--dim)] absolute">
-              or sandbox evaluation
-            </span>
-          </div>
-
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={handleDemoSignIn}
-              disabled={demoLoading}
-              className="ignara-btn-secondary w-full py-2.5 text-xs font-semibold"
-            >
-              {demoLoading ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--o1)]" />
-                  <span>Loading Demo Scenario...</span>
-                </>
-              ) : (
-                <>
-                  <Play className="w-3.5 h-3.5 fill-[var(--o1)] text-[var(--o1)]" />
-                  <span>Explore Demo (Alex Morgan Persona)</span>
-                </>
-              )}
-            </button>
-            <p className="text-[10.5px] text-center text-[var(--dim)]">
-              Pre-seeded with contractor shortfall &amp; PayPal sandbox data
-            </p>
-          </div>
 
           <div className="text-center pt-2 text-xs text-[var(--mu)]">
             Don&rsquo;t have an account?{' '}

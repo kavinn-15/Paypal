@@ -31,8 +31,7 @@ export const LandingPage: React.FC = () => {
   const { formatCurrency } = useRegionalPreferences();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
-  const [demoLoading, setDemoLoading] = useState(false);
-  const { currentUser, logout, demoLogin } = useAuth();
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -56,18 +55,6 @@ export const LandingPage: React.FC = () => {
       document.body.style.overflow = '';
     };
   }, [mobileMenuOpen]);
-
-  const handleLaunchDemo = async () => {
-    try {
-      setDemoLoading(true);
-      await demoLogin();
-      navigate('/dashboard');
-    } catch {
-      // ignore
-    } finally {
-      setDemoLoading(false);
-    }
-  };
 
   const toggleFaq = (index: number) => {
     setOpenFaqIndex(openFaqIndex === index ? null : index);
@@ -184,14 +171,6 @@ export const LandingPage: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <button
-                    onClick={handleLaunchDemo}
-                    disabled={demoLoading}
-                    className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-ink-800 text-electric-300 border border-electric/30 hover:bg-ink-700 hover:border-electric transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Play className="w-3 h-3 fill-electric-300" />
-                    <span>{demoLoading ? 'Starting...' : 'Explore Demo'}</span>
-                  </button>
                   <Link
                     to="/login"
                     className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:text-white hover:bg-ink-800 transition-colors"
@@ -264,31 +243,22 @@ export const LandingPage: React.FC = () => {
                   </button>
                 </>
               ) : (
-                <>
-                  <button
-                    onClick={() => { setMobileMenuOpen(false); handleLaunchDemo(); }}
-                    disabled={demoLoading}
-                    className="w-full py-3 rounded-xl text-xs font-semibold bg-ink-800 text-electric-300 border border-electric/30 text-center min-h-[44px] flex items-center justify-center"
+                <div className="grid grid-cols-2 gap-2">
+                  <Link
+                    to="/login"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="py-3 rounded-xl text-xs font-semibold bg-ink-800 text-white text-center border border-slate-700 min-h-[44px] flex items-center justify-center"
                   >
-                    {demoLoading ? 'Launching Demo...' : 'Explore Demo (Alex Morgan Persona)'}
-                  </button>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Link
-                      to="/login"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="py-3 rounded-xl text-xs font-semibold bg-ink-800 text-white text-center border border-slate-700 min-h-[44px] flex items-center justify-center"
-                    >
-                      Sign In
-                    </Link>
-                    <Link
-                      to="/register"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="py-3 rounded-xl text-xs font-semibold ignara-btn-primary text-white text-center shadow-glow-electric min-h-[44px] flex items-center justify-center"
-                    >
-                      Get Started
-                    </Link>
-                  </div>
-                </>
+                    Sign In
+                  </Link>
+                  <Link
+                    to="/register"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="py-3 rounded-xl text-xs font-semibold ignara-btn-primary text-white text-center shadow-glow-electric min-h-[44px] flex items-center justify-center"
+                  >
+                    Get Started
+                  </Link>
+                </div>
               )}
             </div>
           </div>
@@ -332,14 +302,12 @@ export const LandingPage: React.FC = () => {
                 <span>Get Started Free</span>
                 <ArrowRight className="w-4 h-4 shrink-0" />
               </Link>
-              <button
-                onClick={handleLaunchDemo}
-                disabled={demoLoading}
+              <Link
+                to="/login"
                 className="w-full sm:w-auto px-6 py-3.5 rounded-xl font-semibold text-sm bg-ink-900 text-white border border-slate-700 hover:border-electric hover:bg-ink-800 transition-all flex items-center justify-center space-x-2 min-h-[44px]"
               >
-                <Play className="w-3.5 h-3.5 fill-electric-300 text-electric-300 shrink-0" />
-                <span>{demoLoading ? 'Starting Demo...' : 'Explore Demo Sandbox'}</span>
-              </button>
+                <span>Sign In to Dashboard</span>
+              </Link>
               <a
                 href="#how-it-works"
                 className="w-full sm:w-auto px-5 py-3.5 rounded-xl font-semibold text-sm text-slate-300 hover:text-white transition-colors flex items-center justify-center min-h-[44px]"
@@ -887,13 +855,12 @@ export const LandingPage: React.FC = () => {
               >
                 Create Free Account
               </Link>
-              <button
-                onClick={handleLaunchDemo}
-                disabled={demoLoading}
+              <Link
+                to="/login"
                 className="w-full sm:w-auto px-6 py-3.5 rounded-xl font-semibold text-sm bg-ink-950 text-white border border-slate-700 hover:border-orange-500 transition-all min-h-[44px] flex items-center justify-center"
               >
-                {demoLoading ? 'Starting...' : 'Explore Demo Persona'}
-              </button>
+                Sign In to Dashboard
+              </Link>
             </div>
           </div>
         </div>
@@ -937,7 +904,6 @@ export const LandingPage: React.FC = () => {
                 <li><Link to="/login" className="hover:text-white transition-colors py-1 inline-block">Sign In</Link></li>
                 <li><Link to="/register" className="hover:text-white transition-colors py-1 inline-block">Register Account</Link></li>
                 <li><Link to="/forgot-password" className="hover:text-white transition-colors py-1 inline-block">Forgot Password</Link></li>
-                <li><button onClick={handleLaunchDemo} className="hover:text-white transition-colors text-left py-1 inline-block">Demo Persona</button></li>
               </ul>
             </div>
 

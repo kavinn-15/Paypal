@@ -220,7 +220,7 @@ export const ForgotPasswordPage: React.FC = () => {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="alex@freelance.org"
+                      placeholder="name@company.com"
                       required
                       autoFocus
                       className="ignara-input w-full pl-9"

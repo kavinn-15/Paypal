@@ -261,7 +261,7 @@ export const IgnaraHeader: React.FC<IgnaraHeaderProps> = ({
             <div className="absolute right-0 mt-2 w-56 rounded-[18px] bg-[var(--card)] border border-[var(--line)] shadow-xl p-2 z-50 ignara-card-enter">
               <div className="px-3 py-2 border-b border-[var(--line)] mb-1">
                 <p className="text-xs font-semibold text-[var(--tx)] truncate">{displayName}</p>
-                <p className="text-[11px] text-[var(--mu)] truncate">{currentUser?.email || 'alex@example.com'}</p>
+                <p className="text-[11px] text-[var(--mu)] truncate">{currentUser?.email || 'user@example.com'}</p>
               </div>
 
               <Link

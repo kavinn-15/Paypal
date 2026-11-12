@@ -72,10 +72,10 @@ async def provision_sandbox_invoices(db: Session, owner_id: int) -> List[Dict[st
             },
             "invoicer": {
                 "name": {
-                    "given_name": owner.name.split()[0] if owner.name else "Alex",
-                    "surname": owner.name.split()[-1] if owner.name and " " in owner.name else "Morgan"
+                    "given_name": owner.name.split()[0] if owner.name else "Business",
+                    "surname": owner.name.split()[-1] if owner.name and " " in owner.name else "Owner"
                 },
-                "business_name": "Cashflow Lifeline Freelance Studio"
+                "business_name": "Cashflow Lifeline Studio"
             },
             "primary_recipients": [
                 {

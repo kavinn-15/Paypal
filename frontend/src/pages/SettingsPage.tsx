@@ -762,7 +762,7 @@ export const SettingsPage: React.FC = () => {
                 <h3 className="ignara-h3">Active User Account Session</h3>
                 {currentUser?.is_demo && (
                   <span className="text-[10px] bg-[var(--y)]/15 text-[var(--y)] border border-[var(--y)]/30 font-semibold px-2 py-0.5 rounded-full">
-                    Demo Mode (Alex Morgan)
+                    Demo Mode
                   </span>
                 )}
               </div>

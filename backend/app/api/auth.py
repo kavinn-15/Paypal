@@ -873,80 +873,13 @@ def logout(current_user: Owner = Depends(get_current_user), db: Session = Depend
 
 
 @router.post("/demo-login", response_model=TokenResponse)
-def demo_login(db: Session = Depends(get_db)):
+def demo_login():
     """
-    One-click instant login as Alex Morgan (PayPal AI Hackathon demo scenario).
-    Only permitted when DEV_MODE and ALLOW_DEMO_ENDPOINTS are enabled.
+    Demo login endpoint has been permanently disabled.
     """
-    if not settings.DEV_MODE or not settings.ALLOW_DEMO_ENDPOINTS:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Demo login is strictly disabled in production environments."
-        )
-
-    # Strictly lookup by canonical demo email; never pick an arbitrary user with is_demo==True
-    owner = db.query(Owner).filter(Owner.email == settings.CANONICAL_DEMO_EMAIL).first()
-    if owner:
-        if not owner.is_demo:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Security violation: Demo login cannot issue credentials for a real user account."
-            )
-    else:
-        owner = Owner(
-            name="Alex Morgan",
-            email=settings.CANONICAL_DEMO_EMAIL,
-            hashed_password=hash_password("DemoAlex2026!"),
-            currency="USD",
-            preferred_currency="USD",
-            timezone="UTC",
-            is_demo=True,
-            is_active=True,
-            email_verified=True,
-            account_status="active",
-            token_version=1,
-            created_at=datetime.datetime.utcnow()
-        )
-        db.add(owner)
-        db.commit()
-        db.refresh(owner)
-
-    token = create_access_token({"sub": owner.id, "email": owner.email, "email_verified": True, "ver": owner.token_version})
-    family_id = secrets.token_hex(16)
-    refresh_token = create_refresh_token(owner.id, family_id=family_id)
-
-    # Persist the hashed refresh token in the database to support refresh-token rotation and logout revocation
-    db_refresh = RefreshToken(
-        token=hash_token(refresh_token),
-        owner_id=owner.id,
-        family_id=family_id,
-        expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
-    )
-    db.add(db_refresh)
-    db.commit()
-
-    append_audit_log(
-        db,
-        actor="system",
-        event="DEMO_LOGIN_SUCCESS",
-        payload={"user_id": owner.id, "email": owner.email},
-        owner_id=owner.id
-    )
-
-    return TokenResponse(
-        access_token=token,
-        refresh_token=refresh_token,
-        user_id=owner.id,
-        email=owner.email,
-        name=owner.name,
-        currency=owner.currency,
-        preferred_currency=owner.preferred_currency or owner.currency,
-        locale=owner.locale or "en-US",
-        region_detection_enabled=owner.region_detection_enabled,
-        is_demo=True,
-        country=owner.country or "US",
-        business_type=owner.business_type or "Freelancer",
-        email_verified=True
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Demo login has been permanently disabled. Please register or log in with your credentials."
     )
 
 

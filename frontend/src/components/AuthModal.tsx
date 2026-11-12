@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Sparkles, Lock, Mail, User, ArrowRight, AlertCircle, RefreshCw } from 'lucide-react';
+import { Sparkles, Lock, Mail, User, ArrowRight, AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../api/client';
 
 interface AuthModalProps {
@@ -47,19 +47,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
       }
     } catch (err: any) {
       setError(err.message || 'Authentication failed. Please verify credentials.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDemoLogin = async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await api.demoLogin();
-      onSuccess(res);
-    } catch (err: any) {
-      setError(err.message || 'Demo login failed.');
     } finally {
       setLoading(false);
     }
@@ -224,26 +211,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
               )}
             </button>
           </form>
-
-          {/* Quick Demo Access Divider */}
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-200"></div>
-            </div>
-            <div className="relative flex justify-center text-[10px] uppercase tracking-wider text-sardine-slate font-bold">
-              <span className="bg-white px-2">Or for Hackathon Review</span>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleDemoLogin}
-            disabled={loading}
-            className="w-full py-2.5 sm:py-3 bg-slate-100 hover:bg-slate-200 text-ink font-bold text-xs rounded-xl border border-slate-300 transition-colors flex items-center justify-center space-x-2 min-h-[44px]"
-          >
-            <ShieldCheck className="w-4 h-4 text-electric shrink-0" />
-            <span>Explore Demo as Alex Morgan</span>
-          </button>
         </div>
       </div>
     </div>

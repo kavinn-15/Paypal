@@ -53,9 +53,9 @@ async def load_demo_scenario(
     current_user: Owner = Depends(get_current_user)
 ):
     """
-    Loads or resets the Alex Morgan hackathon scenario (6 seeded client behavioral personas,
+    Loads or resets the demo scenario (6 seeded client behavioral personas,
     12-month transaction history, open invoices, and Marcus Sterling contractor payout).
-    Strictly isolated and scoped to the authorized demo owner.
+    Strictly isolated and scoped to the authorized owner.
     Non-destructive: NEVER deletes database tables or real user accounts.
     Automatically provisions fresh, live, payable PayPal Sandbox invoices if credentials are configured.
     """
@@ -63,7 +63,7 @@ async def load_demo_scenario(
 
     logger.info(f"Loading demo scenario requested by owner_id={current_user.id} (is_demo={current_user.is_demo})")
 
-    # Seed specifically for the current demo owner (or canonical Alex Morgan if admin)
+    # Seed specifically for the current demo owner
     seeded_owner = seed_demo_scenario(db=db, target_owner=current_user if current_user.is_demo else None)
 
     # Automatically provision fresh live PayPal Sandbox invoices so they are immediately payable
@@ -230,5 +230,5 @@ def get_demo_status(
 
     return {
         "is_demo_active": has_seeded,
-        "persona": "Alex Morgan" if (has_seeded or current_user.is_demo) else None
+        "persona": current_user.name if has_seeded else None
     }
