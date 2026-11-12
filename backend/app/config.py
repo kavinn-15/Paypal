@@ -36,6 +36,23 @@ class Settings(BaseSettings):
     DATABASE_URL: str = Field(default="sqlite:///./cashflow.db")
     ALLOWED_ORIGINS: str = Field(default="http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173")
 
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def normalize_database_url(cls, v: str) -> str:
+        if isinstance(v, str):
+            clean = v.strip()
+            if clean.startswith("mysql://"):
+                return "mysql+pymysql://" + clean[len("mysql://"):]
+            return clean
+        return v
+
+    @field_validator("PUBLIC_BASE_URL", "APP_BASE_URL", mode="before")
+    @classmethod
+    def clean_base_urls(cls, v: str) -> str:
+        if isinstance(v, str):
+            return v.strip().rstrip("/")
+        return v
+
     # OTP & Verification Security
     OTP_PEPPER: str = Field(default="cashflow-lifeline-otp-pepper-secret-key-32b")
     OTP_EXPIRE_MINUTES: int = Field(default=10)
@@ -116,7 +133,7 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins_list(self) -> List[str]:
-        origins = [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+        origins = [o.strip().rstrip("/") for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
         if hasattr(self, "APP_BASE_URL") and self.APP_BASE_URL:
             clean_app = self.APP_BASE_URL.strip().rstrip("/")
             if clean_app and clean_app not in origins:
