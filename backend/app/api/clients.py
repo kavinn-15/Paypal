@@ -1,21 +1,29 @@
+import logging
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 from backend.app.db import get_db
 from backend.app.models import Client, Invoice, PaymentHistory, Owner
 from backend.app.auth.deps import get_verified_current_user
+from backend.app.services.paypal_invoice_service import sync_open_invoices_from_paypal
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/clients", tags=["Clients & Payment Patterns"])
 
 
 @router.get("")
-def list_clients_with_patterns(
+async def list_clients_with_patterns(
     db: Session = Depends(get_db),
     current_user: Owner = Depends(get_verified_current_user)
 ):
     """
     Returns clients and behavioral payment metrics scoped strictly to the authenticated user.
+    Auto-reconciles genuine PayPal Sandbox invoice settlements if paid remotely.
     """
+    await sync_open_invoices_from_paypal(db=db, owner_id=current_user.id)
+
     clients = db.query(Client).filter(Client.owner_id == current_user.id).all()
     results = []
 

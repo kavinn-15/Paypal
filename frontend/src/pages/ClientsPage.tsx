@@ -16,16 +16,24 @@ export const ClientsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState(searchParam);
+  const [activePayingInvoice, setActivePayingInvoice] = useState<string | null>(null);
+  const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
 
-  const fetchClients = () => {
-    setIsLoading(true);
+  const fetchClients = (showSpinner = true) => {
+    if (showSpinner) setIsLoading(true);
     setError(null);
-    api.getClients()
-      .then(setClients)
+    return api.getClients()
+      .then((data) => {
+        setClients(data);
+        return data;
+      })
       .catch((err: any) => {
         setError(err.message || 'Failed to load client behavioral models.');
+        return [];
       })
-      .finally(() => setIsLoading(false));
+      .finally(() => {
+        if (showSpinner) setIsLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -34,7 +42,33 @@ export const ClientsPage: React.FC = () => {
 
   useEffect(() => {
     fetchClients();
+
+    // Auto-refresh when user switches back to this tab from PayPal checkout
+    const handleFocus = () => {
+      fetchClients(false);
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, []);
+
+  // Active polling when a PayPal payment window is open
+  useEffect(() => {
+    if (!activePayingInvoice) return;
+
+    const interval = setInterval(() => {
+      fetchClients(false).then((latestClients) => {
+        // Check if the invoice is no longer in open_invoices
+        const allOpen = latestClients.flatMap((c: ClientData) => c.open_invoices || []);
+        const stillOpen = allOpen.some((inv: any) => inv.paypal_invoice_id === activePayingInvoice);
+        if (!stillOpen) {
+          setPaymentSuccessMessage(`Payment confirmed! PayPal invoice #${activePayingInvoice} has been successfully settled and reconciled.`);
+          setActivePayingInvoice(null);
+        }
+      });
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [activePayingInvoice]);
 
   const getBehaviorBadge = (c: ClientData) => {
     if (c.avg_delay_days >= 10) {
@@ -143,6 +177,40 @@ export const ClientsPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Live Payment Tracking Notifications */}
+      {paymentSuccessMessage && (
+        <div className="p-3.5 rounded-[14px] bg-[var(--g)]/15 border border-[var(--g)]/30 text-[var(--g)] text-xs flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top duration-300">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle className="w-4 h-4 shrink-0 text-[var(--g)]" />
+            <span className="font-medium">{paymentSuccessMessage}</span>
+          </div>
+          <button
+            onClick={() => setPaymentSuccessMessage(null)}
+            className="text-[var(--g)] hover:text-[var(--tx)] p-1 cursor-pointer"
+            aria-label="Dismiss message"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {activePayingInvoice && (
+        <div className="p-3.5 rounded-[14px] bg-[var(--o1)]/15 border border-[var(--o1)]/30 text-[var(--o1)] text-xs flex items-center justify-between gap-3 animate-pulse">
+          <div className="flex items-center gap-2.5">
+            <Clock className="w-4 h-4 shrink-0 animate-spin" />
+            <span>
+              <strong>Awaiting PayPal Confirmation:</strong> Invoice #{activePayingInvoice} opened in PayPal. This page automatically detects when you complete the payment.
+            </span>
+          </div>
+          <button
+            onClick={() => setActivePayingInvoice(null)}
+            className="text-xs underline hover:text-[var(--tx)] cursor-pointer"
+          >
+            Stop Tracking
+          </button>
+        </div>
+      )}
 
       {/* Loading State */}
       {isLoading && (
@@ -287,6 +355,10 @@ export const ClientsPage: React.FC = () => {
                           href={inv.pay_link}
                           target="_blank"
                           rel="noreferrer"
+                          onClick={() => {
+                            setActivePayingInvoice(inv.paypal_invoice_id);
+                            setPaymentSuccessMessage(null);
+                          }}
                           className="ignara-btn-secondary text-xs py-1.5 px-3 min-h-[36px]"
                         >
                           <span>PayPal Link</span>

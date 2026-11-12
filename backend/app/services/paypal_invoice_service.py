@@ -75,7 +75,6 @@ async def provision_sandbox_invoices(db: Session, owner_id: int) -> List[Dict[st
                     "given_name": owner.name.split()[0] if owner.name else "Alex",
                     "surname": owner.name.split()[-1] if owner.name and " " in owner.name else "Morgan"
                 },
-                "email_address": owner.email,
                 "business_name": "Cashflow Lifeline Freelance Studio"
             },
             "primary_recipients": [
@@ -120,15 +119,16 @@ async def provision_sandbox_invoices(db: Session, owner_id: int) -> List[Dict[st
             logger.warning(f"Could not extract invoice id from create_invoice response: {created_res}")
             continue
 
-        # 2. Send invoice via PayPal Invoicing v2 to generate payer-view link
+        # 2. Send invoice via PayPal Invoicing v2 to activate it
         await paypal_client.send_invoice(paypal_id, note="Invoice ready for settlement.")
 
-        # 3. Retrieve invoice details to extract genuine payer-view link
+        # 3. Retrieve invoice details to extract genuine recipient_view_url from PayPal metadata
         inv_details = await paypal_client.get_invoice(paypal_id)
-        links = inv_details.get("links", [])
-        payer_link = next((l["href"] for l in links if l.get("rel") == "payer-view"), None)
+        meta = inv_details.get("detail", {}).get("metadata", {})
+        payer_link = meta.get("recipient_view_url")
         if not payer_link:
-            payer_link = f"https://www.sandbox.paypal.com/invoice/p/#{paypal_id}"
+            raw_hash = paypal_id.replace("INV2-", "").replace("-", "")
+            payer_link = f"https://www.sandbox.paypal.com/invoice/p/#{raw_hash}"
 
         # 4. Find or create local invoice record
         local_inv = db.query(Invoice).filter(
@@ -178,4 +178,51 @@ async def provision_sandbox_invoices(db: Session, owner_id: int) -> List[Dict[st
         })
 
     return results
+
+
+async def sync_open_invoices_from_paypal(db: Session, owner_id: int) -> int:
+    """
+    Checks all open invoices for this owner against PayPal Invoicing v2 API.
+    If an invoice has been marked PAID on PayPal, automatically processes the
+    reconciliation event and updates the financial ledger and forecast.
+    Returns the count of newly reconciled invoices.
+    """
+    open_invoices = (
+        db.query(Invoice)
+        .join(Client)
+        .filter(
+            Client.owner_id == owner_id,
+            Invoice.status.in_(["SENT", "DRAFT"])
+        )
+        .all()
+    )
+
+    reconciled_count = 0
+    from backend.app.events.processor import process_webhook_event
+
+    for inv in open_invoices:
+        if inv.paypal_invoice_id and "INV2-" in inv.paypal_invoice_id and "DEMO" not in inv.paypal_invoice_id:
+            try:
+                remote_inv = await paypal_client.get_invoice(inv.paypal_invoice_id)
+                if remote_inv.get("status") == "PAID":
+                    payments = remote_inv.get("payments", {})
+                    tx_list = payments.get("transactions", [])
+                    tx_id = tx_list[0].get("payment_id") if tx_list else f"SYNC-{inv.paypal_invoice_id}"
+                    paid_amt = payments.get("paid_amount", {}).get("value", str(inv.amount))
+                    evt_payload = {
+                        "id": f"WH-AUTO-SYNC-{tx_id}",
+                        "create_time": datetime.now(timezone.utc).isoformat(),
+                        "event_type": "INVOICING.INVOICE.PAID",
+                        "resource": {
+                            "invoice": {"id": inv.paypal_invoice_id},
+                            "amount": {"value": str(paid_amt), "currency_code": inv.currency},
+                            "payments": [{"payment_id": tx_id, "amount": {"value": str(paid_amt), "currency_code": inv.currency}}]
+                        }
+                    }
+                    process_webhook_event(db, evt_payload, is_simulated=False)
+                    reconciled_count += 1
+            except Exception as e:
+                logger.debug(f"PayPal invoice check failed for {inv.paypal_invoice_id}: {e}")
+
+    return reconciled_count
 

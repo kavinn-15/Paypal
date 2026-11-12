@@ -48,7 +48,7 @@ def _require_demo_authority(current_user: Owner):
 
 
 @router.post("/load")
-def load_demo_scenario(
+async def load_demo_scenario(
     db: Session = Depends(get_db),
     current_user: Owner = Depends(get_current_user)
 ):
@@ -57,6 +57,7 @@ def load_demo_scenario(
     12-month transaction history, open invoices, and Marcus Sterling contractor payout).
     Strictly isolated and scoped to the authorized demo owner.
     Non-destructive: NEVER deletes database tables or real user accounts.
+    Automatically provisions fresh, live, payable PayPal Sandbox invoices if credentials are configured.
     """
     _require_demo_authority(current_user)
 
@@ -64,6 +65,15 @@ def load_demo_scenario(
 
     # Seed specifically for the current demo owner (or canonical Alex Morgan if admin)
     seeded_owner = seed_demo_scenario(db=db, target_owner=current_user if current_user.is_demo else None)
+
+    # Automatically provision fresh live PayPal Sandbox invoices so they are immediately payable
+    if settings.PAYPAL_CLIENT_ID and "placeholder" not in settings.PAYPAL_CLIENT_ID.lower() and "your_paypal" not in settings.PAYPAL_CLIENT_ID.lower():
+        try:
+            from backend.app.services.paypal_invoice_service import provision_sandbox_invoices
+            await provision_sandbox_invoices(db=db, owner_id=seeded_owner.id)
+            logger.info("Automatically provisioned fresh live PayPal Sandbox invoices for demo scenario reset.")
+        except Exception as e:
+            logger.warning(f"Live PayPal invoice provisioning during demo reset skipped: {e}")
 
     append_audit_log(
         db,

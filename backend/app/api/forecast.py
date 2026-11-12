@@ -8,12 +8,13 @@ from backend.app.agents.planner import RescuePlanEngine
 from backend.app.auth.deps import get_verified_current_user
 from backend.app.services.financial_service import FinancialService
 from backend.app.schemas import PlansComparisonResponse, RescuePlanOut, ActionOut, DailyProjection, ObligationOut
+from backend.app.services.paypal_invoice_service import sync_open_invoices_from_paypal
 
 router = APIRouter(prefix="/forecast", tags=["Forecast & Rescue Plans"])
 
 
 @router.post("/run", response_model=PlansComparisonResponse)
-def run_forecast_and_plans(
+async def run_forecast_and_plans(
     obligation_id: Optional[int] = Query(None, description="Optional obligation ID"),
     starting_balance: Optional[float] = Query(None, description="Starting cash balance (defaults to authoritative reconciled ledger)"),
     discount_pct: float = Query(3.0, description="Discount percentage for Plan B"),
@@ -28,6 +29,8 @@ def run_forecast_and_plans(
     4. Ranks driver clients & produces validated plain-language explanation.
     5. Generates three Rescue Plans (A, B, C) with cryptographic HMAC approval hashes.
     """
+    # Auto-sync live PayPal invoice payments before running forecast
+    await sync_open_invoices_from_paypal(db=db, owner_id=current_user.id)
     # Defensive parameter normalization when invoked directly by other endpoints
     if not isinstance(obligation_id, int):
         obligation_id = None
@@ -52,17 +55,28 @@ def run_forecast_and_plans(
 
 
 @router.get("/latest", response_model=PlansComparisonResponse)
-def get_latest_forecast(
+async def get_latest_forecast(
     db: Session = Depends(get_db),
     current_user: Owner = Depends(get_verified_current_user)
 ):
     """Retrieves the most recent forecast run and rescue plans for the authenticated user."""
+    # Check if any new PayPal invoices have been paid
+    reconciled_any = await sync_open_invoices_from_paypal(db=db, owner_id=current_user.id)
+    if reconciled_any > 0:
+        return await run_forecast_and_plans(
+            obligation_id=None,
+            starting_balance=None,
+            discount_pct=3.0,
+            db=db,
+            current_user=current_user
+        )
+
     forecast = db.query(Forecast).filter(
         Forecast.owner_id == current_user.id
     ).order_by(Forecast.id.desc()).first()
 
     if not forecast:
-        return run_forecast_and_plans(
+        return await run_forecast_and_plans(
             obligation_id=None,
             starting_balance=None,
             discount_pct=3.0,

@@ -435,6 +435,17 @@ def seed_demo_scenario(db: Session, target_owner: Optional[Owner] = None) -> Own
         db.add(audit_genesis)
 
     db.commit()
+
+    # Automatically provision fresh live PayPal Sandbox invoices so they are immediately payable
+    if settings.PAYPAL_CLIENT_ID and "placeholder" not in settings.PAYPAL_CLIENT_ID.lower() and "your_paypal" not in settings.PAYPAL_CLIENT_ID.lower():
+        try:
+            import asyncio
+            from backend.app.services.paypal_invoice_service import provision_sandbox_invoices
+            asyncio.run(provision_sandbox_invoices(db=db, owner_id=owner.id))
+            print("Successfully provisioned fresh live PayPal Sandbox invoices with payer links!")
+        except Exception as e:
+            print(f"Note: Live sandbox invoice provisioning skipped: {e}")
+
     print("Successfully seeded Cashflow Lifeline demo scenario!")
     print(f"- Owner: {owner.name} ({owner.email}) [ID={owner.id}]")
     print(f"- Clients verified/created: {len(created_clients)} with payment history")
